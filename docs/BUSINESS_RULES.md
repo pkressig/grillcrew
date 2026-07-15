@@ -7,6 +7,8 @@
 - Herbst und Frühling werden separat ausgewiesen.
 - Für die Erfüllung zählt die Summe beider Teil-Saisons.
 - Admin kann einen abweichenden Sollwert erfassen; Grund und Änderung werden protokolliert.
+- Das Soll wird beim ersten fachlichen Bezug im Vereinsjahr materialisiert und danach eingefroren.
+- Spätere Kinderänderungen erzeugen Admin-Handlungsbedarf statt stiller Neuberechnung.
 
 ## BR-002 Vergütungsarten
 
@@ -16,6 +18,7 @@ Eine bestätigte Einsatzleistung besitzt genau eine Hauptart:
 - Auszahlung
 
 Die Art gilt pro Einsatzleistung und nicht generell pro Helfer.
+Überschuss über das Familiensoll bleibt Sollstunden-Gutschrift und wird ausgewiesen; daraus entsteht kein automatischer Geldanspruch. Admin kann begründet manuell splitten.
 
 ## BR-003 Auszahlung
 
@@ -24,6 +27,8 @@ Die Art gilt pro Einsatzleistung und nicht generell pro Helfer.
 - Geldwerte werden in Rappen gespeichert.
 - Nur bestätigte effektive Arbeitszeit wird ausbezahlt.
 - Auszahlung besitzt einen nachvollziehbaren Status.
+- Betrag = `round(durationMinutes * rateRappenPerHour / 60)` pro WorkRecord, kaufmännisch auf 1 Rappen.
+- Der Stundensatz wird beim Freigeben der Auszahlung eingefroren.
 
 ## BR-004 Zeitberechnung
 
@@ -40,10 +45,13 @@ Die Art gilt pro Einsatzleistung und nicht generell pro Helfer.
 - Pflichtdaten sind Name, Telefonnummer und E-Mail.
 - Vollständiger Name wird öffentlich angezeigt.
 - Kontaktdaten sind nicht öffentlich.
+- Eine Anmeldung reserviert den Platz sofort verbindlich.
+- Fehlende Einwilligung zur vollen Namensanzeige führt öffentlich zu abgekürzter Anzeige.
+- Öffentliche Eintragung nutzt unsichtbaren Missbrauchsschutz: Honeypot, Mindest-Ausfüllzeit, Rate-Limits und Plausibilitätsprüfung.
 
 ## BR-006 Absage
 
-- Selbstabsage ist bis sieben volle Tage vor Beginn möglich.
+- Selbstabsage ist bis 23:59:59 Europe/Zurich des Tages möglich, der acht Kalendertage vor dem Schichttag liegt.
 - Danach zeigt die App Kontaktmöglichkeiten zur Koordination.
 - Admin kann jederzeit absagen, umbuchen oder Ersatz zuweisen.
 - Jede Änderung an einer veröffentlichten Anmeldung wird protokolliert.
@@ -71,10 +79,13 @@ Personen werden niemals automatisch nur aufgrund eines ähnlichen Namens zusamme
 - Admin bestätigt oder korrigiert.
 - Papiernachträge werden als solche markiert.
 - Nicht abgeschlossene Einsätze erscheinen im Admin-Handlungsbedarf.
+- Anwesenheitsausgang wird auf dem Signup dokumentiert; WorkRecords enthalten nur tatsächlich geleistete Arbeit.
 
 ## BR-010 Datenschutz
 
 - Telefonnummer und E-Mail niemals öffentlich.
 - Interne Notizen niemals öffentlich.
+- Kinderdaten niemals öffentlich.
 - Staff sieht nur erforderliche Kontaktdaten.
 - Exporte mit Kontaktdaten sind berechtigungspflichtig.
+- Rollen und Rechte stehen in `docs/PERMISSIONS.md` und werden serverseitig durchgesetzt.

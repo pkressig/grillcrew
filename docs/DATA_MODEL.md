@@ -10,7 +10,7 @@ erDiagram
   EVENT ||--o{ SHIFT : contains
   SHIFT ||--o{ SIGNUP : receives
   VOLUNTEER ||--o{ SIGNUP : makes
-  SIGNUP ||--o| WORK_RECORD : becomes
+  SIGNUP ||--o{ WORK_RECORD : becomes
   FAMILY ||--o{ CHILD : contains
   FAMILY ||--o{ FAMILY_MEMBER : has
   VOLUNTEER ||--o{ FAMILY_MEMBER : linked
@@ -90,6 +90,8 @@ Natürliche Person, unabhängig davon, ob ein Konto besteht.
 - emailDisplay
 - preferredLanguage
 - accountUserId nullable
+- publicDisplayConsentAt nullable
+- mergedIntoId nullable
 - status
 - internalNote
 - createdFrom: PUBLIC_SIGNUP | IMPORT | ADMIN
@@ -102,7 +104,8 @@ Reservierung eines Helferplatzes.
 - provisionalCompensationType
 - provisionalFamilyId nullable
 - publicNameSnapshot
-- status
+- status: ACTIVE | CANCELLED_BY_VOLUNTEER | CANCELLED_BY_ADMIN
+- outcome: OPEN | ATTENDED | EXCUSED_CANCELLED | LATE_CANCELLED | NO_SHOW | SUBSTITUTE_ORGANIZED
 - managementTokenHash
 - confirmedAt
 - cancelledAt
@@ -112,7 +115,7 @@ Reservierung eines Helferplatzes.
 ### WorkRecord
 Tatsächlich geleistete Arbeit.
 - id
-- signupId nullable
+- signupId
 - shiftId
 - volunteerId
 - actualStart
@@ -121,7 +124,6 @@ Tatsächlich geleistete Arbeit.
 - durationMinutes
 - finalCompensationType
 - creditedFamilyId nullable
-- attendanceStatus
 - submittedByVolunteerAt
 - confirmedByAdminAt
 - source: DIGITAL | PAPER | IMPORT
@@ -187,7 +189,7 @@ Nur Admin sichtbar.
 - id
 - organizationId
 - userId
-- role
+- role: ADMIN | KOORDINATION | KIOSK | VORSTAND_LESEN
 - active
 - scope optional
 
@@ -217,7 +219,26 @@ Nur Admin sichtbar.
 - aktive Signups pro Schicht dürfen `requiredVolunteers` nicht überschreiten
 - Telefonnummer und E-Mail normalisiert speichern
 - Signup-Verwaltungslinks nur gehasht speichern
+- eine öffentliche Anmeldung reserviert den Platz sofort
 - ein WorkRecord darf nicht gleichzeitig Sollstunden und Auszahlung sein
+- WorkRecord beschreibt nur tatsächlich geleistete Arbeit und braucht ein Signup
 - Auszahlungsbetrag wird serverseitig berechnet
 - Dauer darf nicht negativ sein
 - Saison muss zum Vereinsjahr gehören
+
+## Beschlossene Status-Enums (D-026)
+
+Technische Enum-Werte sind Englisch; UI-Labels sind Deutsch.
+
+- `Season.status`: `DRAFT | ACTIVE | CLOSED | ARCHIVED`
+- `Event.status`: `DRAFT | PUBLISHED | POSTPONED | CANCELLED | COMPLETED`
+- `Shift.status`: `OPEN | CLOSED | CANCELLED`
+- `Signup.status`: `ACTIVE | CANCELLED_BY_VOLUNTEER | CANCELLED_BY_ADMIN`
+- `Signup.outcome`: `OPEN | ATTENDED | EXCUSED_CANCELLED | LATE_CANCELLED | NO_SHOW | SUBSTITUTE_ORGANIZED`
+- `Payment.status`: `OPEN | APPROVED | PAID`
+
+Belegungsanzeigen wie "voll", "noch 1 Platz frei" oder "offene Plätze" sind berechnete Anzeigen und keine gespeicherten Status.
+
+## WorkRecord-Semantik (D-021, D-023)
+
+Ein `WorkRecord` entsteht nur für tatsächlich geleistete Arbeit. Papiernachträge und Importe legen zuerst ein synthetisches Signup mit `source = ADMIN` bzw. `source = IMPORT` an. Ein Signup darf im Admin-Korrekturweg mehrere WorkRecords erhalten, damit ein Einsatz bei begründeten Härtefällen manuell aufgeteilt werden kann.

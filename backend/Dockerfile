@@ -11,7 +11,7 @@ WORKDIR /code
 # würde das Paket nicht gemappt und der Container ohne Volume-Mount
 # (z. B. CI/Produktion) mit "ModuleNotFoundError: app" starten.
 COPY . .
-RUN pip install --no-cache-dir -e ".[dev]"
+RUN pip install --no-cache-dir -e "." && chmod +x scripts/start.sh
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./scripts/start.sh"]

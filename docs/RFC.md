@@ -1,6 +1,6 @@
 # RFC – Offene Architekturentscheidungen vor Sprint 1
 
-**Status dieses Dokuments:** Entwurf zur Diskussion
+**Status dieses Dokuments:** beschlossen
 **Zweck:** Jede hier beschriebene Frage blockiert einen Sprint der Roadmap. Für jede Frage werden Optionen mit Vor- und Nachteilen sowie eine Empfehlung des Technical Lead vorgestellt. Sobald eine Option gewählt ist, wird sie als neue Entscheidung (D-021 ff.) in `docs/DECISIONS.md` übernommen und der betroffene RFC-Abschnitt auf **beschlossen** gesetzt. Bis dahin gilt: nichts aus diesem Dokument ist umzusetzen.
 
 **Konventionen:**
@@ -12,7 +12,7 @@
 
 ## RFC-001 – Modell des Anwesenheitsstatus
 
-**Status:** offen
+**Status:** beschlossen (D-021)
 **Blockiert:** Sprint 1 (Schema), Sprint 6 (Einsatzabschluss)
 **Bezug:** D-019, `docs/DATA_MODEL.md` (WorkRecord), BR-009
 
@@ -60,7 +60,7 @@ Folgeänderung am Datenmodell (nur nach Beschluss): `Signup.outcome`, `WorkRecor
 
 ## RFC-002 – Reservierungs- und Bestätigungslogik der öffentlichen Eintragung
 
-**Status:** offen
+**Status:** beschlossen (D-022)
 **Blockiert:** Sprint 3; Statusmodell in Sprint 1 (RFC-006)
 **Bezug:** PRD 5.2, BR-005
 
@@ -106,7 +106,7 @@ Wie A, aber unbestätigte Anmeldungen verfallen nach z. B. 48 Stunden automatisc
 
 ## RFC-003 – Überschussstunden über das Familiensoll
 
-**Status:** offen
+**Status:** beschlossen (D-023)
 **Blockiert:** Sprint 5/6; berührt Schema (Split ja/nein)
 **Bezug:** BR-001, BR-002, D-012, Excel-Realität «unentgeltliche Stunden»
 
@@ -154,7 +154,7 @@ Hinweis: Diese Empfehlung ist mit RFC-001 Option C verträglich (mehrere WorkRec
 
 ## RFC-004 – Berechnung und Einfrieren der Sollstunden
 
-**Status:** offen
+**Status:** beschlossen (D-024)
 **Blockiert:** Sprint 5; Schema (`FamilyRequirement`)
 **Bezug:** BR-001, D-012, `FamilyRequirement` (source: DEFAULT | OVERRIDE)
 
@@ -200,7 +200,7 @@ Beim ersten Ereignis, das ein Soll benötigt (erste Sollstunden-Gutschrift der F
 
 ## RFC-005 – Staff-Rollenmodell für Version 1
 
-**Status:** offen
+**Status:** beschlossen (D-025)
 **Blockiert:** Sprint 1 («Rollenbasis», Admin-Auth), Sprint 4 (Staff-Ansicht)
 **Bezug:** D-018, PRD 5.12, BR-010, `StaffMembership` (role, scope optional)
 
@@ -249,7 +249,7 @@ Das bereits vorhandene Feld `scope` bleibt ungenutzt reserviert (z. B. spätere 
 
 ## RFC-006 – Status-Enums und Zustandsübergänge
 
-**Status:** offen
+**Status:** beschlossen (D-026)
 **Blockiert:** Sprint 1 (Schema), Sprint 2/3 (Statusanzeigen)
 **Bezug:** `docs/DATA_MODEL.md`, UX_UI (Statusbeispiele), PRD 5.4/5.5/5.10
 
@@ -294,7 +294,7 @@ Vorschlag:
 
 ## RFC-007 – Öffentliche Namensanzeige und Einwilligung importierter Helfer
 
-**Status:** offen
+**Status:** beschlossen (D-027)
 **Blockiert:** Sprint 3 (öffentlicher Plan), Sprint 8 (Import); Schemafeld schon in Sprint 1 sinnvoll
 **Bezug:** D-005, BR-005, BR-010, PRD 5.2, revidiertes DSG
 
@@ -336,7 +336,7 @@ Neues Feld `Volunteer.publicDisplayConsentAt` (nullable). Selbst-Eintragung setz
 
 ## RFC-008 – Rundung von Auszahlungsbeträgen
 
-**Status:** offen
+**Status:** beschlossen (D-028)
 **Blockiert:** Sprint 6 (Auszahlung); Berechnungsregel gehört in die Geschäftsregel-Tests ab Sprint 1
 **Bezug:** BR-003, BR-004, CLAUDE.md (Rappen als Ganzzahl)
 
@@ -378,7 +378,7 @@ Geldbeträge müssen deterministisch, auditierbar und in Summe widerspruchsfrei 
 
 ## RFC-009 – Präzise Definition der Sieben-Tage-Absageregel
 
-**Status:** offen
+**Status:** beschlossen (D-029)
 **Blockiert:** Sprint 3 (Absagefunktion); Geschäftsregel-Tests
 **Bezug:** D-006, BR-006, PRD Kernablauf Schritt 8/9
 
@@ -414,7 +414,7 @@ Zwischen dem Kalendertag der Absage und dem Kalendertag des Schichtbeginns müss
 
 ## RFC-010 – Missbrauchs- und Spam-Schutz der öffentlichen Eintragung
 
-**Status:** offen
+**Status:** beschlossen (D-030)
 **Blockiert:** Sprint 3
 **Bezug:** BR-005, PRD 5.2, UX-Ziele (barrierearm, sekundenschnell), RFC-002
 

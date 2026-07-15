@@ -12,9 +12,15 @@
 - Datenbank
 - Migrationen
 - Test-Setup
-- Organisationseinstellungen
+- Healthchecks
+- CI-Qualitätstore
+- Cloud-Deployment-Vorbereitung für Vercel und Render
+- Architektur- und Rollenentscheidungen finalisieren
+
+Nicht Sprint 1:
 - Admin-Authentifizierung
-- Rollenbasis
+- produktive Rollenverwaltung
+- fachliche Planungs-, Eintragungs- oder Importfunktionen
 
 ## Sprint 2 – Saison, Events und Schichten
 - Vereinsjahre
@@ -23,6 +29,8 @@
 - Schichten
 - Veröffentlichung
 - Admin-Übersicht offene Plätze
+- Organisationseinstellungen für Rate-Limits und Standards
+- Rollenbasis serverseitig vorbereiten, soweit für Admin nötig
 
 ## Sprint 3 – Öffentliche Eintragung
 - öffentlicher Einsatzplan

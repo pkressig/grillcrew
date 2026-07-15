@@ -3,7 +3,7 @@
 Version 1 kennt genau eine Organisation (D-015), technisch trotzdem
 eine eigene Entität, damit das Modell erweiterbar bleibt.
 Sprint 1 legt ausschliesslich diese Fundament-Tabelle an; alle weiteren
-Entitäten folgen in den fachlichen Sprints (D-022).
+Entitäten folgen in den fachlichen Sprints (D-032).
 """
 
 import uuid

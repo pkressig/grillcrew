@@ -1,0 +1,29 @@
+databases:
+  - name: grillcrew-postgres
+    databaseName: grillcrew
+    user: grillcrew
+
+services:
+  - type: web
+    name: grillcrew-api
+    runtime: python
+    rootDir: backend
+    plan: starter
+    buildCommand: pip install -e .
+    startCommand: sh scripts/start.sh
+    healthCheckPath: /api/ready
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: INFO
+      - key: LOG_FORMAT
+        value: json
+      - key: BUSINESS_TIMEZONE
+        value: Europe/Zurich
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: grillcrew-postgres
+          property: connectionString

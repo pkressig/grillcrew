@@ -10,12 +10,16 @@
 - automatische E-Mail-Erinnerungen
 - PDF-Export
 - weitere Staff-Sichtbereiche
+- Verfallsmechanismus für unbestätigte Anmeldungen nur bei realem Bedarf
+- 5-Rappen-Bargeldrundung für Auszahlungsvorgänge
+- systemgestützter WorkRecord-Split
 
 ## Später
 - weitere Module: Kiosk, Kuchen, Fahrdienst, Turniere, Platzdienst
 - Multi-Verein-/Mandantenfähigkeit
 - vollständig automatisierte WhatsApp-Business-Nachrichten
 - SMS
+- SMS-Verifikation für öffentliche Eintragung
 - Push-Nachrichten
 - Offline-Modus für Einsatzabschluss
 - Wetterinformationen

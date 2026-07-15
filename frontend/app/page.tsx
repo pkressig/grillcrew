@@ -6,8 +6,8 @@ export default function HomePage() {
         Helfer- und Einsatzplanung für den FC Thusis-Cazis.
       </p>
       <p className="rounded-lg border border-border bg-muted p-4 text-base">
-        Die Anwendung befindet sich im Aufbau. Der öffentliche Einsatzplan
-        erscheint hier, sobald die erste Saison veröffentlicht ist.
+        Die Anwendung befindet sich im Aufbau. Der öffentliche Einsatzplan erscheint hier, sobald
+        die erste Saison veröffentlicht ist.
       </p>
     </main>
   );

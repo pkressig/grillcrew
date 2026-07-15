@@ -47,8 +47,8 @@ Grillkoordination. Vollständige Planung, Verwaltung, Korrektur, Auswertung und 
    - Auszahlung
 6. Bei Sollstunden wird eine Familie ausgewählt oder zur Prüfung angegeben.
 7. Helfer erhält Bestätigung und kann optional ein Konto anlegen.
-8. Bis sieben Tage vor Beginn kann der Helfer selbst absagen.
-9. Innerhalb von sieben Tagen wird Kontakt mit der Koordination verlangt.
+8. Bis zur konkret angezeigten Frist gemäss Sieben-Kalendertage-Regel kann der Helfer selbst absagen.
+9. Nach Ablauf der Frist wird Kontakt mit der Koordination verlangt.
 10. Nach dem Einsatz erfasst der Helfer effektive Zeiten und bestätigt die Angaben.
 11. Admin kann Papierangaben nachtragen oder jede Angabe korrigieren.
 12. Die App berechnet Stunden, Sollstände und Auszahlungen.
@@ -61,6 +61,7 @@ Grillkoordination. Vollständige Planung, Verwaltung, Korrektur, Auswertung und 
 - Datum, Zeit, Ort, Beschreibung
 - benötigte und belegte Plätze
 - vollständige Namen eingetragener Helfer
+- abgekürzte Namensanzeige, falls die Einwilligung zur vollen öffentlichen Anzeige fehlt
 - keine öffentlichen Telefonnummern oder E-Mail-Adressen
 - Filter nach Zeitraum und offenen Plätzen
 - grosse Schaltfläche zur Eintragung
@@ -79,6 +80,7 @@ Zusätzlich:
 - Zustimmung zur Datenverarbeitung und öffentlichen Namensanzeige
 - Bestätigung per E-Mail
 - sicherer persönlicher Verwaltungslink
+- sofortige verbindliche Platzreservierung
 
 ### 5.3 Optionales Helferkonto
 - Registrierung ist freiwillig
@@ -95,6 +97,7 @@ Zusätzlich:
 - getrennte Auswertung
 - gemeinsame Auswertung über das Vereinsjahr
 - Status: Entwurf, aktiv, abgeschlossen, archiviert
+- technische Statuswerte sind Englisch; deutsche UI-Labels werden übersetzt
 
 ### 5.5 Events und Schichten
 Event:
@@ -140,6 +143,7 @@ Priorität ist Handlungsbedarf:
   - nicht erschienen
   - Ersatz organisiert
 - mögliche Dubletten manuell zusammenführen
+- Namensanzeige-Einwilligung für öffentliche Pläne nachvollziehbar speichern
 
 ### 5.8 Familien und Kinder
 - gemeinsames Familienkonto
@@ -151,6 +155,7 @@ Priorität ist Handlungsbedarf:
   - ein Kind: 8 Stunden
   - zwei oder mehr Kinder: 12 Stunden
 - Admin kann Sollwert begründet überschreiben
+- Sollwert wird beim ersten fachlichen Bezug materialisiert und danach eingefroren
 - Stunden können von einer anderen Person für eine Familie geleistet werden
 
 ### 5.9 Einsatzabschluss
@@ -167,6 +172,7 @@ Priorität ist Handlungsbedarf:
 ### 5.10 Auszahlung
 - Standardsatz 9 CHF pro Stunde, administrativ änderbar
 - Betrag automatisch aus bestätigter Dauer berechnen
+- kaufmännische Rundung pro Einsatzleistung auf 1 Rappen
 - Status: offen, freigegeben, ausbezahlt
 - Auszahlungsdatum
 - interne Bemerkung
@@ -188,6 +194,7 @@ Nur Admin sichtbar:
 - Rollen werden detailliert in Berechtigungen umgesetzt
 - Vorstand kann später eine Lese-/Exportrolle erhalten
 - Admin besitzt Vollzugriff
+- verbindliche Rollenmatrix: ADMIN, KOORDINATION, KIOSK, VORSTAND_LESEN
 
 ### 5.13 Kommunikation
 Version 1:
@@ -227,6 +234,7 @@ Export:
 - Hosting in einer professionellen Umgebung
 - lokale Entwicklung möglich
 - sichere Rollen- und Rechteprüfung
+- Cloud-Zielarchitektur: Vercel für das Frontend, Render für Backend und PostgreSQL
 - revisionsfähiges Änderungsprotokoll für relevante Daten
 - tägliche Backups im Produktivbetrieb
 - Europe/Zurich als fachliche Zeitzone

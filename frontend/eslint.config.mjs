@@ -10,7 +10,7 @@ const config = [
       "@typescript-eslint/no-explicit-any": "error",
     },
   },
-  { ignores: [".next/**", "node_modules/**"] },
+  { ignores: [".next/**", "next-env.d.ts", "node_modules/**"] },
 ];
 
 export default config;
