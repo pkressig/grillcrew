@@ -2,13 +2,16 @@ databases:
   - name: grillcrew-postgres
     databaseName: grillcrew
     user: grillcrew
+    plan: free
+    region: frankfurt
 
 services:
   - type: web
     name: grillcrew-api
     runtime: python
     rootDir: backend
-    plan: starter
+    plan: free
+    region: frankfurt
     buildCommand: pip install -e .
     startCommand: sh scripts/start.sh
     healthCheckPath: /api/ready
