@@ -91,6 +91,15 @@ def _path_slug(path: str) -> str | None:
         return None
     if parts[0] == "api" and len(parts) >= 4 and parts[1] == "public":
         return parts[3]
+    if parts[0] == "api" and len(parts) >= 3 and parts[1] == "admin":
+        return parts[2]
+    if (
+        parts[0] == "api"
+        and len(parts) >= 4
+        and parts[1] == "internal"
+        and parts[2] == "test-support"
+    ):
+        return parts[3]
     if parts[0] != "api":
         return parts[0]
     return None
