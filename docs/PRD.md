@@ -1,249 +1,167 @@
 # Product Requirements Document
 
-## 1. Produkt
+## 1. Product
 
-**Name der Vereinsinstanz:** GrillCrew FCTC
+The product is a commercial SaaS platform for organizing volunteer work across multiple organizations. Each organization has its own data, branding, settings, permissions, planning, people, families, signups, work records, payments, and reports.
 
-GrillCrew FCTC ist eine moderne, mobile Web-App zur Organisation freiwilliger Grilleinsätze. Die erste Version wird für den FC Thusis-Cazis gebaut. Das Datenmodell soll weitere Einsatzarten später ermöglichen, ohne Version 1 unnötig zu vergrössern.
+The first production customer is only the first organization on the platform. It must not be hardcoded in code, configuration, UI copy, API behavior, tests, or seed data.
+
+The first production-ready version focuses on volunteer staffing for grill, kiosk, match-day, and similar organization-run shifts. The platform remains extensible for additional volunteer work types.
 
 ## 2. Problem
 
-Der aktuelle Ablauf verteilt sich auf:
-- Kiosk- und Heimspielplan
-- VolunteerSignup
-- WhatsApp-Kommunikation
-- Monatspläne auf Papier
-- Unterschriften und handschriftliche Nachträge
-- mehrere Excel-Dateien für Einsatz-, Stunden- und Familienauswertungen
+Organizations often coordinate volunteer work through spreadsheets, sign-up tools, messaging apps, paper lists, and manual payment or requirement calculations. This causes:
 
-Die Folgen sind:
-- doppelte Datenpflege
-- Telefonnummern und Namen in verschiedenen Schreibweisen
-- manuelle Kontrolle offener Plätze
-- aufwendiges Nachführen bei Spielverschiebungen
-- manuelle Berechnung von Sollstunden, unentgeltlichen Stunden und Auszahlungen
-- fehlende zentrale Helfer- und Familienhistorie
+- duplicated data entry
+- inconsistent contact data
+- unclear open shift coverage
+- manual rework after schedule changes
+- fragile family or requirement accounting
+- manual payout calculations
+- limited auditability
+- weak data protection boundaries between public and staff-only information
 
-## 3. Zielgruppen
+## 3. Target Groups
 
-### Helfer
-Eltern, Vereinsmitglieder und weitere freiwillige Personen. Unterschiedliche Altersgruppen und technische Erfahrung.
+### Platform Operator
 
-### Staff
-Kioskteam, Grillkoordination, Vorstand oder weitere berechtigte Verantwortliche.
+Runs the SaaS platform, provisions organizations, supports onboarding, monitors operations, and manages commercial platform concerns.
 
-### Admin
-Grillkoordination. Vollständige Planung, Verwaltung, Korrektur, Auswertung und Import.
+### Organization Admin
 
-## 4. Kernablauf
+Owns one organization's setup, branding, roles, seasons, planning, corrections, imports, exports, and reports.
 
-1. Admin erstellt Vereinsjahr, Teil-Saison, Event und Schichten.
-2. Admin veröffentlicht den Plan und teilt Link oder QR-Code.
-3. Helfer sieht Termine und freie Plätze ohne Login.
-4. Helfer trägt sich mit Vorname, Nachname, Telefonnummer und E-Mail ein.
-5. Helfer wählt pro Schicht vorläufig die Vergütungsart:
-   - Sollstunden
-   - unentgeltlich
-   - Auszahlung
-6. Bei Sollstunden wird eine Familie ausgewählt oder zur Prüfung angegeben.
-7. Helfer erhält Bestätigung und kann optional ein Konto anlegen.
-8. Bis zur konkret angezeigten Frist gemäss Sieben-Kalendertage-Regel kann der Helfer selbst absagen.
-9. Nach Ablauf der Frist wird Kontakt mit der Koordination verlangt.
-10. Nach dem Einsatz erfasst der Helfer effektive Zeiten und bestätigt die Angaben.
-11. Admin kann Papierangaben nachtragen oder jede Angabe korrigieren.
-12. Die App berechnet Stunden, Sollstände und Auszahlungen.
-13. Admin exportiert Saison- und Vereinsjahresauswertungen.
+### Organization Staff
 
-## 5. Version-1-Funktionen
+Coordinates operational work inside one organization. Staff roles are scoped to that organization and expose only the required data.
 
-### 5.1 Öffentlicher Einsatzplan
-- kommende Events und Schichten
-- Datum, Zeit, Ort, Beschreibung
-- benötigte und belegte Plätze
-- vollständige Namen eingetragener Helfer
-- abgekürzte Namensanzeige, falls die Einwilligung zur vollen öffentlichen Anzeige fehlt
-- keine öffentlichen Telefonnummern oder E-Mail-Adressen
-- Filter nach Zeitraum und offenen Plätzen
-- grosse Schaltfläche zur Eintragung
+### Volunteer
 
-### 5.2 Eintragung ohne Konto
-Pflichtfelder:
-- Vorname
-- Nachname
-- Telefonnummer
-- E-Mail
-- Vergütungsart für diesen Einsatz
+Signs up for shifts, optionally manages personal assignments, and may contribute work toward a family or other organization-specific requirement.
 
-Zusätzlich:
-- Familienzuordnung bei Sollstunden
-- Bemerkung optional
-- Zustimmung zur Datenverarbeitung und öffentlichen Namensanzeige
-- Bestätigung per E-Mail
-- sicherer persönlicher Verwaltungslink
-- sofortige verbindliche Platzreservierung
+## 4. Core Flow
 
-### 5.3 Optionales Helferkonto
-- Registrierung ist freiwillig
-- bestehende Einsätze können nach verifizierter E-Mail und Telefonnummer übernommen werden
-- persönliche Stammdaten werden vorbefüllt
-- eigene kommende und vergangene Einsätze
-- eigenes Stundenkonto
-- bestätigte Familienzuordnung zeigt gemeinsames Familienkonto
-- Magic Link oder Einmalcode statt komplizierter Passwortpflicht bevorzugt
+1. Platform Operator provisions an organization or an Organization Admin completes onboarding.
+2. Organization Admin configures branding, settings, roles, seasons, and public signup behavior.
+3. Organization Admin creates events and shifts.
+4. Organization Admin publishes the public plan.
+5. Volunteers open the organization's public plan through its domain, subdomain, slug, or other resolved route.
+6. Volunteers sign up without an account and receive a management link.
+7. Organization Staff tracks attendance and operational issues.
+8. Volunteers or Admin submit actual worked time.
+9. Admin confirms work records, family credits, and payouts.
+10. Organization reports, statistics, and exports are generated within the organization boundary.
 
-### 5.4 Saisons
-- Vereinsjahr, z. B. 2026/2027
-- Teil-Saisons Herbst und Frühling
-- getrennte Auswertung
-- gemeinsame Auswertung über das Vereinsjahr
-- Status: Entwurf, aktiv, abgeschlossen, archiviert
-- technische Statuswerte sind Englisch; deutsche UI-Labels werden übersetzt
+## 5. Version-1 Platform Features
 
-### 5.5 Events und Schichten
-Event:
-- Titel
-- Datum
-- Ort
-- öffentliche Beschreibung
-- interne Notiz
-- Eventtyp
-- Status
-- optionale Hinweise wie Turnier oder Spezialbetrieb
+### 5.1 Organization Tenancy
 
-Schicht:
-- geplante Start- und Endzeit
-- benötigte Helferzahl
-- Status
-- öffentlicher Hinweis
-- interne Notiz
-- mehrere Helferplätze
-- Vergütungswahl je Anmeldung
+- multiple organizations on one platform
+- strict data isolation by organization
+- organization-local roles and permissions
+- organization-local volunteers, families, seasons, events, shifts, signups, work records, payments, and exports
+- no hardcoded organization names
 
-### 5.6 Admin-Dashboard
-Priorität ist Handlungsbedarf:
-- offene Plätze in 7, 14 und 30 Tagen
-- kurzfristige Absagen
-- unbestätigte oder unvollständige Einsätze
-- fehlende Familienzuordnungen
-- mögliche Dubletten
-- offene Auszahlungen
-- heutige und nächste Einsätze
-- schneller WhatsApp-Teiltext für offene Schichten
+### 5.2 Organization Branding and Settings
 
-### 5.7 Helferverwaltung
-- vollständige Kontaktdaten
-- Einsatzhistorie
-- Konto vorhanden/nicht vorhanden
-- Familienzuordnungen
-- Status und interne Notizen
-- sachliche Ereignisstatus:
-  - erschienen
-  - entschuldigt abgesagt
-  - kurzfristig abgesagt
-  - nicht erschienen
-  - Ersatz organisiert
-- mögliche Dubletten manuell zusammenführen
-- Namensanzeige-Einwilligung für öffentliche Pläne nachvollziehbar speichern
+- display name, short name, slug, locale, timezone, language, currency
+- Theme-driven logo and colors
+- public-safe organization and Theme endpoint
+- admin settings for rates, anti-abuse thresholds, coordination contacts, and public signup behavior
+- Theme and settings loaded from the database before rendering organization-specific pages
 
-### 5.8 Familien und Kinder
-- gemeinsames Familienkonto
-- mehrere erwachsene Helfer pro Familie
-- mehrere Kinder pro Familie
-- Mannschaft optional
-- Sollstunden pro Vereinsjahr
-- Standard:
-  - ein Kind: 8 Stunden
-  - zwei oder mehr Kinder: 12 Stunden
-- Admin kann Sollwert begründet überschreiben
-- Sollwert wird beim ersten fachlichen Bezug materialisiert und danach eingefroren
-- Stunden können von einer anderen Person für eine Familie geleistet werden
+### 5.3 Authentication and Permissions
 
-### 5.9 Einsatzabschluss
-- effektiver Arbeitsbeginn
-- effektives Arbeitsende
-- Pausen optional
-- berechnete Dauer
-- endgültige Vergütungsart
-- begünstigte Familie bei Sollstunden
-- Helferbestätigung
-- Admin-Korrektur mit Änderungsprotokoll
-- Nachtrag von Papierlisten
+- platform operator access
+- organization admin access
+- organization staff roles
+- optional volunteer account later
+- backend-enforced permission guards
+- one user may have different roles in different organizations
 
-### 5.10 Auszahlung
-- Standardsatz 9 CHF pro Stunde, administrativ änderbar
-- Betrag automatisch aus bestätigter Dauer berechnen
-- kaufmännische Rundung pro Einsatzleistung auf 1 Rappen
-- Status: offen, freigegeben, ausbezahlt
-- Auszahlungsdatum
-- interne Bemerkung
-- Saison- und Gesamtauswertung
+### 5.4 Seasons and Planning
 
-### 5.11 Eigene Koordinationszeit
-Nur Admin sichtbar:
-- Datum
-- Tätigkeit
-- Dauer
-- Teil-Saison
-- Bemerkung
-- Status
-- Berechnung mit hinterlegtem Stundenansatz
+- organization-owned club years and seasons
+- status-based planning lifecycle
+- organization-owned events and shifts
+- public/private notes
+- publication controls
 
-### 5.12 Staff
-- Staff sieht vollständige Namen und Telefonnummern
-- Staff sieht nur Daten, die für seine Arbeit erforderlich sind
-- Rollen werden detailliert in Berechtigungen umgesetzt
-- Vorstand kann später eine Lese-/Exportrolle erhalten
-- Admin besitzt Vollzugriff
-- verbindliche Rollenmatrix: ADMIN, KOORDINATION, KIOSK, VORSTAND_LESEN
+### 5.5 Public Plan and Signup
 
-### 5.13 Kommunikation
-Version 1:
-- E-Mail-Bestätigung
-- E-Mail-Erinnerung
-- klickbare Telefon- und WhatsApp-Links für Staff
-- vorbereitete WhatsApp-Texte zum Teilen
-- Kalenderdatei
-- Änderungsinformation bei verschobenen Events
+- public organization-specific plan
+- open shift display
+- signup without account
+- immediate place reservation
+- contact and compensation choice
+- organization-specific anti-abuse controls
+- hashed management links
+- no public contact data
 
-Nicht Version 1:
-- automatische WhatsApp-Business-API
-- kostenpflichtige SMS
-- native Push-Nachrichten
+### 5.6 Volunteers and Families
 
-### 5.14 Import und Export
-Import:
-- einmalige Übernahme der vier bestehenden Excel-Dateien
-- später allgemeiner Import-Assistent
-- Vorschau, Dublettenprüfung, Spaltenzuordnung und Protokoll
+- organization-owned volunteer records
+- normalized contact data per organization
+- public display consent per organization
+- organization-owned families, children, family members, and requirements
+- children never public
+- requirement rules configurable by organization where needed
 
-Export:
-- Excel/CSV für Stunden, Familien und Auszahlungen
-- Monats-/Einsatzplan
-- druckfreundliche Staff-Liste
-- Saisonabschluss
-- Vereinsjahresübersicht
+### 5.7 Attendance and Work Records
 
-## 6. Nichtfunktionale Anforderungen
+- attendance outcome stored on signup
+- actual worked time stored as work record
+- work records only for actual work
+- admin corrections and paper/import entries
+- audit trail for corrections
 
-- mobile-first PWA
-- moderne, schnelle Benutzeroberfläche
-- für ältere Personen gut bedienbar
-- gute Kontraste und grosse Touch-Ziele
-- responsive für Handy, Tablet und Desktop
-- deutsche Oberfläche, Internationalisierung vorbereitet
-- Hosting in einer professionellen Umgebung
-- lokale Entwicklung möglich
-- sichere Rollen- und Rechteprüfung
-- Cloud-Zielarchitektur: Vercel für das Frontend, Render für Backend und PostgreSQL
-- revisionsfähiges Änderungsprotokoll für relevante Daten
-- tägliche Backups im Produktivbetrieb
-- Europe/Zurich als fachliche Zeitzone
+### 5.8 Payments
 
-## 7. Erfolgskriterien der ersten Saison
+- organization-specific payout rate
+- amount stored in minor units
+- rate frozen at approval
+- payment states: open, approved, paid
+- organization-scoped payout reports
 
-- alle Grilltermine werden in der App geführt
-- Helfer können sich ohne Erklärung selbst eintragen
-- Telefonnummern sind für Staff erreichbar, aber nie öffentlich
-- offene Schichten sind sofort erkennbar
-- Saisonabschluss benötigt keine manuelle Neuberechnung in mehreren Excel-Dateien
-- bestehende Helfer- und Familiendaten sind bereinigt übernommen
+### 5.9 Dashboard, Statistics, and Exports
+
+- operational action dashboard per organization
+- open shift windows
+- missing attendance and incomplete work records
+- family fulfillment
+- payout summaries
+- exports with permission checks
+- audit-sensitive export behavior
+
+### 5.10 Import
+
+- organization-scoped import batches
+- import preview and validation
+- duplicate review
+- import protocol
+- customer-specific source files handled as data, not code assumptions
+
+## 6. Nonfunctional Requirements
+
+- mobile-first responsive UI
+- accessible public signup flow
+- strict server-side validation
+- strict organization data isolation
+- database-driven branding
+- no customer-specific hardcoding
+- auditability for sensitive actions
+- PostgreSQL-backed transactional integrity
+- GitHub-based deployment
+- daily backups for production data
+- secure handling of secrets outside the repository
+
+## 7. Success Criteria for the First Production-Ready Version
+
+- a new organization can be onboarded without code changes
+- organization branding comes from the database
+- organization data is isolated from all other organizations
+- an organization can create seasons, events, and shifts
+- volunteers can sign up through an organization-specific public plan
+- staff can manage attendance and work records
+- admin can generate basic operational summaries
+- contact data and child data are never public

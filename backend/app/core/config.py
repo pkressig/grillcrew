@@ -22,10 +22,13 @@ class LogFormat(StrEnum):
     JSON = "json"
 
 
-class Settings(BaseSettings):
+# NOTE on the ignore below: pydantic.BaseModel.__init__ (inherited via
+# BaseSettings) is itself typed as `**data: Any`, so mypy's disallow_any_explicit
+# flags the subclass; this is inherent to pydantic and not fixable from our code.
+class Settings(BaseSettings):  # type: ignore[explicit-any]
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "GrillCrew FCTC API"
+    app_name: str = "Volunteer Platform API"
     app_env: AppEnv = AppEnv.DEVELOPMENT
     log_level: str = "INFO"
     log_format: LogFormat = LogFormat.TEXT
@@ -49,11 +52,7 @@ class Settings(BaseSettings):
 
     def cors_origins(self) -> list[str]:
         """Return comma-separated CORS origins from the environment."""
-        return [
-            origin.strip()
-            for origin in self.cors_allowed_origins.split(",")
-            if origin.strip()
-        ]
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
 @lru_cache

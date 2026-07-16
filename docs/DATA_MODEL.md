@@ -1,10 +1,16 @@
-# Fachliches Datenmodell
+# Data Model
 
-## Übersicht
+## Overview
 
 ```mermaid
 erDiagram
-  ORGANIZATION ||--o{ CLUB_YEAR : has
+  THEME ||--o{ ORGANIZATION : styles
+  ORGANIZATION ||--|| ORGANIZATION_SETTINGS : configures
+  ORGANIZATION ||--o{ CLUB_YEAR : owns
+  ORGANIZATION ||--o{ VOLUNTEER : owns
+  ORGANIZATION ||--o{ FAMILY : owns
+  ORGANIZATION ||--o{ STAFF_MEMBERSHIP : grants
+  ORGANIZATION ||--o{ IMPORT_BATCH : owns
   CLUB_YEAR ||--o{ SEASON : contains
   SEASON ||--o{ EVENT : contains
   EVENT ||--o{ SHIFT : contains
@@ -16,26 +22,77 @@ erDiagram
   VOLUNTEER ||--o{ FAMILY_MEMBER : linked
   FAMILY ||--o{ WORK_RECORD : credited
   WORK_RECORD ||--o| PAYMENT : may_create
-  ADMIN_USER ||--o{ COORDINATION_LOG : records
-  ORGANIZATION ||--o{ STAFF_MEMBERSHIP : grants
+  USER ||--o{ STAFF_MEMBERSHIP : has
+  USER ||--o{ AUDIT_EVENT : causes
 ```
 
-## Kernentitäten
+## Tenant Boundary
+
+`Organization` is the root tenant entity. Every business record is directly or indirectly scoped to exactly one organization.
+
+Rules:
+
+- Volunteers are organization-local.
+- Families are organization-local.
+- Staff memberships are organization-local.
+- Seasons, events, shifts, signups, work records, payments, statistics, and exports are organization-local through their parent chain.
+- A global user may have memberships in multiple organizations, but permissions are evaluated per organization.
+- A person helping multiple organizations is represented by separate organization-local volunteer records unless a later account-linking feature explicitly connects them.
+
+## Core Entities
 
 ### Organization
-Für Version 1 genau eine Organisation, technisch trotzdem eigene Entität.
+
 - id
+- themeId
 - name
 - shortName
+- slug
+- customDomain nullable
 - timezone
 - locale
-- logo
+- language
+- currency
+- contactEmail nullable
+- contactPhone nullable
+- contactUrl nullable
+
+### Theme
+
+- id
+- name
+- logoUrl nullable
 - primaryColor
-- accentColor
-- settings
+- secondaryColor
+
+### OrganizationSettings
+
+- id
+- organizationId
+- payoutRateMinorPerHour
+- signupRateLimitPerContact
+- signupRateLimitWindowMinutes
+- coordinationContactLabel nullable
+
+### User
+
+- id
+- emailNormalized
+- displayName
+- status
+- createdAt
+
+### StaffMembership
+
+- id
+- organizationId
+- userId
+- role: ADMIN | KOORDINATION | KIOSK | VORSTAND_LESEN
+- active
+- scope nullable
 
 ### ClubYear
-Beispiel 2026/2027.
+
 - id
 - organizationId
 - label
@@ -44,17 +101,17 @@ Beispiel 2026/2027.
 - status
 
 ### Season
-Teil-Saison innerhalb eines Vereinsjahres.
+
 - id
 - clubYearId
 - type: AUTUMN | SPRING | OTHER
 - name
 - startDate
 - endDate
-- status
+- status: DRAFT | ACTIVE | CLOSED | ARCHIVED
 
 ### Event
-Ein Heimspieltag, Turnier, Cupspiel oder anderer Anlass.
+
 - id
 - seasonId
 - title
@@ -63,12 +120,12 @@ Ein Heimspieltag, Turnier, Cupspiel oder anderer Anlass.
 - eventType
 - publicDescription
 - internalNote
-- status
+- status: DRAFT | PUBLISHED | POSTPONED | CANCELLED | COMPLETED
 - publishedAt
-- sourceImportId
+- sourceImportId nullable
 
 ### Shift
-Konkreter Einsatzzeitraum.
+
 - id
 - eventId
 - startsAt
@@ -76,12 +133,13 @@ Konkreter Einsatzzeitraum.
 - requiredVolunteers
 - publicNote
 - internalNote
-- status
+- status: OPEN | CLOSED | CANCELLED
 - sortOrder
 
 ### Volunteer
-Natürliche Person, unabhängig davon, ob ein Konto besteht.
+
 - id
+- organizationId
 - firstName
 - lastName
 - phoneNormalized
@@ -97,7 +155,7 @@ Natürliche Person, unabhängig davon, ob ein Konto besteht.
 - createdFrom: PUBLIC_SIGNUP | IMPORT | ADMIN
 
 ### Signup
-Reservierung eines Helferplatzes.
+
 - id
 - shiftId
 - volunteerId
@@ -110,10 +168,46 @@ Reservierung eines Helferplatzes.
 - confirmedAt
 - cancelledAt
 - cancellationReason
-- source
+- source: PUBLIC_SIGNUP | ADMIN | IMPORT
+
+### Family
+
+- id
+- organizationId
+- displayName
+- status
+- internalNote
+
+### Child
+
+- id
+- familyId
+- firstName
+- lastName
+- team
+- activeFrom
+- activeUntil
+
+### FamilyMember
+
+- id
+- familyId
+- volunteerId
+- relationship
+- verifiedAt
+- isPrimaryContact
+
+### FamilyRequirement
+
+- id
+- familyId
+- clubYearId
+- requiredMinutes
+- reason
+- source: DEFAULT | OVERRIDE
 
 ### WorkRecord
-Tatsächlich geleistete Arbeit.
+
 - id
 - signupId
 - shiftId
@@ -129,42 +223,8 @@ Tatsächlich geleistete Arbeit.
 - source: DIGITAL | PAPER | IMPORT
 - note
 
-### Family
-Gemeinsames Sollstundenkonto.
-- id
-- organizationId
-- displayName
-- status
-- internalNote
-
-### Child
-- id
-- familyId
-- firstName
-- lastName
-- team
-- activeFrom
-- activeUntil
-
-### FamilyMember
-Zuordnung von Helfer zu Familie.
-- id
-- familyId
-- volunteerId
-- relationship
-- verifiedAt
-- isPrimaryContact
-
-### FamilyRequirement
-Sollwert pro Vereinsjahr.
-- id
-- familyId
-- clubYearId
-- requiredMinutes
-- reason
-- source: DEFAULT | OVERRIDE
-
 ### Payment
+
 - id
 - workRecordId
 - rateRappenPerHour
@@ -173,30 +233,12 @@ Sollwert pro Vereinsjahr.
 - paidAt
 - note
 
-### CoordinationLog
-Nur Admin sichtbar.
-- id
-- adminUserId
-- seasonId
-- date
-- durationMinutes
-- activityType
-- note
-- rateRappenPerHour
-- paymentStatus
-
-### StaffMembership
-- id
-- organizationId
-- userId
-- role: ADMIN | KOORDINATION | KIOSK | VORSTAND_LESEN
-- active
-- scope optional
-
 ### AuditEvent
+
 - id
+- organizationId nullable for platform-level events
+- actorUserId nullable
 - actorType
-- actorId
 - action
 - entityType
 - entityId
@@ -205,7 +247,9 @@ Nur Admin sichtbar.
 - createdAt
 
 ### ImportBatch
+
 - id
+- organizationId
 - filename
 - fileHash
 - importType
@@ -214,31 +258,42 @@ Nur Admin sichtbar.
 - summary
 - errorReport
 
-## Wichtige Constraints
+## Organization Resolution (F001)
 
-- aktive Signups pro Schicht dürfen `requiredVolunteers` nicht überschreiten
-- Telefonnummer und E-Mail normalisiert speichern
-- Signup-Verwaltungslinks nur gehasht speichern
-- eine öffentliche Anmeldung reserviert den Platz sofort
-- ein WorkRecord darf nicht gleichzeitig Sollstunden und Auszahlung sein
-- WorkRecord beschreibt nur tatsächlich geleistete Arbeit und braucht ein Signup
-- Auszahlungsbetrag wird serverseitig berechnet
-- Dauer darf nicht negativ sein
-- Saison muss zum Vereinsjahr gehören
+Organization resolution order:
 
-## Beschlossene Status-Enums (D-026)
+1. Custom domain.
+2. Subdomain.
+3. URL path.
+4. Development override `?org=`.
+5. Development-only fallback when `APP_ENV=development` and exactly one organization exists.
 
-Technische Enum-Werte sind Englisch; UI-Labels sind Deutsch.
+The fallback is forbidden in production.
 
-- `Season.status`: `DRAFT | ACTIVE | CLOSED | ARCHIVED`
-- `Event.status`: `DRAFT | PUBLISHED | POSTPONED | CANCELLED | COMPLETED`
-- `Shift.status`: `OPEN | CLOSED | CANCELLED`
-- `Signup.status`: `ACTIVE | CANCELLED_BY_VOLUNTEER | CANCELLED_BY_ADMIN`
-- `Signup.outcome`: `OPEN | ATTENDED | EXCUSED_CANCELLED | LATE_CANCELLED | NO_SHOW | SUBSTITUTE_ORGANIZED`
-- `Payment.status`: `OPEN | APPROVED | PAID`
+## Public Organization API (F001)
 
-Belegungsanzeigen wie "voll", "noch 1 Platz frei" oder "offene Plätze" sind berechnete Anzeigen und keine gespeicherten Status.
+`GET /api/public/organization` returns only public-safe organization metadata:
 
-## WorkRecord-Semantik (D-021, D-023)
+- name
+- short name
+- slug
+- theme: name, logo URL, primary color, secondary color
+- language
+- locale
+- timezone
+- currency
+- public contact fields
+- public-safe settings from `OrganizationSettings`
 
-Ein `WorkRecord` entsteht nur für tatsächlich geleistete Arbeit. Papiernachträge und Importe legen zuerst ein synthetisches Signup mit `source = ADMIN` bzw. `source = IMPORT` an. Ein Signup darf im Admin-Korrekturweg mehrere WorkRecords erhalten, damit ein Einsatz bei begründeten Härtefällen manuell aufgeteilt werden kann.
+## Constraints
+
+- All business queries must be scoped to organization.
+- Signup, shift, volunteer, family, work record, and payment references must resolve to the same organization.
+- Active signups per shift must not exceed `requiredVolunteers`.
+- Phone and email values are stored normalized and display-formatted.
+- Signup management links are stored only as hashes.
+- A work record represents actual work only.
+- A work record may not be both family credit and payout.
+- Duration is stored in integer minutes and may not be negative.
+- Amounts are stored in integer minor units.
+- Public APIs must not expose contact data, child data, internal notes, or cross-organization identifiers.

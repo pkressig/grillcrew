@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GrillCrew FCTC",
-  description: "Helfer- und Einsatzplanung für den FC Thusis-Cazis",
+  title: "Volunteer Platform",
+  description: "Multi-organization volunteer operations platform",
 };
 
 export const viewport: Viewport = {

@@ -4,11 +4,13 @@ Revision ID: 0001
 Revises:
 Create Date: 2026-07-15
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision: str = "0001"
 down_revision: str | None = None
@@ -34,9 +36,7 @@ def upgrade() -> None:
         sa.Column("logo_url", sa.String(500), nullable=True),
         sa.Column("primary_color", sa.String(16), nullable=True),
         sa.Column("accent_color", sa.String(16), nullable=True),
-        sa.Column(
-            "settings", JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")
-        ),
+        sa.Column("settings", JSONB, nullable=False, server_default=sa.text("'{}'::jsonb")),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
