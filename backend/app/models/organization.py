@@ -1,13 +1,19 @@
 """Organization tenant root and platform core models."""
 
+from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.identity import AuditEvent, StaffMembership
 
 
 class Theme(Base):
@@ -64,9 +70,11 @@ class Organization(Base):
     )
 
     theme: Mapped[Theme] = relationship()
-    settings: Mapped["OrganizationSettings"] = relationship(
+    settings: Mapped[OrganizationSettings] = relationship(
         back_populates="organization", uselist=False
     )
+    staff_memberships: Mapped[list[StaffMembership]] = relationship(back_populates="organization")
+    audit_events: Mapped[list[AuditEvent]] = relationship(back_populates="organization")
 
 
 class OrganizationSettings(Base):

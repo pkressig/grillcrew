@@ -51,7 +51,9 @@ def test_decode_rejects_wrong_secret() -> None:
 
 def test_decode_rejects_tampered_token() -> None:
     token = create_access_token(subject="user-123", secret=SECRET, ttl=timedelta(minutes=15))
-    tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
+    header, payload, signature = token.split(".")
+    tampered_payload = payload[:-2] + ("AA" if payload[-2:] != "AA" else "BB")
+    tampered = f"{header}.{tampered_payload}.{signature}"
 
     with pytest.raises(InvalidAccessTokenError):
         decode_access_token(tampered, secret=SECRET)
