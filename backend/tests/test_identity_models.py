@@ -9,6 +9,7 @@ from sqlalchemy.sql.schema import Table
 from app.models.identity import (
     AuditEvent,
     PlatformRole,
+    RefreshToken,
     StaffMembership,
     StaffRole,
     User,
@@ -68,6 +69,24 @@ def test_audit_event_supports_platform_and_system_events_without_update_timestam
 
     audit_lookup = _index(table.indexes, "ix_audit_event_organization_created_at")
     assert ["organization_id", "created_at"] == [column.name for column in audit_lookup.columns]
+
+
+def test_refresh_token_stores_only_hash_and_rotation_family() -> None:
+    table = cast(Table, RefreshToken.__table__)
+
+    assert table.c.user_id.nullable is False
+    assert table.c.token_hash.nullable is False
+    assert table.c.family_id.nullable is False
+    assert table.c.expires_at.nullable is False
+    assert table.c.revoked_at.nullable is True
+    assert "raw_token" not in table.c
+
+    token_hash = _index(table.indexes, "ix_refresh_token_token_hash")
+    assert token_hash.unique is True
+    assert ["token_hash"] == [column.name for column in token_hash.columns]
+    assert ["family_id"] == [
+        column.name for column in _index(table.indexes, "ix_refresh_token_family_id").columns
+    ]
 
 
 def _index(indexes: set[Index], name: str) -> Index:

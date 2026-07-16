@@ -3,6 +3,7 @@
 from app.models.identity import (
     AuditEvent,
     PlatformRole,
+    RefreshToken,
     StaffMembership,
     StaffRole,
     User,
@@ -15,6 +16,7 @@ __all__ = [
     "Organization",
     "OrganizationSettings",
     "PlatformRole",
+    "RefreshToken",
     "StaffMembership",
     "StaffRole",
     "Theme",

@@ -5,6 +5,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.public import router as public_router
 from app.core.config import get_settings
@@ -35,5 +36,6 @@ if cors_origins:
 
 app.include_router(health_router)
 app.include_router(public_router)
+app.include_router(auth_router)
 
 logger.info("Application started (environment: %s)", settings.app_env.value)
