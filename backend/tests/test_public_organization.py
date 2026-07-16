@@ -73,9 +73,7 @@ def test_public_organization_uses_path_slug(
     def fake_get_db() -> object:
         return object()
 
-    def fake_resolver(
-        _db: object, lookup: OrganizationLookup, _env: AppEnv
-    ) -> Organization:
+    def fake_resolver(_db: object, lookup: OrganizationLookup, _env: AppEnv) -> Organization:
         captured_lookup.append(lookup)
         return organization
 

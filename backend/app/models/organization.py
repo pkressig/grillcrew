@@ -18,9 +18,7 @@ class Theme(Base):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     logo_url: Mapped[str | None] = mapped_column(String(500))
-    primary_color: Mapped[str] = mapped_column(
-        String(16), nullable=False, server_default="#262626"
-    )
+    primary_color: Mapped[str] = mapped_column(String(16), nullable=False, server_default="#262626")
     secondary_color: Mapped[str] = mapped_column(
         String(16), nullable=False, server_default="#525252"
     )

@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["health"])
 
 
-class HealthResponse(BaseModel):
+# NOTE on the ignore below: pydantic.BaseModel.__init__ is itself typed as
+# `**data: Any`, so mypy's disallow_any_explicit flags the subclass; this is
+# inherent to pydantic and not fixable from our code.
+class HealthResponse(BaseModel):  # type: ignore[explicit-any]
     status: str
     database: str
 

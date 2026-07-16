@@ -2,8 +2,12 @@
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# NOTE on the ignores below: pydantic.BaseModel.__init__ itself is typed as
+# `**data: Any`, so mypy's disallow_any_explicit flags every subclass; this is
+# inherent to pydantic and cannot be fixed from our code.
 
-class PublicOrganizationSettings(BaseModel):
+
+class PublicOrganizationSettings(BaseModel):  # type: ignore[explicit-any]
     """Public-safe organization settings from the dedicated settings table."""
 
     payout_rate_minor_per_hour: int = Field(default=900, ge=0)
@@ -12,20 +16,20 @@ class PublicOrganizationSettings(BaseModel):
     coordination_contact_label: str | None = None
 
 
-class PublicTheme(BaseModel):
+class PublicTheme(BaseModel):  # type: ignore[explicit-any]
     name: str
     logo_url: str | None
     primary_color: str
     secondary_color: str
 
 
-class OrganizationContact(BaseModel):
+class OrganizationContact(BaseModel):  # type: ignore[explicit-any]
     email: str | None = None
     phone: str | None = None
     url: str | None = None
 
 
-class PublicOrganizationResponse(BaseModel):
+class PublicOrganizationResponse(BaseModel):  # type: ignore[explicit-any]
     """Public organization information safe for unauthenticated clients."""
 
     model_config = ConfigDict(from_attributes=True)

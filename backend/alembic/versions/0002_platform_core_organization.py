@@ -8,8 +8,9 @@ Create Date: 2026-07-16
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID
+
+from alembic import op
 
 revision: str = "0002"
 down_revision: str | None = "0001"
@@ -28,12 +29,8 @@ def upgrade() -> None:
         ),
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("logo_url", sa.String(500), nullable=True),
-        sa.Column(
-            "primary_color", sa.String(16), nullable=False, server_default="#262626"
-        ),
-        sa.Column(
-            "secondary_color", sa.String(16), nullable=False, server_default="#525252"
-        ),
+        sa.Column("primary_color", sa.String(16), nullable=False, server_default="#262626"),
+        sa.Column("secondary_color", sa.String(16), nullable=False, server_default="#525252"),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -88,9 +85,7 @@ def upgrade() -> None:
             server_default=sa.func.now(),
         ),
         sa.ForeignKeyConstraint(["organization_id"], ["organization.id"]),
-        sa.UniqueConstraint(
-            "organization_id", name="uq_organization_settings_organization_id"
-        ),
+        sa.UniqueConstraint("organization_id", name="uq_organization_settings_organization_id"),
     )
 
     op.add_column("organization", sa.Column("theme_id", UUID(as_uuid=True), nullable=True))
@@ -167,9 +162,7 @@ def upgrade() -> None:
         ["id"],
     )
     op.create_unique_constraint("uq_organization_slug", "organization", ["slug"])
-    op.create_unique_constraint(
-        "uq_organization_custom_domain", "organization", ["custom_domain"]
-    )
+    op.create_unique_constraint("uq_organization_custom_domain", "organization", ["custom_domain"])
 
     _seed_first_organization()
 
