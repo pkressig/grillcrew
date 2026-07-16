@@ -143,3 +143,19 @@ Logo, Farben, Anzeigename, Locale, Zeitzone und weitere Organisationskonfigurati
 ## D-036 – F001 Organization Context
 **Status:** beschlossen
 F001 implementiert noch keine Authentifizierung. Oeffentliche Organization-Aufloesung erfolgt in dieser Reihenfolge: Custom Domain, Subdomain, URL-Pfad, Development-Override `?org=`. Nur in `APP_ENV=development` darf auf genau eine vorhandene Organisation zurueckgefallen werden; in Produktion gibt es keinen Fallback. Der erste Kunde darf als Seed-Datensatz in der Migration angelegt werden; Anwendungscode, UI-Texte, Tests und Konfiguration bleiben organisation-agnostisch.
+
+## D-037 – Plattform-Operator-Repraesentation
+**Status:** beschlossen
+Ein Platform Operator wird ueber ein nullable Feld `User.platformRole` (Enum, in Version 1 einziger Wert `PLATFORM_OPERATOR`) abgebildet. Das Feld ist ueber keine oeffentliche und keine organisationsbezogene Admin-API beschreibbar; die Vergabe erfolgt ausschliesslich ueber einen kontrollierten Platform-Admin-Prozess ausserhalb der regulaeren Anwendungs-Endpunkte. Organisationsbezogene Rollen bleiben ausschliesslich in `StaffMembership` abgebildet; `platformRole` ist von `StaffMembership` unabhaengig und ersetzt sie nicht. Entspricht F002_DECISIONS.md P-1.
+
+## D-038 – Authentifizierungs-Rate-Limits
+**Status:** beschlossen
+Rate-Limits fuer sicherheitsrelevante Authentifizierungsaktionen (Login, Token-Refresh, Passwort-Reset-Anfrage, Einladungsannahme und weitere sensible Auth-Aktionen) sind plattformweit und werden ueber umgebungsvariablengetriebene `Settings`-Felder konfiguriert, mit konservativen Standardwerten und je Aktion einem eigenen Grenzwert. Diese Grenzwerte werden in Version 1 nicht in `OrganizationSettings` und nicht in einer neuen Datenbanktabelle gespeichert. Entspricht F002_DECISIONS.md P-2.
+
+## D-039 – Cross-Site-Cookies, CORS und CSRF
+**Status:** beschlossen
+Access- und Refresh-Token werden als `HttpOnly`, `Secure` Cookies uebertragen; solange Frontend und Backend auf unterschiedlichen Sites liegen, gilt `SameSite=None`. Erlaubte Urspruenge (CORS) werden dynamisch aus der Datenbank aufgeloest (freigegebene Plattform- und Organisationsdomains); Wildcard-Origins in Kombination mit Credentials sind ausdruecklich verboten. `Origin` und `Host` werden bei jeder Anfrage konsistent geprueft; fehlende, abweichende oder nicht freigegebene Werte fuehren zur Ablehnung. Jede zustandsaendernde, cookie-authentifizierte Anfrage erfordert zusaetzlich einen CSRF-Schutz nach der in `docs/F002_PLAN.md` beschriebenen Double-Submit-Token-Strategie (signiertes, an die Session gebundenes Token, uebertragen im Custom-Header). Eine zukuenftige Same-Site-BFF-/Custom-Domain-Architektur bleibt im Backlog. Entspricht F002_DECISIONS.md P-3.
+
+## D-040 – E-Mail-Versand fuer Einladung und Passwort-Reset
+**Status:** beschlossen
+Transaktionale E-Mails (Passwort-Reset, Staff-Einladungen) laufen ueber eine anbieterunabhaengige `EmailSender`-Abstraktion. Die konkrete Transportart in Version 1 ist SMTP, konfiguriert ausschliesslich ueber Umgebungsvariablen; der Versand erfolgt asynchron ueber FastAPI `BackgroundTasks`, ohne zusaetzlichen Broker oder Worker-Prozess. Fehlgeschlagene Sendeversuche werden protokolliert, sind fuer Operatoren sichtbar und sicher wiederholbar; Passwort-Reset- und Einladungs-Token bleiben auch bei fehlgeschlagenem Versand sicher (kurzlebig, einmal verwendbar, nur als Hash gespeichert). Rohtoken und Geheimnisse werden niemals geloggt. Entspricht F002_DECISIONS.md P-4.

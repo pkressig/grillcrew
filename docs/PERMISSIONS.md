@@ -39,3 +39,10 @@ Die Rollen sind in D-025 beschlossen und werden serverseitig durchgesetzt.
 - Kinderdaten sind niemals öffentlich.
 - Jede Rolle sieht nur Daten, die für ihre Aufgabe erforderlich sind.
 - Frontend-Ausblendungen sind nur Komfort; verbindlich sind Backend-Guards.
+
+## Platform Operator
+
+`User.platformRole = PLATFORM_OPERATOR` (D-037) ist keine Zeile in obiger Rechtematrix und keine
+`StaffMembership`-Rolle: sie ist organisationsunabhaengig und deckt Plattformbetrieb ab, nicht
+Vereinsverwaltung. Das Feld ist ueber keine API beschreibbar und wird ausschliesslich durch einen
+kontrollierten Platform-Admin-Prozess vergeben. Details in `docs/F002_PLAN.md` §6–7.
