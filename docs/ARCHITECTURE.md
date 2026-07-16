@@ -95,6 +95,23 @@ Permissions are organization-local. A user may be Admin in one organization and 
 
 Frontend route hiding is convenience only; backend guards are authoritative.
 
+## Authentication and Session Security (F002)
+
+Full design in `docs/F002_PLAN.md`; decisions ratified as D-037–D-040 in `docs/DECISIONS.md`.
+
+- Sessions use short-lived JWT access tokens plus rotating opaque refresh tokens, both transported as
+  `HttpOnly`, `Secure` cookies. Access tokens carry only the user id — never a role or organization —
+  so authorization is always re-checked against the database per request, never trusted from the token.
+- A platform-level `User.platformRole` flag (D-037) is orthogonal to the organization-scoped
+  `StaffMembership` model above; it is never writable through any API and is assigned only through a
+  controlled platform-admin process outside the application.
+- Because frontend and backend are cross-site today, the CORS origin allowlist is resolved dynamically
+  from the database (platform and organization domains), never a static list or a wildcard combined
+  with credentials, and every state-changing cookie-authenticated request requires a signed
+  double-submit CSRF token (D-039).
+- Rate limits for login, refresh, password reset, and invitation acceptance are platform-wide,
+  environment-configured, and set independently per action (D-038).
+
 ## Data Rules
 
 - Store timestamps in UTC.

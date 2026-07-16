@@ -13,6 +13,8 @@
 - Verfallsmechanismus für unbestätigte Anmeldungen nur bei realem Bedarf
 - 5-Rappen-Bargeldrundung für Auszahlungsvorgänge
 - systemgestützter WorkRecord-Split
+- Same-Site-BFF-/Proxy-Architektur fuer Auth-Cookies (Next.js-Rewrite zu Render), falls der
+  Wartungsaufwand des dynamischen Origin-Allowlists (D-039) real spuerbar wird
 
 ## Später
 - weitere Module: Kiosk, Kuchen, Fahrdienst, Turniere, Platzdienst

@@ -79,8 +79,14 @@ Rules:
 - id
 - emailNormalized
 - displayName
-- status
+- passwordHash
+- status: INVITED | ACTIVE | DISABLED
+- platformRole: PLATFORM_OPERATOR, nullable (D-037; never writable via API, assigned only through a controlled platform-admin process; independent of `StaffMembership`)
 - createdAt
+
+Full authentication schema (`RefreshToken`, `PasswordResetToken`, `Invitation`, and the finalized
+`StaffMembership`/`AuditEvent` migration) is specified in `docs/F002_PLAN.md` §4–5 and lands with F002;
+not yet migrated as of this entry.
 
 ### StaffMembership
 

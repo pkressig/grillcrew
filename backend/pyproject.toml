@@ -11,6 +11,8 @@ dependencies = [
     "pydantic>=2.7,<3.0",
     "pydantic-settings>=2.3,<3.0",
     "psycopg[binary]>=3.1,<4.0",
+    "argon2-cffi>=23.1,<24.0",
+    "pyjwt>=2.9,<3.0",
 ]
 
 [project.optional-dependencies]
@@ -50,7 +52,7 @@ select = [
 ignore = []
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]  # assert in Tests ist erwünscht
+"tests/*" = ["S101", "S105", "S106", "S107"]  # assert und Test-Literale (Passwoerter/Secrets) sind erwünscht
 
 # ---------------------------------------------------------------------------
 # Typprüfung – strikt, Pendant zu "TypeScript strict" gemäss CLAUDE.md (D-021)
