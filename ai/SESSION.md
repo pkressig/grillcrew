@@ -1,11 +1,14 @@
 # Latest AI Handoff
 
-- Completed work: Implemented F000.2 AI project memory, multi-agent workflow docs, reusable prompt templates, AI status/context/report scripts, package scripts, generated-file ignore rules, and onboarding documentation.
-- Files or areas changed: `ai/`, `prompts/`, `scripts/generate-ai-status.mjs`, `scripts/build-ai-context.mjs`, `scripts/create-ai-report.mjs`, `.gitignore`, `package.json`, `CLAUDE.md`, `CONTRIBUTING.md`, and `README.md`.
-- Validation results: `npm.cmd run ai:status`, `npm.cmd run ai:context`, `npm.cmd run ai:prepare`, temporary `npm.cmd run ai:report`, generated context inspection, `npm.cmd run check`, and `git diff --check` passed.
-- Unresolved issues: Git emits permission warnings for `C:\Users\pkres/.config/git/ignore` during status commands; this is outside the repository. `git diff --check` emits LF-to-CRLF normalization warnings for edited text files.
-- Next exact action: Product Owner reviews and commits F000.2, then continue with F002 Step 4.
+- Completed work: Implemented F002 Step 4 organization permission guards and protected internal smoke endpoints; Claude Code reviewed the step and fixed one scope-leak finding (smoke router reachable in production).
+- Files or areas changed: `backend/app/api/dependencies.py`, `backend/app/api/internal.py`, `backend/app/main.py`, `backend/app/services/organization_context.py`, `backend/tests/test_permission_guards.py`, `docs/F002_PLAN.md`, `ai/SESSION.md`, and `ai/STATUS.md`.
+- Guards implemented: `require_authenticated_user`, `require_organization_context`, `require_staff_membership`, and `require_staff_role`.
+- Smoke endpoints added: temporary `/api/internal/test-support/*` endpoints for authenticated, organization context, active staff membership, admin-only, coordination, kiosk/staff execution, report read, and report write guard behavior. Review fix: the router is now mounted only when `APP_ENV != production` (`backend/app/main.py`), matching the existing `/api/docs` gate, since these routes are declared internal/test-support only and must not be permanent product API surface.
+- Permission behavior: `ADMIN` is accepted for all organization staff/admin smoke routes; `KOORDINATION` is accepted for coordination, kiosk/staff execution, and report read/write routes; `KIOSK` is accepted only for kiosk/staff execution; `VORSTAND_LESEN` is accepted only for report read and rejected for report write.
+- Tenant isolation behavior: membership checks are scoped to the resolved organization and reject missing, inactive, or wrong-organization memberships; JWT organization or role claims are ignored.
+- Validation results: `npm.cmd run check`, `npm.cmd run ai:prepare`, and `git diff --check` passed after the fix. Backend pytest reported 117 passed; frontend Vitest reported 1 passed. `git diff --check` emitted only LF-to-CRLF normalization warnings for edited text files.
+- Unresolved issues / deferred risks: Git status still emits permission warnings for `C:\Users\pkres/.config/git/ignore`, outside the repository. Test output includes existing Starlette/httpx deprecation warnings and per-request cookie deprecation warnings in tests. The permission-guard test suite mocks the DB session boundary (consistent with the existing F002 Step 3 test style), so no test exercises the real SQL-level `organization_id`/`user_id` filter against a live database — the in-code redundant check in `require_staff_membership` is what makes the mocked wrong-organization test meaningful; an integration test against a real/sqlite database is not part of this step and is left as a deferred hardening item, not a blocker.
+- Next exact action: Product Owner reviews and decides on commit for F002 Step 4, then continue with F002 Step 5 (platform operator guard).
 - Responsible next agent: Product Owner.
-- Branch: feature/f000-ai-project-memory.
-- Commit or uncommitted state: HEAD `7d7d7d6c2340bb41ebb8377247af88beb82f96d4`; F000.2 changes uncommitted.
-- Timestamp: 2026-07-17T00:51:26+02:00.
+- Commit or uncommitted state: Uncommitted F002 Step 4 changes (reviewed and fixed); do not commit or push.
+- Timestamp: 2026-07-17T02:05:00+02:00.

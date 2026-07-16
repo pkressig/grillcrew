@@ -554,8 +554,15 @@ independently testable and mergeable to that branch (or split into sub-PRs again
 3. **Login/logout/refresh** — `RefreshToken` model + migration B (can merge with step 2's migration if
    preferred); JWT issuance/verification service; `/api/auth/login`, `/logout`, `/refresh`, `/me`;
    `get_current_user` dependency; cookie plumbing (including the CSRF cookie from §10.3); tests from §19.
-4. **Organization role guards** — `require_staff_role`, reuse of `get_current_organization`; one
-   protected smoke endpoint; the permission-matrix and isolation tests from §19.
+4. **Organization role guards** — `require_authenticated_user`, `require_organization_context`,
+   `require_staff_membership`, and `require_staff_role`; reuse of `get_current_organization`;
+   temporary `/api/internal/test-support/*` smoke endpoints for the guard categories; the
+   permission-matrix and isolation tests from §19. **Completed in Step 4:** role checks load active
+   `StaffMembership` rows scoped to the resolved organization, accept `ADMIN` for all organization
+   staff/admin guards, reject inactive memberships and non-active users, and never use organization or
+   role claims from JWTs for authorization. The `/api/internal/test-support/*` router is mounted only
+   when `APP_ENV != production` (same gate already used for `/api/docs`), since these routes are smoke
+   tests, not product API.
 5. **Platform operator guard** — `require_platform_operator`; smoke test only (no platform endpoints
    built, per §1 scope boundary).
 6. **Forgotten password** — `PasswordResetToken` model/migration; `/forgot-password`, `/reset-password`
