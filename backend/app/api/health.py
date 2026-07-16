@@ -1,4 +1,4 @@
-"""Health-Endpoint – einziger API-Endpoint in Sprint 1 (D-022)."""
+"""Health-Endpoint - einziger API-Endpoint in Sprint 1 (D-022)."""
 
 import logging
 

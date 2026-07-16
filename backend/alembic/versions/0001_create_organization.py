@@ -4,6 +4,7 @@ Revision ID: 0001
 Revises:
 Create Date: 2026-07-15
 """
+
 from collections.abc import Sequence
 
 import sqlalchemy as sa
@@ -29,7 +30,9 @@ def upgrade() -> None:
         ),
         sa.Column("name", sa.String(200), nullable=False),
         sa.Column("short_name", sa.String(50), nullable=True),
-        sa.Column("timezone", sa.String(64), nullable=False, server_default="Europe/Zurich"),
+        sa.Column(
+            "timezone", sa.String(64), nullable=False, server_default="Europe/Zurich"
+        ),
         sa.Column("locale", sa.String(16), nullable=False, server_default="de-CH"),
         sa.Column("logo_url", sa.String(500), nullable=True),
         sa.Column("primary_color", sa.String(16), nullable=True),

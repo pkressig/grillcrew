@@ -8,7 +8,7 @@ def test_health_returns_ok(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
-    # "database" ist "ok" mit laufender DB, sonst "unavailable" – nie ein stiller Fehler.
+    # "database" ist "ok" mit laufender DB, sonst "unavailable" - nie ein stiller Fehler.
     assert body["database"] in {"ok", "unavailable"}
 
 
