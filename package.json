@@ -1,0 +1,17 @@
+{
+  "name": "grillcrew",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "install:frontend": "node scripts/run-in-dir.mjs frontend npm ci",
+    "install:backend": "npm run check:backend:python && node scripts/run-in-dir.mjs backend python -m pip install -e .[dev]",
+    "check:backend:python": "python -c \"import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 12) else 'Python 3.12 required')\"",
+    "check:backend:ruff": "node scripts/run-in-dir.mjs backend python -m ruff check .",
+    "check:backend:format": "node scripts/run-in-dir.mjs backend python -m ruff format --check .",
+    "check:backend:mypy": "node scripts/run-in-dir.mjs backend python -m mypy .",
+    "check:backend:pytest": "node scripts/run-in-dir.mjs backend python -m pytest",
+    "check:backend": "npm run check:backend:ruff && npm run check:backend:format && npm run check:backend:mypy && npm run check:backend:pytest",
+    "check:frontend": "node scripts/run-in-dir.mjs frontend npm run lint && node scripts/run-in-dir.mjs frontend npm run format:check && node scripts/run-in-dir.mjs frontend npm run typecheck && node scripts/run-in-dir.mjs frontend npm test && node scripts/run-in-dir.mjs frontend npm run build",
+    "check": "npm run check:backend && npm run check:frontend"
+  }
+}
