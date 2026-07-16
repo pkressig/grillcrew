@@ -1,62 +1,67 @@
-# CLAUDE.md – GrillCrew FCTC
+# CLAUDE.md - Volunteer Platform
 
-## Rolle
+## Role
 
-Du arbeitest als verantwortlicher Senior Full-Stack-Entwickler an GrillCrew FCTC. Implementiere nur Anforderungen, die in den Projektdokumenten beschlossen sind. Erfinde keine zusätzlichen Produktfunktionen.
+You work as the responsible senior full-stack developer for a commercial multi-organization SaaS platform. Implement only requirements that are approved in the project documents. Do not invent additional product features.
 
-## Vor jeder Aufgabe
+## Before Each Task
 
-1. Lies `docs/PRD.md`.
-2. Lies `docs/DECISIONS.md`.
-3. Lies die für die Aufgabe relevanten Fachdokumente.
-4. Prüfe `docs/BACKLOG.md`, damit spätere Ideen nicht versehentlich in Version 1 geraten.
-5. Formuliere vor grösseren Änderungen einen kurzen Plan.
-6. Stelle nur dann Rückfragen, wenn eine fachliche Entscheidung wirklich fehlt.
+1. Read `docs/PRD.md`.
+2. Read `docs/DECISIONS.md`.
+3. Read task-relevant domain documents.
+4. Check `docs/BACKLOG.md` so later ideas do not accidentally enter the current version.
+5. State a short plan before larger changes.
+6. Ask questions only when a real product or architecture decision is missing.
 
-## Produktprinzipien
+## Product Principles
 
-- Mobile first
-- für Jung und Alt verständlich
-- keine erzwungene Registrierung für Helfer
-- grosse Interaktionsflächen und klare Sprache
-- öffentliche Telefonnummern sind verboten
-- vollständige Namen dürfen im öffentlichen Einsatzplan sichtbar sein
-- Helfer und begünstigte Familie sind getrennte Entitäten
-- Vergütungsart wird pro Einsatz gewählt, nicht global pro Person
-- Events und Schichten sind getrennte Entitäten
-- Herbst und Frühling sind separat und gemeinsam auswertbar
-- Admin-Funktionen dürfen die öffentliche Oberfläche nicht überladen
+- Commercial SaaS, not open source.
+- Multi-organization from the foundation.
+- No organization, customer, club, or instance name is hardcoded.
+- Organization branding comes from the database.
+- Mobile first.
+- Understandable for young and older users.
+- No forced registration for public volunteer signup.
+- Large interaction targets and clear language.
+- Public phone numbers and email addresses are forbidden.
+- Helpers and credited families are separate entities.
+- Compensation type is chosen per work record, not globally per person.
+- Events and shifts are separate entities.
+- Admin functionality must not overload the public interface.
 
-## Entwicklungsregeln
+## Development Rules
 
-- TypeScript strict
-- keine `any` ohne schriftliche Begründung
-- keine stillen Fehler
-- Eingaben serverseitig validieren
-- Berechtigungen serverseitig durchsetzen
-- personenbezogene Daten minimieren und schützen
-- migrationsfähige relationale Datenbank
-- automatisierte Tests für Geschäftsregeln
-- barrierearme Bedienung
-- deutsche Oberfläche, technisch übersetzbar
-- Datums-/Zeitlogik für Zeitzone Europe/Zurich
-- Geldwerte als Ganzzahl in Rappen speichern
-- Arbeitsdauer nicht als frei gerundeten Float speichern
+- TypeScript strict.
+- No `any` without written justification.
+- No silent errors.
+- Validate inputs server-side.
+- Enforce permissions server-side.
+- Scope every future business entity to an organization.
+- Minimize and protect personal data.
+- Use migration-ready relational database design.
+- Add automated tests for business rules.
+- Keep the UI accessible.
+- Prepare technical internationalization.
+- Persist timestamps in UTC; interpret business time in the organization's timezone.
+- Store money as integer minor units.
+- Store work duration as integer minutes, not rounded floats.
 
-## Dokumentationspflicht
+## Documentation Duty
 
-Bei jeder fachlich relevanten Änderung:
-- bestehende Dokumentation aktualisieren
-- neue Entscheidung in `docs/DECISIONS.md` ergänzen
-- verschobene Funktion in `docs/BACKLOG.md` eintragen
-- keine widersprüchlichen Kopien derselben Regel erzeugen
+For every domain-relevant change:
 
-## Verboten
+- update existing documentation
+- add decisions to `docs/DECISIONS.md` when needed
+- move deferred functionality to `docs/BACKLOG.md`
+- avoid contradictory copies of the same rule
 
-- ungefragte KI-Funktionen
-- Gamification in Version 1
-- öffentliche Telefonnummern oder E-Mail-Adressen
-- Multi-Tenant-Komplexität in Version 1
-- WhatsApp-Business-API in Version 1
-- native Mobile-App in Version 1
-- unkontrollierte automatische Zusammenführung von Personen nur anhand des Namens
+## Forbidden
+
+- customer-specific hardcoding
+- organization-specific branding in code
+- unauthenticated admin/business management features before authentication is implemented
+- public phone numbers or email addresses
+- uncontrolled automatic person merging by similar name only
+- native mobile app in version 1
+- WhatsApp Business API in version 1
+- gamification in version 1

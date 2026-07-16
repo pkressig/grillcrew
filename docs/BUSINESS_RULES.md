@@ -1,5 +1,13 @@
 # Business Rules
 
+## BR-000 Organisation und Tenant-Isolation
+
+- Jede fachliche Aktion findet im Kontext genau einer Organisation statt.
+- Organisationen besitzen eigene Daten, Einstellungen, Rollen, Saisons, Volunteers, Events, Familien, Auswertungen und Exporte.
+- Kein Kunden-, Vereins- oder Instanzname wird im Code hart codiert.
+- Logo, Farben, Anzeigename, Locale, Zeitzone und fachliche Einstellungen kommen aus der Datenbank.
+- Backend-Guards pruefen immer Organisation und Rolle gemeinsam.
+
 ## BR-001 Sollstunden
 
 - Eine Familie mit einem Kind hat standardmässig 8 Sollstunden pro Vereinsjahr.

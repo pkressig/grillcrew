@@ -1,18 +1,18 @@
 import { OrganizationProvider } from "@/components/organization-provider";
 import { fetchPublicOrganization } from "@/lib/organization";
-import { OrganizationLanding } from "./organization-landing";
+import { OrganizationLanding } from "../organization-landing";
 
 export const dynamic = "force-dynamic";
 
-type HomePageProps = {
-  searchParams?: Promise<{
-    org?: string;
+type OrganizationPageProps = {
+  params: Promise<{
+    org: string;
   }>;
 };
 
-export default async function HomePage({ searchParams }: Readonly<HomePageProps>) {
-  const params = await searchParams;
-  const organization = await fetchPublicOrganization(params?.org);
+export default async function OrganizationPage({ params }: Readonly<OrganizationPageProps>) {
+  const { org } = await params;
+  const organization = await fetchPublicOrganization(org);
 
   return (
     <OrganizationProvider organization={organization}>

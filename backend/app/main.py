@@ -1,4 +1,4 @@
-"""GrillCrew FCTC – FastAPI-Anwendung (Sprint 1: nur Fundament)."""
+"""FastAPI application for the SaaS platform."""
 
 import logging
 
@@ -6,8 +6,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.health import router as health_router
+from app.api.public import router as public_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+from app.middleware.organization_context import OrganizationContextMiddleware
 
 settings = get_settings()
 configure_logging(settings)
@@ -18,6 +20,8 @@ app = FastAPI(
     version="0.1.0",
     docs_url="/api/docs" if settings.app_env.value != "production" else None,
 )
+
+app.add_middleware(OrganizationContextMiddleware)
 
 cors_origins = settings.cors_origins()
 if cors_origins:
@@ -30,5 +34,6 @@ if cors_origins:
     )
 
 app.include_router(health_router)
+app.include_router(public_router)
 
-logger.info("Anwendung gestartet (Umgebung: %s)", settings.app_env.value)
+logger.info("Application started (environment: %s)", settings.app_env.value)

@@ -58,7 +58,7 @@ Version 1 ist deutsch. Die technische Struktur wird von Anfang an Ã¼bersetzbar
 
 ## D-015 â€“ Produktumfang
 **Status:** beschlossen
-Version 1 wird fÃ¼r den FC Thusis-Cazis entwickelt. Eine spÃ¤tere Nutzung durch andere Vereine bleibt mÃ¶glich, wird aber nicht als vollstÃ¤ndige Multi-Tenant-SaaS in Version 1 umgesetzt.
+Ueberholt durch D-033 und D-034. Das Produkt ist eine kommerzielle Multi-Organization-SaaS-Plattform. Die erste produktive Organisation ist ein Pilotkunde, nicht die Produktgrenze.
 
 ## D-016 â€“ Hosting
 **Status:** beschlossen
@@ -66,7 +66,7 @@ Entwicklung zunÃ¤chst lokal. Produktivbetrieb spÃ¤ter bei einem Hostinganbie
 
 ## D-017 â€“ Produktname
 **Status:** beschlossen
-Die Vereinsinstanz heisst GrillCrew FCTC.
+Ueberholt durch D-033 und D-035. Produkt- und Organisationsnamen duerfen nicht im Code hart codiert werden. Jede Organisation liefert Anzeigename und Branding aus der Datenbank.
 
 ## D-018 â€“ Staff-Zugriff
 **Status:** beschlossen
@@ -127,3 +127,19 @@ Der Product Owner bestÃ¤tigt den Stack: Next.js Frontend, FastAPI Backend und 
 ## D-032 â€“ Revidierter Sprint-1-Umfang
 **Status:** beschlossen
 Sprint 1 ist bewusst nur das technische Fundament: Repository-Struktur, lokale Entwicklung, CI, Datenbank/Migrationen, Healthchecks, Basis-Konfiguration, Tests, Deployment-Vorbereitung und dokumentierte Architektur. Produktfunktionen aus Sprint 2 und spÃ¤ter werden nicht vorgezogen.
+
+## D-033 – Kommerzielles SaaS-Produkt
+**Status:** beschlossen
+Das Produkt ist eine kommerzielle SaaS-Plattform fuer mehrere Organisationen. Keine Organisation, kein Verein und kein Instanzname ist Produktgrenze oder Code-Konstante. Die erste produktive Organisation dient als Pilotkunde.
+
+## D-034 – Multi-Organization-Tenancy
+**Status:** beschlossen
+Alle fachlichen Daten sind organisationsgebunden. Jede Organisation besitzt eigene Einstellungen, Rollen, Saisons, Volunteers, Events, Shifts, Signups, Familien, WorkRecords, Payments, Statistiken und Exporte. Backend-Queries muessen immer auf den aktuellen Organization-Kontext eingeschraenkt sein.
+
+## D-035 – Datenbankgetriebenes Branding
+**Status:** beschlossen
+Logo, Farben, Anzeigename, Locale, Zeitzone und weitere Organisationskonfiguration kommen aus der Datenbank. Frontend und Backend duerfen keine kundenspezifischen Markenwerte hart codieren. Oeffentliche Seiten laden Branding ueber den Organization-Kontext.
+
+## D-036 – F001 Organization Context
+**Status:** beschlossen
+F001 implementiert noch keine Authentifizierung. Oeffentliche Organization-Aufloesung erfolgt in dieser Reihenfolge: Custom Domain, Subdomain, URL-Pfad, Development-Override `?org=`. Nur in `APP_ENV=development` darf auf genau eine vorhandene Organisation zurueckgefallen werden; in Produktion gibt es keinen Fallback. Der erste Kunde darf als Seed-Datensatz in der Migration angelegt werden; Anwendungscode, UI-Texte, Tests und Konfiguration bleiben organisation-agnostisch.

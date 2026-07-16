@@ -1,7 +1,7 @@
 [project]
 name = "grillcrew-backend"
 version = "0.1.0"
-description = "GrillCrew FCTC – Backend (FastAPI)"
+description = "Volunteer Platform backend (FastAPI)"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115,<1.0",

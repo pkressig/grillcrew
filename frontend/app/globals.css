@@ -1,11 +1,8 @@
 @import "tailwindcss";
 
 /*
- * NEUTRALE THEME-TOKENS (Platzhalter, klar markiert – siehe prompts/01 & UX_UI.md):
- * Die finalen Vereinsfarben werden erst nach Übernahme des offiziellen
- * FC-Thusis-Cazis-Logos festgelegt. Bis dahin: bewusst neutrale Grautöne.
- * Fachstatusfarben (Erfolg/Warnung/Fehler/neutral) werden nie als einzige
- * Informationsquelle verwendet (UX_UI.md: keine Information nur durch Farbe).
+ * Neutral fallback tokens. Organization-specific branding is loaded from
+ * the database and must not be hardcoded in CSS.
  */
 :root {
   --background: #ffffff;
@@ -14,11 +11,11 @@
   --muted-foreground: #525252;
   --border: #e5e5e5;
 
-  /* Platzhalter – werden durch Vereinsfarben ersetzt */
+  /* Fallback only. Organization branding overrides these values at runtime. */
   --primary: #262626;
   --primary-foreground: #fafafa;
 
-  /* Fachstatus (vorläufig) */
+  /* Status colors are never the only information channel. */
   --status-success: #15803d;
   --status-warning: #b45309;
   --status-error: #b91c1c;
@@ -40,7 +37,6 @@
 }
 
 html {
-  /* Barrierearm: Grundschrift nie unter 16 px (UX_UI.md) */
   font-size: 100%;
 }
 
@@ -55,7 +51,6 @@ body {
     sans-serif;
 }
 
-/* Sichtbarer Tastaturfokus (UX_UI.md) */
 :focus-visible {
   outline: 3px solid var(--primary);
   outline-offset: 2px;

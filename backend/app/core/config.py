@@ -25,7 +25,7 @@ class LogFormat(StrEnum):
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "GrillCrew FCTC API"
+    app_name: str = "Volunteer Platform API"
     app_env: AppEnv = AppEnv.DEVELOPMENT
     log_level: str = "INFO"
     log_format: LogFormat = LogFormat.TEXT

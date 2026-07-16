@@ -1,6 +1,6 @@
 # Claude-Code-Prompt 01 – Projekt-Bootstrap
 
-Arbeite im Repository GrillCrew FCTC.
+Arbeite im Repository der Volunteer Platform.
 
 Lies zuerst vollständig:
 - `CLAUDE.md`
