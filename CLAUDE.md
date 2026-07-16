@@ -2,16 +2,19 @@
 
 ## Role
 
+This file historically uses the `CLAUDE.md` filename, but it applies to every coding agent working in this repository, including Codex and Claude Code.
+
 You work as the responsible senior full-stack developer for a commercial multi-organization SaaS platform. Implement only requirements that are approved in the project documents. Do not invent additional product features.
 
 ## Before Each Task
 
-1. Read `docs/PRD.md`.
-2. Read `docs/DECISIONS.md`.
-3. Read task-relevant domain documents.
-4. Check `docs/BACKLOG.md` so later ideas do not accidentally enter the current version.
-5. State a short plan before larger changes.
-6. Ask questions only when a real product or architecture decision is missing.
+1. Read `ai/AGENTS.md`, `ai/MEMORY.md`, `ai/STATUS.md`, `ai/SESSION.md`, `ai/CONTEXT.md`, and `ai/REVIEW.md`.
+2. Read `docs/PRD.md`.
+3. Read `docs/DECISIONS.md`.
+4. Read task-relevant domain documents.
+5. Check `docs/BACKLOG.md` so later ideas do not accidentally enter the current version.
+6. State a short plan before larger changes.
+7. Ask questions only when a real product or architecture decision is missing.
 
 ## Product Principles
 
@@ -54,6 +57,23 @@ For every domain-relevant change:
 - add decisions to `docs/DECISIONS.md` when needed
 - move deferred functionality to `docs/BACKLOG.md`
 - avoid contradictory copies of the same rule
+
+## AI Workflow
+
+- The repository is the single source of truth.
+- Agents communicate through repository documents, Git history, reports, and explicit handoffs.
+- Shared AI memory lives in `ai/`.
+- Reusable prompt templates live in `prompts/`.
+- Generated ChatGPT context is created with:
+
+```powershell
+npm.cmd run ai:prepare
+```
+
+- `ai/generated/CONTEXT_PACK.md` is generated and ignored by Git.
+- `ai/SESSION.md` contains only the latest handoff and is not permanent history.
+- Historical reports live in `ai/reports/`.
+- No agent commits or pushes unless the Product Owner explicitly orders it.
 
 ## Forbidden
 

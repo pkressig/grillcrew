@@ -45,3 +45,7 @@ htmlcov/
 
 # Docker
 db_data/
+
+# Generated AI context
+ai/generated/*
+!ai/generated/.gitkeep

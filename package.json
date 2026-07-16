@@ -12,6 +12,10 @@
     "check:backend:pytest": "node scripts/run-in-dir.mjs backend python -m pytest",
     "check:backend": "npm run check:backend:ruff && npm run check:backend:format && npm run check:backend:mypy && npm run check:backend:pytest",
     "check:frontend": "node scripts/run-in-dir.mjs frontend npm run lint && node scripts/run-in-dir.mjs frontend npm run format:check && node scripts/run-in-dir.mjs frontend npm run typecheck && node scripts/run-in-dir.mjs frontend npm test && node scripts/run-in-dir.mjs frontend npm run build",
-    "check": "npm run check:backend && npm run check:frontend"
+    "check": "npm run check:backend && npm run check:frontend",
+    "ai:status": "node scripts/generate-ai-status.mjs",
+    "ai:context": "node scripts/build-ai-context.mjs",
+    "ai:prepare": "npm run ai:status && npm run ai:context",
+    "ai:report": "node scripts/create-ai-report.mjs"
   }
 }

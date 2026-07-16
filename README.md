@@ -55,9 +55,40 @@ Run all project checks:
 npm.cmd run check
 ```
 
+## AI Project Workflow
+
+The file `CLAUDE.md` historically has that filename, but it applies to every coding agent in this repository. All agents read the shared AI files in `ai/` before non-trivial work:
+
+```powershell
+Get-Content .\CLAUDE.md
+Get-Content .\ai\AGENTS.md
+Get-Content .\ai\MEMORY.md
+Get-Content .\ai\STATUS.md
+Get-Content .\ai\SESSION.md
+Get-Content .\ai\CONTEXT.md
+Get-Content .\ai\REVIEW.md
+```
+
+Generate the ChatGPT context pack:
+
+```powershell
+npm.cmd run ai:prepare
+```
+
+The Product Owner uploads `ai/generated/CONTEXT_PACK.md` to ChatGPT when starting a new chat, when context may be stale, when GitHub connector access is unavailable, or when an independent complete review is requested. ChatGPT GitHub access is optional; the context pack remains the reliable fallback.
+
+Create a historical AI report:
+
+```powershell
+npm.cmd run ai:report -- <agent> <feature> [source.md]
+```
+
 ## Quality Commands
 
 ```powershell
+npm.cmd run ai:status
+npm.cmd run ai:context
+npm.cmd run ai:prepare
 npm.cmd run install:frontend
 npm.cmd run install:backend
 npm.cmd run check:backend:ruff
@@ -73,13 +104,24 @@ npm.cmd run check
 Start Claude Code from the repository directory:
 
 ```powershell
-cd C:\Users\pkres\Documents\GitHub\grillcrew
+cd <your-repository-root>
 claude
 ```
 
 Start Codex from the repository directory:
 
 ```powershell
-cd C:\Users\pkres\Documents\GitHub\grillcrew
+cd <your-repository-root>
 codex
 ```
+
+Start AGY / Antigravity from the repository directory:
+
+```powershell
+cd <your-repository-root>
+agy
+```
+
+On Windows PowerShell, use `npm.cmd` when a command shell cannot resolve
+`npm` directly. On macOS, Linux, Git Bash, WSL, or CI, use the same commands
+without the `.cmd` suffix.
