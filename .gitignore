@@ -1,30 +1,47 @@
-# Umgebungsvariablen / Geheimnisse
+# Local environment files / secrets
 .env
 .env.local
 .env.*.local
+*.env
 
-# Node / Next.js
+# Frontend dependencies and build output
 node_modules/
 .next/
 out/
+dist/
+build/
 next-env.d.ts
 *.tsbuildinfo
+coverage/
 
-# Python
-__pycache__/
-*.py[cod]
+# Python virtual environments
 .venv/
 venv/
+env/
+ENV/
+
+# Python build output and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# Python tool caches and coverage
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
-htmlcov/
 .coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
-# Betriebssystem / Editor
+# Operating system / editor
 .DS_Store
 .idea/
 .vscode/
+.claude/settings.local.json
 
 # Docker
 db_data/
