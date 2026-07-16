@@ -128,9 +128,14 @@ in `app/db/base.py`.
 | active | boolean | admin can deactivate without deleting history |
 | scope | string, nullable | reserved, unused in V1 (per RFC-005) |
 
-Constraint: unique on `(organization_id, user_id)` — one role per user per organization, matching the
-fixed-matrix model; no stacking of roles within a single organization in V1. Per D-037, organization
-roles remain exclusively here — `User.platformRole` is never a substitute for a `StaffMembership` check.
+Constraint: partial unique index on `(organization_id, user_id) WHERE active` — at most one *active*
+role per user per organization, matching the fixed-matrix model; no stacking of active roles within a
+single organization in V1. The index is partial rather than a plain unique constraint precisely because
+`active` rows are deactivated, not deleted (see `active` above): a user can accumulate multiple inactive
+`StaffMembership` rows over time (history) while never having more than one active row at once, so
+re-inviting a previously deactivated staff member can insert a new row instead of being blocked by their
+old, inactive one. Per D-037, organization roles remain exclusively here — `User.platformRole` is never a
+substitute for a `StaffMembership` check.
 
 ### AuditEvent (as documented, now materialized)
 
@@ -386,8 +391,8 @@ one only.
 2. Set the new `passwordHash`, mark `used_at = now()`.
 3. Revoke **all** of that user's refresh tokens (forces re-login on every device — the standard
    response to a password reset, since the old password may have been compromised).
-4. Write an `AuditEvent` (`action = PASSWORD_RESET`, `actorType = user`, no `previousData`/`newData`
-   payload beyond the fact it happened, to avoid persisting the password itself in any form).
+4. Write an `AuditEvent` (`action = PASSWORD_RESET`, `metadata = {}` beyond the fact it happened,
+   to avoid persisting the password itself in any form).
 
 ## 16. Invitation Flow
 

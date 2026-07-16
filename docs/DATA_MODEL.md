@@ -82,11 +82,14 @@ Rules:
 - passwordHash
 - status: INVITED | ACTIVE | DISABLED
 - platformRole: PLATFORM_OPERATOR, nullable (D-037; never writable via API, assigned only through a controlled platform-admin process; independent of `StaffMembership`)
+- emailVerifiedAt nullable
+- lastLoginAt nullable
 - createdAt
+- updatedAt
 
 Full authentication schema (`RefreshToken`, `PasswordResetToken`, `Invitation`, and the finalized
 `StaffMembership`/`AuditEvent` migration) is specified in `docs/F002_PLAN.md` §4–5 and lands with F002;
-not yet migrated as of this entry.
+Core identity tables are migrated in F002 Step 2; token and invitation tables land in later F002 steps.
 
 ### StaffMembership
 
@@ -96,6 +99,8 @@ not yet migrated as of this entry.
 - role: ADMIN | KOORDINATION | KIOSK | VORSTAND_LESEN
 - active
 - scope nullable
+- createdAt
+- updatedAt
 
 ### ClubYear
 
@@ -244,12 +249,10 @@ not yet migrated as of this entry.
 - id
 - organizationId nullable for platform-level events
 - actorUserId nullable
-- actorType
 - action
 - entityType
 - entityId
-- previousData
-- newData
+- metadata
 - createdAt
 
 ### ImportBatch
