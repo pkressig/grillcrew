@@ -1,14 +1,14 @@
 # Latest AI Handoff
 
-- Completed work: Implemented F002 Step 4 organization permission guards and protected internal smoke endpoints; Claude Code reviewed the step and fixed one scope-leak finding (smoke router reachable in production).
-- Files or areas changed: `backend/app/api/dependencies.py`, `backend/app/api/internal.py`, `backend/app/main.py`, `backend/app/services/organization_context.py`, `backend/tests/test_permission_guards.py`, `docs/F002_PLAN.md`, `ai/SESSION.md`, and `ai/STATUS.md`.
-- Guards implemented: `require_authenticated_user`, `require_organization_context`, `require_staff_membership`, and `require_staff_role`.
-- Smoke endpoints added: temporary `/api/internal/test-support/*` endpoints for authenticated, organization context, active staff membership, admin-only, coordination, kiosk/staff execution, report read, and report write guard behavior. Review fix: the router is now mounted only when `APP_ENV != production` (`backend/app/main.py`), matching the existing `/api/docs` gate, since these routes are declared internal/test-support only and must not be permanent product API surface.
-- Permission behavior: `ADMIN` is accepted for all organization staff/admin smoke routes; `KOORDINATION` is accepted for coordination, kiosk/staff execution, and report read/write routes; `KIOSK` is accepted only for kiosk/staff execution; `VORSTAND_LESEN` is accepted only for report read and rejected for report write.
-- Tenant isolation behavior: membership checks are scoped to the resolved organization and reject missing, inactive, or wrong-organization memberships; JWT organization or role claims are ignored.
-- Validation results: `npm.cmd run check`, `npm.cmd run ai:prepare`, and `git diff --check` passed after the fix. Backend pytest reported 117 passed; frontend Vitest reported 1 passed. `git diff --check` emitted only LF-to-CRLF normalization warnings for edited text files.
-- Unresolved issues / deferred risks: Git status still emits permission warnings for `C:\Users\pkres/.config/git/ignore`, outside the repository. Test output includes existing Starlette/httpx deprecation warnings and per-request cookie deprecation warnings in tests. The permission-guard test suite mocks the DB session boundary (consistent with the existing F002 Step 3 test style), so no test exercises the real SQL-level `organization_id`/`user_id` filter against a live database — the in-code redundant check in `require_staff_membership` is what makes the mocked wrong-organization test meaningful; an integration test against a real/sqlite database is not part of this step and is left as a deferred hardening item, not a blocker.
-- Next exact action: Product Owner reviews and decides on commit for F002 Step 4, then continue with F002 Step 5 (platform operator guard).
-- Responsible next agent: Product Owner.
-- Commit or uncommitted state: Uncommitted F002 Step 4 changes (reviewed and fixed); do not commit or push.
-- Timestamp: 2026-07-17T02:05:00+02:00.
+- Completed work: Implemented F002 Step 5 platform operator guard foundation.
+- Files or areas changed: `backend/app/api/dependencies.py`, `backend/app/api/internal.py`, `backend/app/main.py`, `backend/tests/test_permission_guards.py`, `docs/F002_PLAN.md`, `docs/PERMISSIONS.md`, `ai/SESSION.md`, and `ai/STATUS.md`.
+- Guard implemented: `require_platform_operator`.
+- Smoke endpoint added: temporary `/api/internal/test-support/platform/operator`, mounted only when `APP_ENV != production` through the existing internal router gate.
+- Platform/operator behavior: access requires an authenticated active `User` with database-backed `platform_role = PLATFORM_OPERATOR`; organization context is not resolved or required.
+- Security behavior: disabled and invited users are rejected by the authenticated-user dependency; organization `StaffMembership` roles, including `ADMIN`, do not grant platform access; JWT role, organization, and platform-role claims are ignored for authorization; `platform_role` remains absent from ordinary auth response schemas and there is no organization API that writes it.
+- Validation results: `npm.cmd run check`, `npm.cmd run ai:prepare`, and `git diff --check` passed. Backend pytest reported 126 passed; frontend Vitest reported 1 passed. Focused guard tests also passed (`python -m pytest tests/test_permission_guards.py`: 38 passed). `git diff --check` emitted only LF-to-CRLF normalization warnings for edited text files.
+- Unresolved issues / deferred risks: Git status still emits the existing permission warning for `C:\Users\pkres/.config/git/ignore`, outside the repository. Test output includes existing Starlette/httpx and per-request cookie deprecation warnings; one focused pytest run also emitted a local `.pytest_cache` write warning.
+- Next exact action: Product Owner or Claude Code reviews F002 Step 5 before commit, then continue with F002 Step 6.
+- Responsible next agent: Product Owner / Claude Code.
+- Commit or uncommitted state: Uncommitted F002 Step 5 changes; do not commit or push.
+- Timestamp: 2026-07-17T01:59:18+02:00.

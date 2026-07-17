@@ -1,7 +1,8 @@
-"""Temporary internal endpoints that smoke-test organization permission guards.
+"""Temporary internal endpoints that smoke-test permission guards.
 
 These routes are not product APIs. They exist only to exercise the F002 Step 4
-authentication, organization context, staff membership, and role dependencies.
+and Step 5 authentication, organization context, staff membership, role, and
+platform operator dependencies.
 """
 
 from fastapi import APIRouter, Depends
@@ -12,6 +13,7 @@ from app.api.dependencies import (
     CurrentUser,
     require_authenticated_user,
     require_organization_context,
+    require_platform_operator,
     require_staff_membership,
     require_staff_role,
     validate_csrf,
@@ -33,6 +35,13 @@ def authenticated_smoke(
     current_user: CurrentUser = Depends(require_authenticated_user),  # noqa: B008
 ) -> dict[str, str]:
     return {"user_id": str(current_user.user.id)}
+
+
+@router.get("/platform/operator")
+def platform_operator_smoke(
+    current_user: CurrentUser = Depends(require_platform_operator),  # noqa: B008
+) -> dict[str, str]:
+    return {"user_id": str(current_user.user.id), "platform_role": "PLATFORM_OPERATOR"}
 
 
 @router.get("/{organization_slug}/organization")

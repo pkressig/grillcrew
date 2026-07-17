@@ -564,7 +564,12 @@ independently testable and mergeable to that branch (or split into sub-PRs again
    when `APP_ENV != production` (same gate already used for `/api/docs`), since these routes are smoke
    tests, not product API.
 5. **Platform operator guard** — `require_platform_operator`; smoke test only (no platform endpoints
-   built, per §1 scope boundary).
+   built, per §1 scope boundary). **Completed in Step 5:** platform access now requires an
+   authenticated active `User` with database-backed `platform_role = PLATFORM_OPERATOR`, without
+   resolving organization context. `StaffMembership` roles, including organization `ADMIN`, do not
+   grant platform access, and JWT role/platform claims are ignored. The temporary
+   `/api/internal/test-support/platform/operator` endpoint exercises the guard only when
+   `APP_ENV != production`, matching the existing internal router gate.
 6. **Forgotten password** — `PasswordResetToken` model/migration; `/forgot-password`, `/reset-password`
    wired to the Step-1 `EmailSender`; rate limiting wired to D-038's limits; tests.
 7. **Invitation flow** — `Invitation` model/migration; admin invitation endpoints; public accept

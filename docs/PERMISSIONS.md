@@ -45,4 +45,6 @@ Die Rollen sind in D-025 beschlossen und werden serverseitig durchgesetzt.
 `User.platformRole = PLATFORM_OPERATOR` (D-037) ist keine Zeile in obiger Rechtematrix und keine
 `StaffMembership`-Rolle: sie ist organisationsunabhaengig und deckt Plattformbetrieb ab, nicht
 Vereinsverwaltung. Das Feld ist ueber keine API beschreibbar und wird ausschliesslich durch einen
-kontrollierten Platform-Admin-Prozess vergeben. Details in `docs/F002_PLAN.md` §6–7.
+kontrollierten Platform-Admin-Prozess vergeben. Platform-Zugriff erfordert einen authentifizierten,
+aktiven `User` mit `platform_role = PLATFORM_OPERATOR`; Organisationsrollen koennen diesen Zugriff
+nicht ersetzen oder eskalieren. Details in `docs/F002_PLAN.md` §6–7.
