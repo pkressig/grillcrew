@@ -1,13 +1,13 @@
-# AI Project Status
+﻿# AI Project Status
 
 ## Manual Status
 
 - Current feature: F002 - Authentication and Organization Permissions
 - Current step: Step 5 - Platform Operator Guard
 - Last merged feature: F002 Step 4 - organization permission guards
-- Current phase: Backend auth guard foundation
+- Current phase: Repository/process workflow automation
 - Active blockers: None known
-- Next intended action: Review and commit F002 Step 5, then continue with F002 Step 6
+- Next intended action: Review and commit F000.3 workflow automation, then continue with F002 Step 6
 - Production frontend URL: Not configured in repository; see Vercel project settings
 - Production backend URL: Not configured in repository; see Render service settings
 - F002 Step 1 completed: yes
@@ -19,9 +19,9 @@
 ## Generated Status
 
 <!-- GENERATED:START -->
-- Current branch: feature/f002-step5-platform-operator-guard
-- Current commit: f39053b14f3c3a77a9919e2a4b561d2076384db2
-- Working tree state: dirty (8 changed path(s))
-- Latest commit subject: Merge pull request #7 from pkressig/feature/f002-step4-permission-guards
-- Latest update timestamp: 2026-07-17T00:11:13.306Z
+- Current branch: feature/f000-workflow-automation
+- Current commit: bb405321b4263fdada119671e5ea0c0d972365aa
+- Working tree state: dirty (12 changed path(s))
+- Latest commit subject: Merge pull request #8 from pkressig/feature/f002-step5-platform-operator-guard
+- Latest update timestamp: 2026-07-17T06:40:32.760Z
 <!-- GENERATED:END -->
