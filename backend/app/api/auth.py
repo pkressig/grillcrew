@@ -24,6 +24,8 @@ from app.core.security.rate_limit import InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
 from app.models.organization import Organization
 from app.schemas.auth import (
+    AcceptInvitationRequest,
+    AcceptInvitationResponse,
     AuthSessionResponse,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
@@ -47,6 +49,11 @@ from app.services.auth import (
     build_session_response,
     dispatch_password_reset_email,
     normalize_email,
+)
+from app.services.invitation import (
+    InvalidInvitationTokenError,
+    InvitationService,
+    hash_invitation_token,
 )
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -141,6 +148,42 @@ def reset_password(
             detail="invalid reset token",
         ) from None
     return ResetPasswordResponse()
+
+
+@router.post("/accept-invitation", response_model=AcceptInvitationResponse)
+def accept_invitation(
+    payload: AcceptInvitationRequest,
+    request: Request,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> AcceptInvitationResponse:
+    settings = get_settings()
+    _ensure_origin_and_host(request, db, settings)
+    token_key = hash_invitation_token(payload.token)
+    _ensure_rate_limit(
+        key=f"invitation-accept:token:{token_key}",
+        rule=settings.auth_rate_limits.invitation_accept_per_token,
+    )
+    _ensure_rate_limit(
+        key=f"invitation-accept:ip:{_client_key(request)}",
+        rule=settings.auth_rate_limits.invitation_accept_per_ip,
+    )
+    try:
+        InvitationService(db, settings).accept(
+            raw_token=payload.token,
+            display_name=payload.display_name,
+            password=payload.password,
+        )
+    except PasswordPolicyError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="password policy violation",
+        ) from None
+    except InvalidInvitationTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid invitation token",
+        ) from None
+    return AcceptInvitationResponse()
 
 
 @router.post("/logout", response_model=LogoutResponse)

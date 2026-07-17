@@ -65,6 +65,9 @@ class User(Base):
     audit_events: Mapped[list[AuditEvent]] = relationship(back_populates="actor_user")
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(back_populates="user")
     password_reset_tokens: Mapped[list[PasswordResetToken]] = relationship(back_populates="user")
+    invitations: Mapped[list[Invitation]] = relationship(
+        back_populates="user", foreign_keys="Invitation.user_id"
+    )
 
 
 class RefreshToken(Base):
@@ -113,6 +116,48 @@ class PasswordResetToken(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="password_reset_tokens")
+
+
+class Invitation(Base):
+    __tablename__ = "invitation"
+    __table_args__ = (
+        Index("ix_invitation_token_hash", "token_hash", unique=True),
+        Index("ix_invitation_organization_created_at", "organization_id", "created_at"),
+        Index("ix_invitation_user_id", "user_id"),
+        Index("ix_invitation_expires_at", "expires_at"),
+        Index(
+            "uq_invitation_pending_organization_user",
+            "organization_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("accepted_at IS NULL AND revoked_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user.id"), nullable=False
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organization.id"), nullable=False
+    )
+    role: Mapped[StaffRole] = mapped_column(Enum(StaffRole, name="staff_role"), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user.id"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="invitations", foreign_keys=[user_id])
+    organization: Mapped[Organization] = relationship(back_populates="invitations")
+    created_by_user: Mapped[User] = relationship(foreign_keys=[created_by_user_id])
 
 
 class StaffMembership(Base):

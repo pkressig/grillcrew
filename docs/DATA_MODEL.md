@@ -90,7 +90,7 @@ Rules:
 Full authentication schema (`RefreshToken`, `PasswordResetToken`, `Invitation`, and the finalized
 `StaffMembership`/`AuditEvent` migration) is specified in `docs/F002_PLAN.md` §4–5 and lands with F002;
 Core identity tables are migrated in F002 Step 2; refresh tokens landed in Step 3; password reset
-tokens landed in Step 6; invitation tables land in a later F002 step.
+tokens landed in Step 6; invitations landed in Step 7.
 
 ### PasswordResetToken
 
@@ -103,6 +103,24 @@ tokens landed in Step 6; invitation tables land in a later F002 step.
 
 Password reset tokens are platform-level user tokens, not organization-scoped data. Raw reset tokens
 are never stored, logged, returned in API responses, or written to audit metadata.
+
+### Invitation
+
+- id
+- userId
+- organizationId
+- role: ADMIN | KOORDINATION | KIOSK | VORSTAND_LESEN
+- tokenHash, unique, stores SHA-256 of the opaque raw token only
+- expiresAt
+- acceptedAt nullable
+- revokedAt nullable
+- createdByUserId
+- createdAt
+
+Pending invitations are unique per organization and user. Acceptance derives user, organization,
+and role exclusively from the invitation, creates or activates the organization membership, and
+consumes the token exactly once. Raw invitation tokens are never stored, logged, returned in API
+responses, or written to audit metadata.
 
 ### StaffMembership
 

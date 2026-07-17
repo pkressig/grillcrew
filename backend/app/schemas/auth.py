@@ -50,3 +50,13 @@ class ResetPasswordRequest(BaseModel):  # type: ignore[explicit-any]
 
 class ResetPasswordResponse(BaseModel):  # type: ignore[explicit-any]
     ok: bool = True
+
+
+class AcceptInvitationRequest(BaseModel):  # type: ignore[explicit-any]
+    token: str = Field(min_length=1, max_length=512)
+    display_name: str = Field(min_length=1, max_length=200)
+    password: str | None = Field(default=None, min_length=1, max_length=1024)
+
+
+class AcceptInvitationResponse(BaseModel):  # type: ignore[explicit-any]
+    ok: bool = True
