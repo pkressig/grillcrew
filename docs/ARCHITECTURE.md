@@ -114,6 +114,10 @@ Full design in `docs/F002_PLAN.md`; decisions ratified as D-037–D-040 in `docs
 - Password reset uses opaque high-entropy bearer tokens stored only as SHA-256 hashes. Reset requests
   are generic and do not reveal account state; successful reset consumes the token and revokes existing
   refresh-token sessions for that user.
+- Staff invitations use the same hashed-at-rest bearer-token pattern and deferred provider-agnostic
+  email transport. Only a database-authorized organization ADMIN can issue an invitation; accepting
+  it derives the tenant, user, and role from the single-use invitation row rather than client input,
+  and only then creates or activates the `StaffMembership`.
 
 ## Data Rules
 

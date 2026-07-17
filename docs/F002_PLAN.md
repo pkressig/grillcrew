@@ -408,10 +408,13 @@ one only.
    mistyped or intercepted invitation never itself grants access.
 
 `GET /api/invitations/{token}` — public, token-gated preview (organization name + offered role), for
-the frontend accept screen to render without requiring login first.
+the frontend accept screen to render without requiring login first. **Not implemented in Step 7**;
+planned for Step 8 alongside the `/invite/[token]` frontend page.
 
-`POST /api/invitations/{token}/accept {display_name, password?}` — rate-limited per D-038's
-`invitation_accept_per_token`/`invitation_accept_per_ip` limits.
+`POST /api/auth/accept-invitation {token, display_name, password?}` — public, token-gated,
+rate-limited per D-038's `invitation_accept_per_token`/`invitation_accept_per_ip` limits. Implemented
+under `/api/auth` (not `/api/invitations` as originally sketched here) so it shares the auth router's
+public-endpoint origin/Host handling with `/api/auth/reset-password`.
 
 1. Validate token hash, expiry, not already accepted/revoked.
 2. If the target `User.status == INVITED` (brand-new account): require `password`, set `passwordHash`,
@@ -423,6 +426,7 @@ the frontend accept screen to render without requiring login first.
    satisfying BR-010's requirement to log role/permission changes.
 
 `DELETE /api/admin/{organization_slug}/invitations/{id}` — `ADMIN` only, sets `revoked_at`.
+**Not implemented in Step 7**; planned for a follow-up admin invitation-management step.
 
 ## 17. API Structure
 
@@ -433,14 +437,15 @@ the frontend accept screen to render without requiring login first.
 /api/auth/me                             GET    authenticated
 /api/auth/forgot-password                POST   public
 /api/auth/reset-password                 POST   public (token-gated)
+/api/auth/accept-invitation              POST   public (token-gated)
 
-/api/invitations/{token}                 GET    public (token-gated)
-/api/invitations/{token}/accept          POST   public (token-gated)
+/api/invitations/{token}                 GET    public (token-gated) — not implemented in Step 7, planned for Step 8
 
-/api/admin/{organization_slug}/invitations        POST, GET   ADMIN
-/api/admin/{organization_slug}/invitations/{id}   DELETE      ADMIN
-/api/admin/{organization_slug}/staff              GET         ADMIN, KOORDINATION (read per matrix)
-/api/admin/{organization_slug}/staff/{id}         PATCH       ADMIN
+/api/admin/{organization_slug}/invitations        POST        ADMIN
+/api/admin/{organization_slug}/invitations        GET         ADMIN — not implemented in Step 7
+/api/admin/{organization_slug}/invitations/{id}   DELETE      ADMIN — not implemented in Step 7
+/api/admin/{organization_slug}/staff              GET         ADMIN, KOORDINATION (read per matrix) — not implemented in Step 7
+/api/admin/{organization_slug}/staff/{id}         PATCH       ADMIN — not implemented in Step 7
 
 /api/platform/*                          reserved, guard only — no endpoints built in F002
 ```
@@ -580,7 +585,14 @@ independently testable and mergeable to that branch (or split into sub-PRs again
    submission has no separate rate-limit bucket, deferred per `docs/BACKLOG.md` since the token's
    256-bit entropy already makes brute-forcing it infeasible.
 7. **Invitation flow** — `Invitation` model/migration; admin invitation endpoints; public accept
-   endpoint; `EmailSender` reused; rate limiting wired; tests.
+   endpoint; `EmailSender` reused; rate limiting wired; tests. **Completed in Step 7:** organization
+   admins can issue hashed, seven-day invitations through
+   `POST /api/admin/{organization_slug}/invitations`; missing users are created as `INVITED` and
+   existing users are reused. `POST /api/auth/accept-invitation` validates and atomically consumes
+   the opaque token, activates invited users with an Argon2id password, creates or reactivates the
+   database-scoped membership, and audits the role grant. Raw tokens appear only in the deferred
+   email payload and never in database rows, API responses, logs, or audit metadata. Invitation
+   acceptance uses D-038's dedicated per-token-hash and per-IP limits.
 8. **Frontend auth shell** — `AuthProvider`, `/login`, `/invite/[token]`, `/reset-password/[token]`,
    protected `app/[org]/admin/**` shell, organization switcher, forbidden-state handling, CSRF header
    plumbing; Vitest coverage.

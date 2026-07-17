@@ -2,6 +2,8 @@
 
 from app.models.identity import (
     AuditEvent,
+    Invitation,
+    PasswordResetToken,
     PlatformRole,
     RefreshToken,
     StaffMembership,
@@ -13,8 +15,10 @@ from app.models.organization import Organization, OrganizationSettings, Theme
 
 __all__ = [
     "AuditEvent",
+    "Invitation",
     "Organization",
     "OrganizationSettings",
+    "PasswordResetToken",
     "PlatformRole",
     "RefreshToken",
     "StaffMembership",
