@@ -4,11 +4,12 @@
 
 1. `CLAUDE.md`
 2. `ai/AGENTS.md`
-3. `ai/MEMORY.md`
-4. `ai/STATUS.md`
-5. `ai/SESSION.md`
-6. `ai/CONTEXT.md`
-7. `ai/REVIEW.md`
+3. `ai/DIRECT_HANDOFF.md`
+4. `ai/MEMORY.md`
+5. `ai/STATUS.md`
+6. `ai/SESSION.md`
+7. `ai/CONTEXT.md`
+8. `ai/REVIEW.md`
 
 ## Authoritative Requirements
 
@@ -64,6 +65,7 @@ git diff --check
 ## Workflow Automation
 
 - Create branches manually; workflow scripts do not create branches.
+- For product features, prefer concrete task, review, and PR handoffs written directly by ChatGPT into `ai/generated/`; see `ai/DIRECT_HANDOFF.md`.
 - Generate implementation prompts with `npm.cmd run workflow:start -- <feature-id> "<feature-name>" <branch>`.
 - Tell Codex to read `ai/generated/current-task.md` and execute it.
 - Generate review prompts with `npm.cmd run workflow:review -- <claude|codex|agy|chatgpt> <feature-id> "<feature-name>"`.
@@ -71,6 +73,7 @@ git diff --check
 - Generate PR text with `npm.cmd run workflow:pr -- "<title>"`.
 - The Product Owner opens PRs manually, waits for green CI, merges, then runs `npm.cmd run ai:prepare`.
 - Generated workflow files in `ai/generated/` are ignored by Git; keep `ai/generated/.gitkeep` tracked.
+- `workflow:start` and `workflow:review` produce generic scaffolds. Review and correct their scope before any agent executes them.
 ## Deployment Overview
 
 - Frontend: Vercel with root directory `frontend`.

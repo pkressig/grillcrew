@@ -42,6 +42,8 @@ try {
   console.log("");
   console.log(`Generated ${relativePath(outputPath)}.`);
 
+  console.warn("workflow:start creates a generic scaffold. For product features, prefer a ChatGPT-authored ai/generated/current-task.md and review this file before Codex executes it.");
+
   if (options.updateSession) {
     updateSession(
       [
