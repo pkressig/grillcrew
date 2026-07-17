@@ -571,7 +571,14 @@ independently testable and mergeable to that branch (or split into sub-PRs again
    `/api/internal/test-support/platform/operator` endpoint exercises the guard only when
    `APP_ENV != production`, matching the existing internal router gate.
 6. **Forgotten password** — `PasswordResetToken` model/migration; `/forgot-password`, `/reset-password`
-   wired to the Step-1 `EmailSender`; rate limiting wired to D-038's limits; tests.
+   wired to the Step-1 EmailSender; rate limiting wired to D-038's limits; tests. **Completed
+   in Step 6:** password reset requests now create only hashed, single-use, expiring tokens for
+   active users, return generic responses without account enumeration, dispatch reset email through
+   EmailSender via FastAPI BackgroundTasks, and reset submissions update the Argon2id password
+   hash, consume the token, audit PASSWORD_RESET, and revoke existing refresh-token sessions.
+   D-038 rate limiting is wired for `/forgot-password` (per account and per IP); `/reset-password`
+   submission has no separate rate-limit bucket, deferred per `docs/BACKLOG.md` since the token's
+   256-bit entropy already makes brute-forcing it infeasible.
 7. **Invitation flow** — `Invitation` model/migration; admin invitation endpoints; public accept
    endpoint; `EmailSender` reused; rate limiting wired; tests.
 8. **Frontend auth shell** — `AuthProvider`, `/login`, `/invite/[token]`, `/reset-password/[token]`,

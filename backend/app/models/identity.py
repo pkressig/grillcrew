@@ -64,6 +64,7 @@ class User(Base):
     staff_memberships: Mapped[list[StaffMembership]] = relationship(back_populates="user")
     audit_events: Mapped[list[AuditEvent]] = relationship(back_populates="actor_user")
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(back_populates="user")
+    password_reset_tokens: Mapped[list[PasswordResetToken]] = relationship(back_populates="user")
 
 
 class RefreshToken(Base):
@@ -89,6 +90,29 @@ class RefreshToken(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="refresh_tokens")
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_token"
+    __table_args__ = (
+        Index("ix_password_reset_token_token_hash", "token_hash", unique=True),
+        Index("ix_password_reset_token_user_id", "user_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user.id"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="password_reset_tokens")
 
 
 class StaffMembership(Base):

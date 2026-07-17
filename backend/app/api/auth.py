@@ -2,7 +2,7 @@
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -19,21 +19,33 @@ from app.core.security.origins import (
     is_host_consistent_with_origin,
     is_origin_allowed,
 )
+from app.core.security.password import PasswordPolicyError
 from app.core.security.rate_limit import InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
 from app.models.organization import Organization
-from app.schemas.auth import AuthSessionResponse, LoginRequest, LogoutResponse
+from app.schemas.auth import (
+    AuthSessionResponse,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    LoginRequest,
+    LogoutResponse,
+    ResetPasswordRequest,
+    ResetPasswordResponse,
+)
 from app.services.auth import (
     ACCESS_TOKEN_COOKIE_NAME,
     REFRESH_TOKEN_COOKIE_NAME,
     InvalidCredentialsError,
+    InvalidPasswordResetTokenError,
     InvalidRefreshTokenError,
     IssuedSession,
     LoginService,
     LogoutService,
+    PasswordResetService,
     RefreshService,
     RefreshTokenValidation,
     build_session_response,
+    dispatch_password_reset_email,
     normalize_email,
 )
 
@@ -70,6 +82,65 @@ def login(
         ) from None
     set_auth_cookies(response, session, settings)
     return body
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> ForgotPasswordResponse:
+    settings = get_settings()
+    _ensure_origin_and_host(request, db, settings)
+    email_normalized = normalize_email(payload.email)
+    _ensure_rate_limit(
+        key=f"password-reset-request:account:{email_normalized}",
+        rule=settings.auth_rate_limits.password_reset_request_per_account,
+    )
+    _ensure_rate_limit(
+        key=f"password-reset-request:ip:{_client_key(request)}",
+        rule=settings.auth_rate_limits.password_reset_request_per_ip,
+    )
+    issue = PasswordResetService(db, settings).request_reset(email=email_normalized)
+    if issue is not None:
+        background_tasks.add_task(
+            dispatch_password_reset_email,
+            settings,
+            recipient=issue.recipient,
+            raw_token=issue.raw_token,
+        )
+    return ForgotPasswordResponse()
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+def reset_password(
+    payload: ResetPasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> ResetPasswordResponse:
+    settings = get_settings()
+    _ensure_origin_and_host(request, db, settings)
+    try:
+        PasswordResetService(db, settings).reset_password(
+            raw_token=payload.token,
+            new_password=payload.new_password,
+        )
+    except PasswordPolicyError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="password policy violation",
+        ) from None
+    except InvalidPasswordResetTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid reset token",
+        ) from None
+    return ResetPasswordResponse()
 
 
 @router.post("/logout", response_model=LogoutResponse)
