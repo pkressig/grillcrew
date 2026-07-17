@@ -8,6 +8,7 @@ from sqlalchemy.sql.schema import Table
 
 from app.models.identity import (
     AuditEvent,
+    PasswordResetToken,
     PlatformRole,
     RefreshToken,
     StaffMembership,
@@ -86,6 +87,24 @@ def test_refresh_token_stores_only_hash_and_rotation_family() -> None:
     assert ["token_hash"] == [column.name for column in token_hash.columns]
     assert ["family_id"] == [
         column.name for column in _index(table.indexes, "ix_refresh_token_family_id").columns
+    ]
+
+
+def test_password_reset_token_stores_only_hash_and_single_use_timestamps() -> None:
+    table = cast(Table, PasswordResetToken.__table__)
+
+    assert table.c.user_id.nullable is False
+    assert table.c.token_hash.nullable is False
+    assert table.c.expires_at.nullable is False
+    assert table.c.consumed_at.nullable is True
+    assert table.c.created_at.nullable is False
+    assert "raw_token" not in table.c
+
+    token_hash = _index(table.indexes, "ix_password_reset_token_token_hash")
+    assert token_hash.unique is True
+    assert ["token_hash"] == [column.name for column in token_hash.columns]
+    assert ["user_id"] == [
+        column.name for column in _index(table.indexes, "ix_password_reset_token_user_id").columns
     ]
 
 

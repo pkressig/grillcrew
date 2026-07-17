@@ -36,3 +36,14 @@
 - öffentlich sichtbare Kontaktdaten
 - automatische negative Helferbewertung
 - komplexes SaaS-Abrechnungssystem
+
+## Repository / Workflow
+- workflow:start needs a product-feature mode so it does not generate process-only prompts for
+  auth/API/database work.
+
+## Security Hardening
+- `POST /api/auth/reset-password` has no dedicated D-038 rate-limit bucket (unlike
+  `/forgot-password`, which is limited per account and per IP). Deferred because the reset token is a
+  256-bit random value (`secrets.token_urlsafe(32)`), making brute-force guessing infeasible regardless
+  of rate limiting, and D-038's ratified wording names "password-reset request," not submission, as the
+  action requiring its own limit. Add a `password_reset_submit_per_ip` limit if this needs revisiting.

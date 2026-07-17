@@ -11,6 +11,7 @@ from app.api import auth
 from app.api.dependencies import CurrentUser, get_current_user
 from app.core.config import Settings, get_settings
 from app.core.security.csrf import CSRF_HEADER_NAME, derive_csrf_secret, generate_csrf_token
+from app.core.security.password import PasswordPolicyError
 from app.core.security.rate_limit import AuthRateLimits, InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
 from app.main import app
@@ -19,6 +20,7 @@ from app.services.auth import (
     ACCESS_TOKEN_COOKIE_NAME,
     REFRESH_TOKEN_COOKIE_NAME,
     InvalidCredentialsError,
+    InvalidPasswordResetTokenError,
     InvalidRefreshTokenError,
     IssuedSession,
 )
@@ -329,6 +331,299 @@ def test_me_returns_current_user_session_shape(client: TestClient) -> None:
             }
         ],
     }
+
+
+def test_forgot_password_returns_generic_success_and_sends_for_eligible_user(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[tuple[str, str]] = []
+
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def request_reset(self, *, email: str) -> object:
+            assert email == "user@example.test"
+            return SimpleNamespace(recipient=email, raw_token="raw-reset-token")
+
+    def fake_dispatch(_settings: object, *, recipient: str, raw_token: str) -> None:
+        sent.append((recipient, raw_token))
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    monkeypatch.setattr(auth, "dispatch_password_reset_email", fake_dispatch)
+    try:
+        response = client.post(
+            "/api/auth/forgot-password",
+            headers=_origin_headers(),
+            json={"email": " USER@example.test "},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    assert response.json() == {"ok": True}
+    assert sent == [("user@example.test", "raw-reset-token")]
+
+
+def test_forgot_password_returns_generic_success_for_missing_or_ineligible_user(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def request_reset(self, *, email: str) -> None:
+            assert email == "missing@example.test"
+            return None
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        response = client.post(
+            "/api/auth/forgot-password",
+            headers=_origin_headers(),
+            json={"email": "missing@example.test"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    assert response.json() == {"ok": True}
+
+
+def test_forgot_password_email_failure_still_returns_generic_success(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    raw_token = "raw-token-that-must-not-be-logged"
+
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def request_reset(self, *, email: str) -> object:
+            return SimpleNamespace(recipient=email, raw_token=raw_token)
+
+    class FailingSender:
+        def send(self, _message: object) -> None:
+            from app.services.email.base import EmailSendError
+
+            raise EmailSendError("transport unavailable")
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    monkeypatch.setattr("app.services.auth.build_email_sender", lambda _settings: FailingSender())
+    try:
+        with caplog.at_level("DEBUG"):
+            response = client.post(
+                "/api/auth/forgot-password",
+                headers=_origin_headers(),
+                json={"email": "user@example.test"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    assert raw_token not in caplog.text
+
+
+def test_forgot_password_returns_generic_success_even_when_email_sender_unavailable(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A missing SMTP config (e.g. an operator forgot to set SMTP_HOST in production)
+
+    must not turn into a different response for existing vs. missing accounts.
+    Regression test: `build_email_sender` used to be called eagerly inside the
+    request handler, only when an eligible user existed, so its `ValueError`
+    surfaced as an uncaught 500 for real accounts while non-existent accounts
+    still got 202 - a user-enumeration oracle. Construction now happens inside
+    the deferred background task instead.
+    """
+    raw_token = "raw-token-that-must-not-be-logged"
+
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def request_reset(self, *, email: str) -> object:
+            return SimpleNamespace(recipient=email, raw_token=raw_token)
+
+    def _raise_sender_unavailable(_settings: object) -> None:
+        raise ValueError("SMTP_HOST must be configured outside development/test")
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    monkeypatch.setattr("app.services.auth.build_email_sender", _raise_sender_unavailable)
+    try:
+        with caplog.at_level("DEBUG"):
+            response = client.post(
+                "/api/auth/forgot-password",
+                headers=_origin_headers(),
+                json={"email": "user@example.test"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 202
+    assert response.json() == {"ok": True}
+    assert raw_token not in caplog.text
+
+
+def test_forgot_password_rejects_missing_origin(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            raise AssertionError("forgot-password must not run without origin validation")
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        response = client.post(
+            "/api/auth/forgot-password",
+            json={"email": "user@example.test"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+
+
+def test_forgot_password_rate_limit_blocks_after_configured_budget(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = Settings(
+        cors_allowed_origins="http://testserver",
+        auth_rate_limits=AuthRateLimits(
+            password_reset_request_per_account=RateLimitRule(max_attempts=1, window_seconds=900),
+            password_reset_request_per_ip=RateLimitRule(max_attempts=10, window_seconds=900),
+        ),
+    )
+
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def request_reset(self, *, email: str) -> None:
+            return None
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "get_settings", lambda: settings)
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        first = client.post(
+            "/api/auth/forgot-password",
+            headers=_origin_headers(),
+            json={"email": "USER@example.test"},
+        )
+        second = client.post(
+            "/api/auth/forgot-password",
+            headers=_origin_headers(),
+            json={"email": "user@example.test"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert first.status_code == 202
+    assert second.status_code == 429
+
+
+def test_reset_password_returns_success_for_valid_token(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def reset_password(self, *, raw_token: str, new_password: str) -> None:
+            calls.append((raw_token, new_password))
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        response = client.post(
+            "/api/auth/reset-password",
+            headers=_origin_headers(),
+            json={"token": "raw-token", "new_password": "new-password-123"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+    assert calls == [("raw-token", "new-password-123")]
+
+
+def test_reset_password_rejects_invalid_token(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def reset_password(self, *, raw_token: str, new_password: str) -> None:
+            raise InvalidPasswordResetTokenError
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        response = client.post(
+            "/api/auth/reset-password",
+            headers=_origin_headers(),
+            json={"token": "raw-token", "new_password": "new-password-123"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid reset token"
+
+
+def test_reset_password_enforces_password_policy(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def reset_password(self, *, raw_token: str, new_password: str) -> None:
+            raise PasswordPolicyError("too short")
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        response = client.post(
+            "/api/auth/reset-password",
+            headers=_origin_headers(),
+            json={"token": "raw-token", "new_password": "short"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "password policy violation"
+
+
+def test_reset_password_rejects_missing_origin(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            raise AssertionError("reset-password must not run without origin validation")
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        response = client.post(
+            "/api/auth/reset-password",
+            json={"token": "raw-token", "new_password": "new-password-123"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
 
 
 def _session(

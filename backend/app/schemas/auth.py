@@ -33,3 +33,20 @@ class AuthSessionResponse(BaseModel):  # type: ignore[explicit-any]
 
 class LogoutResponse(BaseModel):  # type: ignore[explicit-any]
     ok: bool = True
+
+
+class ForgotPasswordRequest(BaseModel):  # type: ignore[explicit-any]
+    email: str = Field(min_length=3, max_length=320)
+
+
+class ForgotPasswordResponse(BaseModel):  # type: ignore[explicit-any]
+    ok: bool = True
+
+
+class ResetPasswordRequest(BaseModel):  # type: ignore[explicit-any]
+    token: str = Field(min_length=1, max_length=512)
+    new_password: str = Field(min_length=1, max_length=1024)
+
+
+class ResetPasswordResponse(BaseModel):  # type: ignore[explicit-any]
+    ok: bool = True

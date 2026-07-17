@@ -111,6 +111,9 @@ Full design in `docs/F002_PLAN.md`; decisions ratified as D-037–D-040 in `docs
   double-submit CSRF token (D-039).
 - Rate limits for login, refresh, password reset, and invitation acceptance are platform-wide,
   environment-configured, and set independently per action (D-038).
+- Password reset uses opaque high-entropy bearer tokens stored only as SHA-256 hashes. Reset requests
+  are generic and do not reveal account state; successful reset consumes the token and revokes existing
+  refresh-token sessions for that user.
 
 ## Data Rules
 

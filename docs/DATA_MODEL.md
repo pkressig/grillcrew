@@ -89,7 +89,20 @@ Rules:
 
 Full authentication schema (`RefreshToken`, `PasswordResetToken`, `Invitation`, and the finalized
 `StaffMembership`/`AuditEvent` migration) is specified in `docs/F002_PLAN.md` §4–5 and lands with F002;
-Core identity tables are migrated in F002 Step 2; token and invitation tables land in later F002 steps.
+Core identity tables are migrated in F002 Step 2; refresh tokens landed in Step 3; password reset
+tokens landed in Step 6; invitation tables land in a later F002 step.
+
+### PasswordResetToken
+
+- id
+- userId
+- tokenHash, unique, stores SHA-256 of the opaque raw token only
+- expiresAt
+- consumedAt nullable
+- createdAt
+
+Password reset tokens are platform-level user tokens, not organization-scoped data. Raw reset tokens
+are never stored, logged, returned in API responses, or written to audit metadata.
 
 ### StaffMembership
 
