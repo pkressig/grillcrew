@@ -16,6 +16,10 @@
     "ai:status": "node scripts/generate-ai-status.mjs",
     "ai:context": "node scripts/build-ai-context.mjs",
     "ai:prepare": "npm run ai:status && npm run ai:context",
-    "ai:report": "node scripts/create-ai-report.mjs"
+    "ai:report": "node scripts/create-ai-report.mjs",
+    "workflow:start": "node scripts/workflow-start.mjs",
+    "workflow:review": "node scripts/workflow-review.mjs",
+    "workflow:pr": "node scripts/workflow-pr.mjs",
+    "workflow:handoff": "node scripts/workflow-handoff.mjs"
   }
 }

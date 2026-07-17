@@ -1,4 +1,4 @@
-# Volunteer Platform
+﻿# Volunteer Platform
 
 Commercial multi-organization SaaS platform for coordinating volunteer operations.
 
@@ -82,6 +82,34 @@ Create a historical AI report:
 ```powershell
 npm.cmd run ai:report -- <agent> <feature> [source.md]
 ```
+### Workflow Automation
+
+Use generated workflow prompts to reduce manual copy and paste while keeping the repository as the source of truth. The scripts do not run external AI tools, create branches, commit, push, open PRs, or merge.
+
+Happy path:
+
+```powershell
+git switch -c feature/f002-step6-password-reset
+npm.cmd run workflow:start -- F002 "Step 6 Password Reset" feature/f002-step6-password-reset
+codex
+# Tell Codex: Read ai/generated/current-task.md and execute it. Do not commit or push.
+
+npm.cmd run workflow:review -- claude F002 "Step 6 Password Reset"
+claude
+# Tell Claude Code: Read ai/generated/current-review.md and execute the review. Do not commit or push.
+
+npm.cmd run workflow:pr -- "F002 Step 6: Password Reset"
+# Product Owner opens the PR manually and pastes ai/generated/pr-description.md.
+# Wait for green CI, then merge.
+
+npm.cmd run ai:prepare
+```
+
+Create a historical handoff report and update the latest session handoff:
+
+```powershell
+npm.cmd run workflow:handoff -- Codex F002-step6 ai/generated/codex-report.md
+```
 
 ## Quality Commands
 
@@ -89,6 +117,9 @@ npm.cmd run ai:report -- <agent> <feature> [source.md]
 npm.cmd run ai:status
 npm.cmd run ai:context
 npm.cmd run ai:prepare
+npm.cmd run workflow:start -- F002 "Step 6 Password Reset" feature/f002-step6-password-reset
+npm.cmd run workflow:review -- claude F002 "Step 6 Password Reset"
+npm.cmd run workflow:pr -- "F002 Step 6: Password Reset"
 npm.cmd run install:frontend
 npm.cmd run install:backend
 npm.cmd run check:backend:ruff

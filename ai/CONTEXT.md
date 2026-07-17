@@ -1,4 +1,4 @@
-# AI Onboarding Context
+﻿# AI Onboarding Context
 
 ## Read First
 
@@ -60,6 +60,17 @@ git diff --check
 - Pull requests must describe scope, documentation impact, database or migration impact, tests, and deployment considerations.
 - CI must be green before merge.
 
+
+## Workflow Automation
+
+- Create branches manually; workflow scripts do not create branches.
+- Generate implementation prompts with `npm.cmd run workflow:start -- <feature-id> "<feature-name>" <branch>`.
+- Tell Codex to read `ai/generated/current-task.md` and execute it.
+- Generate review prompts with `npm.cmd run workflow:review -- <claude|codex|agy|chatgpt> <feature-id> "<feature-name>"`.
+- Tell the selected reviewer to read `ai/generated/current-review.md`; agents still do not communicate secretly or directly.
+- Generate PR text with `npm.cmd run workflow:pr -- "<title>"`.
+- The Product Owner opens PRs manually, waits for green CI, merges, then runs `npm.cmd run ai:prepare`.
+- Generated workflow files in `ai/generated/` are ignored by Git; keep `ai/generated/.gitkeep` tracked.
 ## Deployment Overview
 
 - Frontend: Vercel with root directory `frontend`.
