@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.security.csrf import CSRF_HEADER_NAME, derive_csrf_secret, verify_csrf_token
 from app.core.security.jwt import InvalidAccessTokenError, decode_access_token
 from app.db.session import get_db
-from app.models.identity import StaffMembership, StaffRole, User, UserStatus
+from app.models.identity import PlatformRole, StaffMembership, StaffRole, User, UserStatus
 from app.models.organization import Organization
 from app.services.auth import (
     ACCESS_TOKEN_COOKIE_NAME,
@@ -144,6 +144,19 @@ def require_staff_role(
         raise _forbidden()
 
     return dependency
+
+
+def require_platform_operator(
+    current_user: CurrentUser = Depends(require_authenticated_user),  # noqa: B008
+) -> CurrentUser:
+    """Require an active authenticated platform operator.
+
+    Platform access is independent of organization context and StaffMembership
+    roles; only the database-backed User.platform_role flag grants it.
+    """
+    if current_user.user.platform_role != PlatformRole.PLATFORM_OPERATOR:
+        raise _forbidden()
+    return current_user
 
 
 def validate_csrf(
