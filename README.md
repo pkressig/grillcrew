@@ -62,6 +62,7 @@ The file `CLAUDE.md` historically has that filename, but it applies to every cod
 ```powershell
 Get-Content .\CLAUDE.md
 Get-Content .\ai\AGENTS.md
+Get-Content .\ai\DIRECT_HANDOFF.md
 Get-Content .\ai\MEMORY.md
 Get-Content .\ai\STATUS.md
 Get-Content .\ai\SESSION.md
@@ -82,28 +83,30 @@ Create a historical AI report:
 ```powershell
 npm.cmd run ai:report -- <agent> <feature> [source.md]
 ```
-### Workflow Automation
+### Direct AI Handoff Workflow
 
-Use generated workflow prompts to reduce manual copy and paste while keeping the repository as the source of truth. The scripts do not run external AI tools, create branches, commit, push, open PRs, or merge.
+For real product features, prefer concrete handoff files written by ChatGPT directly into `ai/generated/`. See `ai/DIRECT_HANDOFF.md` for the complete workflow.
 
 Happy path:
 
 ```powershell
-git switch -c feature/f002-step6-password-reset
-npm.cmd run workflow:start -- F002 "Step 6 Password Reset" feature/f002-step6-password-reset
+git switch -c feature/<feature-name>
+# Ask ChatGPT to write the exact implementation handoff to ai/generated/current-task.md.
 codex
 # Tell Codex: Read ai/generated/current-task.md and execute it. Do not commit or push.
 
-npm.cmd run workflow:review -- claude F002 "Step 6 Password Reset"
+# Ask ChatGPT to review the report and local diff, then write ai/generated/current-review.md.
 claude
 # Tell Claude Code: Read ai/generated/current-review.md and execute the review. Do not commit or push.
+# Or start AGY and tell it: Read ai/generated/current-review.md and execute the review. Do not modify files.
 
-npm.cmd run workflow:pr -- "F002 Step 6: Password Reset"
-# Product Owner opens the PR manually and pastes ai/generated/pr-description.md.
-# Wait for green CI, then merge.
+# ChatGPT and the Product Owner prepare the PR description.
+# Product Owner commits, pushes, opens the PR, waits for green CI, and merges.
 
 npm.cmd run ai:prepare
 ```
+
+The `workflow:start`, `workflow:review`, and `workflow:pr` commands remain available as optional helpers. They create generic scaffolds that must be reviewed for correct scope before use. The scripts do not run external AI tools, create branches, commit, push, open PRs, or merge.
 
 Create a historical handoff report and update the latest session handoff:
 

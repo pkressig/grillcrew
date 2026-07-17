@@ -13,21 +13,34 @@ Prepare shared AI status and context when starting or handing off non-trivial wo
 ```powershell
 npm.cmd run ai:prepare
 ```
-Generate workflow-ready prompts when starting, reviewing, handing off, or preparing PR text:
+For real product features, use the direct AI handoff happy path:
 
 ```powershell
-git switch -c feature/f002-step6-password-reset
-npm.cmd run workflow:start -- F002 "Step 6 Password Reset" feature/f002-step6-password-reset
+git switch -c feature/<feature-name>
+# Ask ChatGPT to write the exact task to ai/generated/current-task.md.
 codex
 # Tell Codex to read ai/generated/current-task.md and execute it. Do not commit or push.
 
-npm.cmd run workflow:review -- claude F002 "Step 6 Password Reset"
+# Ask ChatGPT to review the report and local diff, then write ai/generated/current-review.md.
 claude
 # Tell Claude Code to read ai/generated/current-review.md and execute the review. Do not commit or push.
+# AGY may review instead: read ai/generated/current-review.md, execute the review, and do not modify files.
 
-npm.cmd run workflow:pr -- "F002 Step 6: Password Reset"
-# Product Owner opens the PR manually and pastes ai/generated/pr-description.md.
+# ChatGPT and the Product Owner prepare the PR description.
+# Product Owner commits, pushes, and opens the PR manually.
 ```
+
+The agent returns a structured report for ChatGPT to review. The Product Owner waits for green CI before merging, then runs `npm.cmd run ai:prepare`. See `ai/DIRECT_HANDOFF.md`.
+
+The workflow scripts remain optional helpers for starting, reviewing, handing off, or preparing PR text:
+
+```powershell
+npm.cmd run workflow:start -- F002 "Feature name" feature/example
+npm.cmd run workflow:review -- claude F002 "Feature name"
+npm.cmd run workflow:pr -- "F002: Feature name"
+```
+
+`workflow:start` and `workflow:review` create generic scaffolds. Review them for correct scope before an agent executes them.
 
 After CI is green and the Product Owner merges the PR, run:
 

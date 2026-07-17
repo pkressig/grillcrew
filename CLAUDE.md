@@ -8,7 +8,7 @@ You work as the responsible senior full-stack developer for a commercial multi-o
 
 ## Before Each Task
 
-1. Read `ai/AGENTS.md`, `ai/MEMORY.md`, `ai/STATUS.md`, `ai/SESSION.md`, `ai/CONTEXT.md`, and `ai/REVIEW.md`.
+1. Read `ai/AGENTS.md`, `ai/DIRECT_HANDOFF.md`, `ai/MEMORY.md`, `ai/STATUS.md`, `ai/SESSION.md`, `ai/CONTEXT.md`, and `ai/REVIEW.md`.
 2. Read `docs/PRD.md`.
 3. Read `docs/DECISIONS.md`.
 4. Read task-relevant domain documents.
@@ -63,6 +63,7 @@ For every domain-relevant change:
 - The repository is the single source of truth.
 - Agents communicate through repository documents, Git history, reports, and explicit handoffs.
 - Shared AI memory lives in `ai/`.
+- For real product features, the preferred workflow is a concrete handoff written by ChatGPT directly into `ai/generated/`; see `ai/DIRECT_HANDOFF.md`. The `workflow:start`, `workflow:review`, and `workflow:pr` scripts remain optional helper and scaffold tools only.
 - Reusable prompt templates live in `prompts/`.
 - Generated ChatGPT context is created with:
 
