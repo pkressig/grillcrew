@@ -40,6 +40,13 @@ class InvitationIssue:
     raw_token: str
 
 
+@dataclass(frozen=True)
+class InvitationPreview:
+    organization_name: str
+    role: StaffRole
+    password_required: bool
+
+
 class InvitationService:
     def __init__(self, db: Session, settings: Settings) -> None:
         self._db = db
@@ -93,6 +100,27 @@ class InvitationService:
             recipient=user.email_normalized,
             organization_name=organization.name,
             raw_token=raw_token,
+        )
+
+    def preview(self, *, raw_token: str) -> InvitationPreview:
+        invitation = self._db.scalar(
+            select(Invitation)
+            .where(Invitation.token_hash == hash_invitation_token(raw_token))
+            .options(selectinload(Invitation.user), selectinload(Invitation.organization))
+        )
+        now = datetime.now(UTC)
+        if (
+            invitation is None
+            or invitation.accepted_at is not None
+            or invitation.revoked_at is not None
+            or invitation.expires_at <= now
+            or invitation.user.status == UserStatus.DISABLED
+        ):
+            raise InvalidInvitationTokenError
+        return InvitationPreview(
+            organization_name=invitation.organization.name,
+            role=invitation.role,
+            password_required=invitation.user.status == UserStatus.INVITED,
         )
 
     def accept(self, *, raw_token: str, display_name: str, password: str | None) -> None:

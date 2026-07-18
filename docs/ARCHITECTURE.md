@@ -118,6 +118,11 @@ Full design in `docs/F002_PLAN.md`; decisions ratified as D-037–D-040 in `docs
   email transport. Only a database-authorized organization ADMIN can issue an invitation; accepting
   it derives the tenant, user, and role from the single-use invitation row rather than client input,
   and only then creates or activates the `StaffMembership`.
+- The root frontend `AuthProvider` loads `GET /api/auth/me` with credentials and keeps only the safe
+  user/membership response in memory. It never reads or persists access/refresh cookies. The readable
+  `gc_csrf` cookie is echoed as `X-CSRF-Token` for cookie-authenticated state changes. Protected
+  organization admin routes derive access from the membership matching the URL slug; switching
+  organizations is URL navigation, not separate client session state.
 
 ## Data Rules
 

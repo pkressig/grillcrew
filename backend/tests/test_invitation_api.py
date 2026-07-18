@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api import admin, auth
+from app.api import admin, auth, invitations
 from app.api.dependencies import CurrentStaffMembership, require_staff_membership, validate_csrf
 from app.core.config import Settings
 from app.core.security.password import PasswordPolicyError
@@ -16,7 +16,7 @@ from app.db.session import get_db
 from app.main import app
 from app.models.identity import StaffMembership, StaffRole, User, UserStatus
 from app.models.organization import Organization
-from app.services.invitation import InvalidInvitationTokenError
+from app.services.invitation import InvalidInvitationTokenError, InvitationPreview
 
 
 @pytest.fixture(autouse=True)
@@ -24,6 +24,7 @@ def _settings(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = Settings(cors_allowed_origins="http://testserver")
     monkeypatch.setattr(auth, "get_settings", lambda: settings)
     monkeypatch.setattr(admin, "get_settings", lambda: settings)
+    monkeypatch.setattr(invitations, "get_settings", lambda: settings)
     monkeypatch.setattr(auth, "_rate_limiter", InMemoryRateLimiter())
 
 
@@ -59,6 +60,59 @@ def test_admin_can_create_invitation_without_token_in_response(
     assert response.json() == {"ok": True}
     assert "raw-secret-token" not in response.text
     assert captured == [("Person@example.test", StaffRole.KIOSK)]
+
+
+def test_invitation_preview_returns_only_safe_display_data(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def preview(self, *, raw_token: str) -> InvitationPreview:
+            assert raw_token == "raw-token"
+            return InvitationPreview(
+                organization_name="Example Org",
+                role=StaffRole.KIOSK,
+                password_required=True,
+            )
+
+    monkeypatch.setattr(invitations, "InvitationService", FakeService)
+    app.dependency_overrides[get_db] = _fake_db
+    try:
+        response = client.get("/api/invitations/raw-token")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "organization_name": "Example Org",
+        "role": "KIOSK",
+        "password_required": True,
+    }
+    assert "raw-token" not in response.text
+    assert "email" not in response.text
+
+
+def test_invitation_preview_maps_unusable_tokens_to_not_found(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def preview(self, *, raw_token: str) -> InvitationPreview:
+            raise InvalidInvitationTokenError
+
+    monkeypatch.setattr(invitations, "InvitationService", FakeService)
+    app.dependency_overrides[get_db] = _fake_db
+    try:
+        response = client.get("/api/invitations/unknown-token")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 404
+    assert "unknown-token" not in response.text
 
 
 @pytest.mark.parametrize(
