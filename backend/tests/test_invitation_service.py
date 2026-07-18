@@ -227,6 +227,54 @@ def test_accept_invitation_rejects_every_invalid_token_state(state: str) -> None
     assert not db.committed
 
 
+def test_preview_returns_safe_organization_role_and_password_required_flag() -> None:
+    organization = _organization()
+    invitation = _invitation(role=StaffRole.KOORDINATION)
+    invitation.organization = organization
+    db = FakeSession([invitation])
+
+    preview = InvitationService(cast(Session, db), Settings()).preview(raw_token=RAW_TOKEN)
+
+    assert preview.organization_name == organization.name
+    assert preview.role == StaffRole.KOORDINATION
+    assert preview.password_required is True
+
+
+def test_preview_reports_no_password_required_for_existing_active_user() -> None:
+    invitation = _invitation(user=_user(UserStatus.ACTIVE))
+    invitation.organization = _organization()
+    db = FakeSession([invitation])
+
+    preview = InvitationService(cast(Session, db), Settings()).preview(raw_token=RAW_TOKEN)
+
+    assert preview.password_required is False
+
+
+@pytest.mark.parametrize("state", ["unknown", "expired", "consumed", "revoked", "disabled"])
+def test_preview_rejects_every_invalid_token_state(state: str) -> None:
+    """Mirrors test_accept_invitation_rejects_every_invalid_token_state: preview() shares the same
+    validity conditions as accept() and must fail closed identically for every unusable token.
+    """
+    invitation: Invitation | None = _invitation()
+    if state == "unknown":
+        invitation = None
+    else:
+        assert invitation is not None
+        invitation.organization = _organization()
+        if state == "expired":
+            invitation.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        elif state == "consumed":
+            invitation.accepted_at = datetime.now(UTC)
+        elif state == "revoked":
+            invitation.revoked_at = datetime.now(UTC)
+        else:
+            invitation.user.status = UserStatus.DISABLED
+    db = FakeSession([invitation])
+
+    with pytest.raises(InvalidInvitationTokenError):
+        InvitationService(cast(Session, db), Settings()).preview(raw_token=RAW_TOKEN)
+
+
 def test_accept_invitation_enforces_password_policy_for_invited_user() -> None:
     db = FakeSession([_invitation()])
 

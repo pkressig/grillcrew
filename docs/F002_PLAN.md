@@ -595,7 +595,11 @@ independently testable and mergeable to that branch (or split into sub-PRs again
    acceptance uses D-038's dedicated per-token-hash and per-IP limits.
 8. **Frontend auth shell** — `AuthProvider`, `/login`, `/invite/[token]`, `/reset-password/[token]`,
    protected `app/[org]/admin/**` shell, organization switcher, forbidden-state handling, CSRF header
-   plumbing; Vitest coverage.
+   plumbing; Vitest coverage. **Completed in Step 8:** the frontend uses the existing cookie session
+   without storing tokens in JavaScript-accessible storage, adds clear loading/unauthenticated/
+   forbidden states and navigation-only organization switching, and echoes the readable `gc_csrf`
+   cookie on logout. `GET /api/invitations/{token}` now returns only organization name, offered role,
+   and whether a password is required for safe invitation rendering.
 9. **Documentation and rollout** — finish any remaining detail in `docs/ARCHITECTURE.md`,
    `docs/DATA_MODEL.md`, `docs/PERMISSIONS.md`, `docs/DEPLOYMENT.md` once Steps 2–7's concrete shape
    exists; configure Render/Vercel env vars; deploy and smoke-test.

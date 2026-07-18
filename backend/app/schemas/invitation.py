@@ -12,3 +12,9 @@ class CreateInvitationRequest(BaseModel):  # type: ignore[explicit-any]
 
 class CreateInvitationResponse(BaseModel):  # type: ignore[explicit-any]
     ok: bool = True
+
+
+class InvitationPreviewResponse(BaseModel):  # type: ignore[explicit-any]
+    organization_name: str
+    role: StaffRole
+    password_required: bool
