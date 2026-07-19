@@ -40,4 +40,21 @@ The organization admin area now lists club years and seasons, shows the current 
 
 Only `ADMIN` and `KOORDINATION` receive planning API requests and management controls. `KIOSK` and `VORSTAND_LESEN` receive a simple no-permission state; backend authorization remains authoritative.
 
+## Step 3 — Events and shifts backend foundation
+
+Status: implemented locally, awaiting independent review.
+
+This step adds tenant-scoped Event and Shift persistence and authenticated admin management APIs. Event dates must fall inside their season; shift times must be ordered, remain on the event date, and require a positive volunteer count.
+
+### Admin endpoints
+
+- `GET/POST /api/admin/{organization_slug}/seasons/{season_id}/events`
+- `PATCH /api/admin/{organization_slug}/events/{event_id}`
+- `GET/POST /api/admin/{organization_slug}/events/{event_id}/shifts`
+- `PATCH /api/admin/{organization_slug}/shifts/{shift_id}`
+
+### Deferred
+
+Public planning and signup, volunteer/family/capacity behavior, imports, notifications, and event/shift frontend UI remain deferred to their planned features or later F003 steps.
+
 All requests are scoped by the route organization slug. Writes include cookie credentials and the existing double-submit CSRF header when available.

@@ -87,7 +87,7 @@ High.
 
 **Status**
 
-Steps 1 and 2 implemented: backend foundation and organization admin planning UI; independent review remains pending.
+Steps 1 and 2 are implemented. Step 3 adds the tenant-safe Events and Shifts backend foundation and admin APIs; public planning, signup, and frontend management remain deferred.
 
 **Goal**  
 Let each organization manage its own planning periods.

@@ -18,9 +18,15 @@ from app.schemas.planning import (
     ClubYearCreate,
     ClubYearResponse,
     ClubYearUpdate,
+    EventCreate,
+    EventResponse,
+    EventUpdate,
     SeasonCreate,
     SeasonResponse,
     SeasonUpdate,
+    ShiftCreate,
+    ShiftResponse,
+    ShiftUpdate,
 )
 from app.services.planning import (
     PlanningConflictError,
@@ -178,4 +184,108 @@ def update_season(
         )
         return SeasonResponse.model_validate(item)
     except (PlanningNotFoundError, PlanningConflictError, PlanningValidationError) as error:
+        raise _translate(error) from None
+
+
+@router.get("/seasons/{season_id}/events", response_model=list[EventResponse])
+def list_events(
+    organization_slug: str,
+    season_id: uuid.UUID,
+    current: CurrentStaffMembership = Depends(manage),
+    db: Session = Depends(get_db),
+) -> list[EventResponse]:
+    try:
+        return [
+            EventResponse.model_validate(item)
+            for item in _service(organization_slug, current, db).list_events(season_id)
+        ]
+    except PlanningNotFoundError as error:
+        raise _translate(error) from None
+
+
+@router.post("/seasons/{season_id}/events", response_model=EventResponse, status_code=201)
+def create_event(
+    organization_slug: str,
+    season_id: uuid.UUID,
+    payload: EventCreate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> EventResponse:
+    try:
+        return EventResponse.model_validate(
+            _write_service(organization_slug, current, db, request).create_event(season_id, payload)
+        )
+    except (PlanningNotFoundError, PlanningValidationError) as error:
+        raise _translate(error) from None
+
+
+@router.patch("/events/{event_id}", response_model=EventResponse)
+def update_event(
+    organization_slug: str,
+    event_id: uuid.UUID,
+    payload: EventUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> EventResponse:
+    try:
+        return EventResponse.model_validate(
+            _write_service(organization_slug, current, db, request).update_event(event_id, payload)
+        )
+    except (PlanningNotFoundError, PlanningValidationError) as error:
+        raise _translate(error) from None
+
+
+@router.get("/events/{event_id}/shifts", response_model=list[ShiftResponse])
+def list_shifts(
+    organization_slug: str,
+    event_id: uuid.UUID,
+    current: CurrentStaffMembership = Depends(manage),
+    db: Session = Depends(get_db),
+) -> list[ShiftResponse]:
+    try:
+        return [
+            ShiftResponse.model_validate(item)
+            for item in _service(organization_slug, current, db).list_shifts(event_id)
+        ]
+    except PlanningNotFoundError as error:
+        raise _translate(error) from None
+
+
+@router.post("/events/{event_id}/shifts", response_model=ShiftResponse, status_code=201)
+def create_shift(
+    organization_slug: str,
+    event_id: uuid.UUID,
+    payload: ShiftCreate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> ShiftResponse:
+    try:
+        return ShiftResponse.model_validate(
+            _write_service(organization_slug, current, db, request).create_shift(event_id, payload)
+        )
+    except (PlanningNotFoundError, PlanningValidationError) as error:
+        raise _translate(error) from None
+
+
+@router.patch("/shifts/{shift_id}", response_model=ShiftResponse)
+def update_shift(
+    organization_slug: str,
+    shift_id: uuid.UUID,
+    payload: ShiftUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> ShiftResponse:
+    try:
+        return ShiftResponse.model_validate(
+            _write_service(organization_slug, current, db, request).update_shift(shift_id, payload)
+        )
+    except (PlanningNotFoundError, PlanningValidationError) as error:
         raise _translate(error) from None
