@@ -93,20 +93,20 @@ Happy path:
 git switch -c feature/<feature-name>
 # Ask ChatGPT to write the exact implementation handoff to ai/generated/current-task.md.
 codex
-# Tell Codex: Read ai/generated/current-task.md and execute it. Do not commit or push.
+# Tell Codex: Read ai/generated/current-task.md and execute it. Do not commit or push during implementation.
 
 # Ask ChatGPT to review the report and local diff, then write ai/generated/current-review.md.
 claude
 # Tell Claude Code: Read ai/generated/current-review.md and execute the review. Do not commit or push.
 # Or start AGY and tell it: Read ai/generated/current-review.md and execute the review. Do not modify files.
 
-# ChatGPT and the Product Owner prepare the PR description.
-# Product Owner commits, pushes, opens the PR, waits for green CI, and merges.
+# ChatGPT opens the release gate when implementation and reviews are acceptable.
+# Codex may then commit, push, create the PR, check CI, merge, and clean up only as explicitly instructed.
 
 npm.cmd run ai:prepare
 ```
 
-The `workflow:start`, `workflow:review`, and `workflow:pr` commands remain available as optional helpers. They create generic scaffolds that must be reviewed for correct scope before use. The scripts do not run external AI tools, create branches, commit, push, open PRs, or merge.
+The `workflow:start`, `workflow:review`, and `workflow:pr` commands remain available as optional helpers. They create generic scaffolds that must be reviewed for correct scope before use. The scripts do not run external AI tools, create branches, commit, push, open PRs, or merge. Controlled Git automation after ChatGPT release gate is documented in `ai/GIT_AUTOMATION.md`.
 
 Create a historical handoff report and update the latest session handoff:
 
