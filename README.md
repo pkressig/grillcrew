@@ -1,4 +1,4 @@
-﻿# Volunteer Platform
+# Volunteer Platform
 
 Commercial multi-organization SaaS platform for coordinating volunteer operations.
 
@@ -114,6 +114,25 @@ Create a historical handoff report and update the latest session handoff:
 npm.cmd run workflow:handoff -- Codex F002-step6 ai/generated/codex-report.md
 ```
 
+
+## First Production Admin
+
+The first organization admin is created with a backend CLI command, not through
+an HTTP endpoint. Run it only from the trusted Render backend shell with
+temporary environment variables:
+
+```sh
+export BOOTSTRAP_ADMIN_EMAIL="you@example.com"
+export BOOTSTRAP_ADMIN_DISPLAY_NAME="Your Name"
+export BOOTSTRAP_ADMIN_PASSWORD="choose-a-long-password"
+export BOOTSTRAP_ORGANIZATION_SLUG="fc-thusis-cazis"
+python -m app.cli.bootstrap_admin
+unset BOOTSTRAP_ADMIN_EMAIL BOOTSTRAP_ADMIN_DISPLAY_NAME BOOTSTRAP_ADMIN_PASSWORD BOOTSTRAP_ORGANIZATION_SLUG
+```
+
+The command is idempotent for active or invited users, creates/reactivates an
+active `ADMIN` staff membership for the selected organization, and refuses to
+reactivate disabled users.
 ## Quality Commands
 
 ```powershell
