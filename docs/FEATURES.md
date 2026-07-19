@@ -87,7 +87,7 @@ High.
 
 **Status**
 
-Step 1 backend foundation implemented; admin UI remains pending.
+Steps 1 and 2 implemented: backend foundation and organization admin planning UI; independent review remains pending.
 
 **Goal**  
 Let each organization manage its own planning periods.

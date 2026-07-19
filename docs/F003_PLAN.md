@@ -2,7 +2,7 @@
 
 ## Step 1 — Backend foundation
 
-Status: implemented, awaiting independent review.
+Status: implemented and merged.
 
 This step adds organization-owned club years and seasons without frontend or public planning APIs.
 
@@ -30,4 +30,14 @@ Endpoints:
 
 ### Deferred
 
-The admin UI, public season APIs, events, shifts, and season selectors belong to later steps/features.
+Public season APIs, events, shifts, and broader season selectors belong to later steps/features.
+
+## Step 2 — Visible admin UI
+
+Status: implemented, awaiting Claude and AGY review.
+
+The organization admin area now lists club years and seasons, shows the current season, creates both record types, and exposes valid season lifecycle actions. The UI is mobile-first, uses German labels, and includes loading, error, empty, and success states.
+
+Only `ADMIN` and `KOORDINATION` receive planning API requests and management controls. `KIOSK` and `VORSTAND_LESEN` receive a simple no-permission state; backend authorization remains authoritative.
+
+All requests are scoped by the route organization slug. Writes include cookie credentials and the existing double-submit CSRF header when available.

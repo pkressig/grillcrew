@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth-provider";
 import { LogoutButton } from "@/components/logout-button";
 import { OrganizationSwitcher } from "@/components/organization-switcher";
 import type { PublicOrganization } from "@/lib/organization";
+import { PlanningPanel } from "./planning-panel";
 
 const roleLabels = {
   ADMIN: "Administration",
@@ -33,6 +34,7 @@ export function AdminShell({
     return (
       <State title="Kein Zugriff" text="Ihr Konto hat keinen Zugriff auf diese Organisation." />
     );
+  const canManagePlanning = membership.role === "ADMIN" || membership.role === "KOORDINATION";
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-6 px-4 py-8">
@@ -45,11 +47,18 @@ export function AdminShell({
         <LogoutButton />
       </header>
       <OrganizationSwitcher memberships={auth.memberships} currentSlug={org} />
+      {canManagePlanning ? (
+        <PlanningPanel org={org} />
+      ) : (
+        <section className="rounded-lg border p-5">
+          <h2 className="text-lg font-semibold">Planung</h2>
+          <p className="mt-2">Ihre Rolle hat keine Berechtigung, Planungsdaten zu verwalten.</p>
+        </section>
+      )}
       <section className="rounded-lg border p-5">
         <h2 className="text-lg font-semibold">Bereiche</h2>
         <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-          <li className="rounded border p-4">Einsatzplanung (folgt)</li>
-          {membership.role === "ADMIN" || membership.role === "KOORDINATION" ? (
+          {canManagePlanning ? (
             <li className="rounded border p-4">Helfer und Familien (folgt)</li>
           ) : null}
           {membership.role === "ADMIN" ? (
