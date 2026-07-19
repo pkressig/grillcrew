@@ -85,6 +85,10 @@ High.
 
 ## F003 Seasons and Club Years
 
+**Status**
+
+Step 1 backend foundation implemented; admin UI remains pending.
+
 **Goal**  
 Let each organization manage its own planning periods.
 

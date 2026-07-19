@@ -141,6 +141,10 @@ responses, or written to audit metadata.
 - startDate
 - endDate
 - status
+- createdAt
+- updatedAt
+
+Status is `DRAFT | ACTIVE | CLOSED | ARCHIVED`. `organizationId`, start date, and end date are indexed together. Date ranges are inclusive and checked in both API validation and the database.
 
 ### Season
 
@@ -151,6 +155,10 @@ responses, or written to audit metadata.
 - startDate
 - endDate
 - status: DRAFT | ACTIVE | CLOSED | ARCHIVED
+- createdAt
+- updatedAt
+
+The club-year foreign key cascades deletion to seasons. Club-year/date lookup is indexed. A season's containment inside its club year is enforced in the service layer because it spans parent and child rows.
 
 ### Event
 
