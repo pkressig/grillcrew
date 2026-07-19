@@ -16,7 +16,6 @@ from app.core.security.csrf import (
 )
 from app.core.security.origins import (
     build_allowed_origins,
-    is_host_consistent_with_origin,
     is_origin_allowed,
 )
 from app.core.security.password import PasswordPolicyError
@@ -320,11 +319,8 @@ def _ensure_origin_and_host(request: Request, db: Session, settings: Settings) -
         organization_domains=_organization_domains(db),
     )
     origin = request.headers.get("origin")
-    host = request.headers.get("host")
     if not is_origin_allowed(origin, allowed_origins=allowed_origins):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="origin not allowed")
-    if not is_host_consistent_with_origin(host, origin):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="origin host mismatch")
 
 
 def _organization_domains(db: Session) -> set[str]:

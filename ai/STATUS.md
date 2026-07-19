@@ -26,9 +26,9 @@
 ## Generated Status
 
 <!-- GENERATED:START -->
-- Current branch: feature/f000.6-admin-bootstrap
-- Current commit: ac1e97435d080cf8fd4a4f36895918b75e81d94b
-- Working tree state: dirty (10 changed path(s))
-- Latest commit subject: Merge pull request #16 from pkressig/feature/f003-step2-season-admin-ui
-- Latest update timestamp: 2026-07-19T15:19:07.201Z
+- Current branch: feature/f002-cross-origin-auth-login
+- Current commit: f25970c55c2d7eafe28d8a2be125bcb01d47748e
+- Working tree state: dirty (2 changed path(s))
+- Latest commit subject: chore: add first admin bootstrap command
+- Latest update timestamp: 2026-07-19T21:04:46.528Z
 <!-- GENERATED:END -->
