@@ -162,6 +162,8 @@ The club-year foreign key cascades deletion to seasons. Club-year/date lookup is
 
 ### Event
 
+Implemented in F003 Step 3.
+
 - id
 - seasonId
 - title
@@ -173,8 +175,14 @@ The club-year foreign key cascades deletion to seasons. Club-year/date lookup is
 - status: DRAFT | PUBLISHED | POSTPONED | CANCELLED | COMPLETED
 - publishedAt
 - sourceImportId nullable
+- createdAt
+- updatedAt
+
+Events inherit organization scope through their season and club year. Season/date lookup is indexed; the service enforces the inclusive parent-season date range.
 
 ### Shift
+
+Implemented in F003 Step 3.
 
 - id
 - eventId
@@ -185,6 +193,10 @@ The club-year foreign key cascades deletion to seasons. Club-year/date lookup is
 - internalNote
 - status: OPEN | CLOSED | CANCELLED
 - sortOrder
+- createdAt
+- updatedAt
+
+Shifts inherit organization scope through their event. Event/order/time lookup is indexed; database checks and service validation enforce a positive volunteer count and ordered times, while the service also keeps both timestamps on the event date.
 
 ### Volunteer
 

@@ -1,13 +1,11 @@
 # Latest AI Handoff
 
-- Current work: F000.6 - First production admin bootstrap.
-- Goal: Give the Product Owner a safe way to create the initial `ADMIN` account for the seeded FC Thusis-Cazis tenant after Render/Vercel deployment.
-- Scope: Backend CLI helper, focused tests, README instructions, and AI status/session updates. No HTTP endpoint, no frontend change, no migration, and no product runtime behavior change.
-- Previous product step: F003 Step 2 - Visible season and club-year admin UI is completed and merged.
-- Completed work: Added `python -m app.cli.bootstrap_admin`, which reads temporary `BOOTSTRAP_*` environment variables, validates password policy, finds the organization by slug, creates or activates the admin user, creates or reactivates an active `ADMIN` staff membership, writes safe audit metadata, and refuses disabled users.
-- Operational behavior: Secrets are supplied through the trusted backend shell environment only and are not written to repository files or responses. The command is idempotent for active or invited users.
-- Validation results: `npm.cmd run check` passed with 208 backend tests and 24 frontend tests plus the production build; `npm.cmd run ai:prepare` and `git diff --check` also passed.
-- Next exact action: Commit, push, open PR, merge after green checks, deploy, then run the Render Shell bootstrap command.
-- Responsible next agents: ChatGPT/Codex release gate; Claude review can be skipped because this is a small tested operational CLI helper unless the Product Owner wants an extra review.
-- Commit or uncommitted state: F000.6 is implemented locally and uncommitted.
+- Current work: F003 Step 3 - Events and Shifts backend foundation.
+- Goal: Add tenant-safe Event and Shift persistence plus authenticated admin management APIs on the existing ClubYear/Season foundation.
+- Scope: ORM models and enums, Alembic 0008, strict API schemas, planning service methods, six admin endpoints, focused tests, and documentation. No public plan, signup, capacity enforcement, imports, notifications, or frontend UI.
+- Completed work: Added Event and Shift models, parent-chain tenant scoping, date/time/capacity validation, deterministic ordering, guarded CRUD-style endpoints, migration coverage, and focused unit/API tests.
+- Security boundary: Client payloads cannot supply organization or parent identifiers; every lookup resolves through Season and ClubYear to the authenticated organization. Writes retain CSRF and approved Origin validation.
+- Validation results: `npm.cmd run check:backend` passed with Ruff, formatting, mypy, and 219 tests; `npm.cmd run check` passed the full backend and frontend suite including 24 frontend tests and the production build. Alembic 0007-to-0008 upgrade and downgrade offline SQL both passed with safe dependency order.
+- Next exact action: Run independent Claude architecture/security/migration review, address objective findings, then request a release-gate decision.
+- Commit or uncommitted state: F003 Step 3 is implemented locally and uncommitted.
 - Timestamp: 2026-07-19.
