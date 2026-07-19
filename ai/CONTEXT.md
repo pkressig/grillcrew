@@ -5,11 +5,12 @@
 1. `CLAUDE.md`
 2. `ai/AGENTS.md`
 3. `ai/DIRECT_HANDOFF.md`
-4. `ai/MEMORY.md`
-5. `ai/STATUS.md`
-6. `ai/SESSION.md`
-7. `ai/CONTEXT.md`
-8. `ai/REVIEW.md`
+4. `ai/GIT_AUTOMATION.md`
+5. `ai/MEMORY.md`
+6. `ai/STATUS.md`
+7. `ai/SESSION.md`
+8. `ai/CONTEXT.md`
+9. `ai/REVIEW.md`
 
 ## Authoritative Requirements
 
@@ -57,7 +58,7 @@ git diff --check
 ## Branch and PR Workflow
 
 - Use feature branches.
-- Do not commit or push unless explicitly ordered by the Product Owner.
+- Do not commit, push, create PRs, merge, or delete branches unless a ChatGPT release-gate handoff explicitly authorizes it; see `ai/GIT_AUTOMATION.md`.
 - Pull requests must describe scope, documentation impact, database or migration impact, tests, and deployment considerations.
 - CI must be green before merge.
 
@@ -71,7 +72,7 @@ git diff --check
 - Generate review prompts with `npm.cmd run workflow:review -- <claude|codex|agy|chatgpt> <feature-id> "<feature-name>"`.
 - Tell the selected reviewer to read `ai/generated/current-review.md`; agents still do not communicate secretly or directly.
 - Generate PR text with `npm.cmd run workflow:pr -- "<title>"`.
-- The Product Owner opens PRs manually, waits for green CI, merges, then runs `npm.cmd run ai:prepare`.
+- After ChatGPT opens the release gate, Codex may commit, push, create PRs, check CI, merge, and clean up only as explicitly instructed. The Product Owner may still perform these steps manually.
 - Generated workflow files in `ai/generated/` are ignored by Git; keep `ai/generated/.gitkeep` tracked.
 - `workflow:start` and `workflow:review` produce generic scaffolds. Review and correct their scope before any agent executes them.
 ## Deployment Overview

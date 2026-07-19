@@ -19,18 +19,18 @@ For real product features, use the direct AI handoff happy path:
 git switch -c feature/<feature-name>
 # Ask ChatGPT to write the exact task to ai/generated/current-task.md.
 codex
-# Tell Codex to read ai/generated/current-task.md and execute it. Do not commit or push.
+# Tell Codex to read ai/generated/current-task.md and execute it. Do not commit or push during implementation.
 
 # Ask ChatGPT to review the report and local diff, then write ai/generated/current-review.md.
 claude
 # Tell Claude Code to read ai/generated/current-review.md and execute the review. Do not commit or push.
 # AGY may review instead: read ai/generated/current-review.md, execute the review, and do not modify files.
 
-# ChatGPT and the Product Owner prepare the PR description.
-# Product Owner commits, pushes, and opens the PR manually.
+# ChatGPT opens the release gate when implementation and reviews are acceptable.
+# Codex may then commit, push, create the PR, check CI, merge, and clean up only as explicitly instructed.
 ```
 
-The agent returns a structured report for ChatGPT to review. The Product Owner waits for green CI before merging, then runs `npm.cmd run ai:prepare`. See `ai/DIRECT_HANDOFF.md`.
+The agent returns a structured report for ChatGPT to review. Git release actions require an explicit ChatGPT release-gate handoff. The Product Owner may run the Git steps manually or let Codex execute the approved handoff. CI must be green before merging; after merge run `npm.cmd run ai:prepare`. See `ai/DIRECT_HANDOFF.md` and `ai/GIT_AUTOMATION.md`.
 
 The workflow scripts remain optional helpers for starting, reviewing, handing off, or preparing PR text:
 

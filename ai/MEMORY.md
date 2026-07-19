@@ -1,4 +1,4 @@
-# AI Project Memory
+﻿# AI Project Memory
 
 Stable long-term memory only. Do not copy full business rules or implementation plans here; link to the authoritative repository documents instead.
 
@@ -28,7 +28,7 @@ Stable long-term memory only. Do not copy full business rules or implementation 
 - Codex implements approved scope.
 - Claude Code reviews architecture, security, migrations, and code independently.
 - AGY / Antigravity reviews product, UX, accessibility, workflow, and research topics.
-- The Product Owner approves product decisions, commits, pushes, PRs, and merges.
+- The Product Owner remains final owner of product decisions and repository actions. Codex may execute commit, push, PR, merge, and cleanup only after ChatGPT opens the release gate; details live in `ai/GIT_AUTOMATION.md`.
 
 ## Rejected Directions
 
@@ -47,3 +47,4 @@ Stable long-term memory only. Do not copy full business rules or implementation 
 - Current F002 plan: `docs/F002_PLAN.md`
 - Contribution workflow: `CONTRIBUTING.md`
 - Agent operating rules: `CLAUDE.md`
+- Git automation policy: `ai/GIT_AUTOMATION.md`

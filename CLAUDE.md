@@ -1,4 +1,4 @@
-# CLAUDE.md - Volunteer Platform
+﻿# CLAUDE.md - Volunteer Platform
 
 ## Role
 
@@ -8,7 +8,7 @@ You work as the responsible senior full-stack developer for a commercial multi-o
 
 ## Before Each Task
 
-1. Read `ai/AGENTS.md`, `ai/DIRECT_HANDOFF.md`, `ai/MEMORY.md`, `ai/STATUS.md`, `ai/SESSION.md`, `ai/CONTEXT.md`, and `ai/REVIEW.md`.
+1. Read `ai/AGENTS.md`, `ai/DIRECT_HANDOFF.md`, `ai/GIT_AUTOMATION.md`, `ai/MEMORY.md`, `ai/STATUS.md`, `ai/SESSION.md`, `ai/CONTEXT.md`, and `ai/REVIEW.md`.
 2. Read `docs/PRD.md`.
 3. Read `docs/DECISIONS.md`.
 4. Read task-relevant domain documents.
@@ -63,7 +63,7 @@ For every domain-relevant change:
 - The repository is the single source of truth.
 - Agents communicate through repository documents, Git history, reports, and explicit handoffs.
 - Shared AI memory lives in `ai/`.
-- For real product features, the preferred workflow is a concrete handoff written by ChatGPT directly into `ai/generated/`; see `ai/DIRECT_HANDOFF.md`. The `workflow:start`, `workflow:review`, and `workflow:pr` scripts remain optional helper and scaffold tools only.
+- For real product features, the preferred workflow is a concrete handoff written by ChatGPT directly into `ai/generated/`; see `ai/DIRECT_HANDOFF.md`. Controlled Git automation after ChatGPT release gate is defined in `ai/GIT_AUTOMATION.md`. The `workflow:start`, `workflow:review`, and `workflow:pr` scripts remain optional helper and scaffold tools only.
 - Reusable prompt templates live in `prompts/`.
 - Generated ChatGPT context is created with:
 
@@ -74,7 +74,7 @@ npm.cmd run ai:prepare
 - `ai/generated/CONTEXT_PACK.md` is generated and ignored by Git.
 - `ai/SESSION.md` contains only the latest handoff and is not permanent history.
 - Historical reports live in `ai/reports/`.
-- No agent commits or pushes unless the Product Owner explicitly orders it.
+- No agent commits, pushes, creates PRs, merges, or deletes branches unless a handoff explicitly opens the matching release gate. Codex is the preferred agent for those Git actions after the gate is open.
 
 ## Forbidden
 
