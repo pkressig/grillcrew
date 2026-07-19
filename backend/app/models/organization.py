@@ -14,6 +14,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.identity import AuditEvent, Invitation, StaffMembership
+    from app.models.planning import ClubYear
 
 
 class Theme(Base):
@@ -76,6 +77,7 @@ class Organization(Base):
     staff_memberships: Mapped[list[StaffMembership]] = relationship(back_populates="organization")
     audit_events: Mapped[list[AuditEvent]] = relationship(back_populates="organization")
     invitations: Mapped[list[Invitation]] = relationship(back_populates="organization")
+    club_years: Mapped[list[ClubYear]] = relationship(back_populates="organization")
 
 
 class OrganizationSettings(Base):

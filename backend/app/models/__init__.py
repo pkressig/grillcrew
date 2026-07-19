@@ -12,15 +12,20 @@ from app.models.identity import (
     UserStatus,
 )
 from app.models.organization import Organization, OrganizationSettings, Theme
+from app.models.planning import ClubYear, PlanningStatus, Season, SeasonType
 
 __all__ = [
     "AuditEvent",
+    "ClubYear",
     "Invitation",
     "Organization",
     "OrganizationSettings",
     "PasswordResetToken",
+    "PlanningStatus",
     "PlatformRole",
     "RefreshToken",
+    "Season",
+    "SeasonType",
     "StaffMembership",
     "StaffRole",
     "Theme",
