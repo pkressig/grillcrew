@@ -1,14 +1,13 @@
 # Latest AI Handoff
 
-- Current work: F003 Step 2 - AGY UX blocker fixes for the visible season and club-year admin UI.
-- Goal: Give organization planning staff a practical mobile-first planning panel at `/{org}/admin`.
-- Scope: Frontend planning API client, admin shell integration, planning UI, focused tests, and feature/status documentation. No backend changes or migrations.
-- Previous product step: F003 Step 1 - Club Years and Seasons Backend Foundation is completed and merged.
-- Completed work: Added club-year and season lists, current-season overview, create forms, valid season lifecycle actions, role-aware management visibility, German enum labels, and explicit loading/error/empty/success states. Resolved the AGY blockers by confirming close/archive transitions, showing each season's Vereinsjahr, and giving repeated lifecycle buttons season-specific accessible names.
-- Permission behavior: `ADMIN` and `KOORDINATION` can load and manage planning data. `KIOSK` and `VORSTAND_LESEN` see a no-permission state and make no planning API requests; backend guards remain authoritative.
-- API behavior: All planning calls use the route organization slug and cookie credentials. POST/PATCH calls send JSON and the existing CSRF header when available, then refresh all planning data.
-- Validation results: `npm.cmd run check` passed with 201 backend tests and 24 frontend tests plus the production build; `npm.cmd run ai:prepare` and `git diff --check` also passed.
-- Next exact action: Hand the implementation and validation report back for final release-gate review.
-- Responsible next agents: ChatGPT for final release-gate review after Codex validation report.
-- Commit or uncommitted state: F003 Step 2 is implemented locally and uncommitted.
+- Current work: F000.6 - First production admin bootstrap.
+- Goal: Give the Product Owner a safe way to create the initial `ADMIN` account for the seeded FC Thusis-Cazis tenant after Render/Vercel deployment.
+- Scope: Backend CLI helper, focused tests, README instructions, and AI status/session updates. No HTTP endpoint, no frontend change, no migration, and no product runtime behavior change.
+- Previous product step: F003 Step 2 - Visible season and club-year admin UI is completed and merged.
+- Completed work: Added `python -m app.cli.bootstrap_admin`, which reads temporary `BOOTSTRAP_*` environment variables, validates password policy, finds the organization by slug, creates or activates the admin user, creates or reactivates an active `ADMIN` staff membership, writes safe audit metadata, and refuses disabled users.
+- Operational behavior: Secrets are supplied through the trusted backend shell environment only and are not written to repository files or responses. The command is idempotent for active or invited users.
+- Validation results: `npm.cmd run check` passed with 208 backend tests and 24 frontend tests plus the production build; `npm.cmd run ai:prepare` and `git diff --check` also passed.
+- Next exact action: Commit, push, open PR, merge after green checks, deploy, then run the Render Shell bootstrap command.
+- Responsible next agents: ChatGPT/Codex release gate; Claude review can be skipped because this is a small tested operational CLI helper unless the Product Owner wants an extra review.
+- Commit or uncommitted state: F000.6 is implemented locally and uncommitted.
 - Timestamp: 2026-07-19.
