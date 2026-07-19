@@ -267,6 +267,36 @@ def test_login_rejects_missing_origin(client: TestClient, monkeypatch: pytest.Mo
     assert response.status_code == 403
 
 
+def test_login_allows_allowed_cross_origin_api_host(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    settings = Settings(cors_allowed_origins="https://grillcrew-six.vercel.app")
+
+    class FakeLoginService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def login(self, *, email: str, password: str) -> tuple[IssuedSession, object]:
+            return _session(), _body()
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "get_settings", lambda: settings)
+    monkeypatch.setattr(auth, "LoginService", FakeLoginService)
+    try:
+        response = client.post(
+            "/api/auth/login",
+            headers={
+                "Origin": "https://grillcrew-six.vercel.app",
+                "Host": "grillcrew-api.onrender.com",
+            },
+            json={"email": "USER@example.test", "password": "correct horse"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+
+
 def test_login_rate_limit_blocks_after_configured_budget(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
