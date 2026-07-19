@@ -1,12 +1,14 @@
-﻿# Latest AI Handoff
+# Latest AI Handoff
 
-- Current work: F000.5 - Git Automation Policy.
-- Goal: Allow Codex to execute commit, push, PR creation, CI checking, merge, and branch cleanup after ChatGPT explicitly opens a release gate.
-- Scope: Repository/process documentation plus mechanical Prettier stabilization of pre-existing F002 Step 8 frontend formatting drift required for `npm.cmd run check` to pass.
+- Current work: F003 Step 2 - AGY UX blocker fixes for the visible season and club-year admin UI.
+- Goal: Give organization planning staff a practical mobile-first planning panel at `/{org}/admin`.
+- Scope: Frontend planning API client, admin shell integration, planning UI, focused tests, and feature/status documentation. No backend changes or migrations.
 - Previous product step: F003 Step 1 - Club Years and Seasons Backend Foundation is completed and merged.
-- Completed work: Added `ai/GIT_AUTOMATION.md`, synchronized agent workflow docs, and normalized existing frontend formatting drift.
-- Validation results: `npm.cmd run check` passed, `npm.cmd run ai:prepare` passed, and `git diff --check` passed with CRLF warnings only.
-- Next exact action: Commit, push, open PR, wait for CI, then merge and clean up after green checks.
-- Responsible next agent: Codex or Product Owner for Git release actions after ChatGPT release gate.
-- Commit or uncommitted state: F000.5 is implemented locally and uncommitted.
+- Completed work: Added club-year and season lists, current-season overview, create forms, valid season lifecycle actions, role-aware management visibility, German enum labels, and explicit loading/error/empty/success states. Resolved the AGY blockers by confirming close/archive transitions, showing each season's Vereinsjahr, and giving repeated lifecycle buttons season-specific accessible names.
+- Permission behavior: `ADMIN` and `KOORDINATION` can load and manage planning data. `KIOSK` and `VORSTAND_LESEN` see a no-permission state and make no planning API requests; backend guards remain authoritative.
+- API behavior: All planning calls use the route organization slug and cookie credentials. POST/PATCH calls send JSON and the existing CSRF header when available, then refresh all planning data.
+- Validation results: `npm.cmd run check` passed with 201 backend tests and 24 frontend tests plus the production build; `npm.cmd run ai:prepare` and `git diff --check` also passed.
+- Next exact action: Hand the implementation and validation report back for final release-gate review.
+- Responsible next agents: ChatGPT for final release-gate review after Codex validation report.
+- Commit or uncommitted state: F003 Step 2 is implemented locally and uncommitted.
 - Timestamp: 2026-07-19.

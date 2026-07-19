@@ -2,12 +2,12 @@
 
 ## Manual Status
 
-- Current feature: F000.5 - Git Automation Policy
-- Current step: Process documentation
+- Current feature: F003 - Seasons and Club Years
+- Current step: Step 2 - Visible admin UI
 - Last merged feature: F003 Step 1 - Club Years and Seasons Backend Foundation
-- Current phase: Workflow automation hardening
-- Active blockers: None known
-- Next intended action: Validate and commit F000.5 Git Automation Policy
+- Current phase: Product feature implementation
+- Active blockers: None known; AGY Step 2 UX blockers are resolved locally
+- Next intended action: Final release-gate review for F003 Step 2
 - Production frontend URL: Not configured in repository; see Vercel project settings
 - Production backend URL: Not configured in repository; see Render service settings
 - F002 Step 1 completed: yes
@@ -19,14 +19,15 @@
 - F002 Step 7 completed: yes
 - F002 Step 8 completed: yes
 - F003 Step 1 completed: yes
-- F000.5 completed: in progress
+- F003 Step 2 completed: implemented with AGY UX blocker fixes, awaiting final release gate
+- F000.5 completed: yes
 
 ## Generated Status
 
 <!-- GENERATED:START -->
-- Current branch: feature/f000.5-git-automation-policy
-- Current commit: 5bf6d12ff31384b3d6a270bc98dfce5293c79f29
-- Working tree state: dirty (26 changed path(s))
-- Latest commit subject: Merge pull request #14 from pkressig/feature/f003-seasons-club-years
-- Latest update timestamp: 2026-07-19T12:51:10.637Z
+- Current branch: feature/f003-step2-season-admin-ui
+- Current commit: f48c6ec9254a912a0fd94143600949a021652ef7
+- Working tree state: dirty (10 changed path(s))
+- Latest commit subject: Merge pull request #15 from pkressig/feature/f000.5-git-automation-policy
+- Latest update timestamp: 2026-07-19T13:34:39.566Z
 <!-- GENERATED:END -->
