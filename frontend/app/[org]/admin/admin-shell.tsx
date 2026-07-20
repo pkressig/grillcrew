@@ -48,7 +48,7 @@ export function AdminShell({
       </header>
       <OrganizationSwitcher memberships={auth.memberships} currentSlug={org} />
       {canManagePlanning ? (
-        <PlanningPanel org={org} />
+        <PlanningPanel org={org} timezone={organization.timezone} />
       ) : (
         <section className="rounded-lg border p-5">
           <h2 className="text-lg font-semibold">Planung</h2>

@@ -87,7 +87,7 @@ High.
 
 **Status**
 
-Steps 1 and 2 are implemented. Step 3 adds the tenant-safe Events and Shifts backend foundation and admin APIs; public planning, signup, and frontend management remain deferred.
+Steps 1 through 3 are implemented. Step 4 adds visible, role-aware event and shift administration inside the organization admin planning panel, including creation, status actions, operational cards, and empty/error/success states. Public planning and signup remain deferred.
 
 **Goal**  
 Let each organization manage its own planning periods.
@@ -119,6 +119,7 @@ Medium.
 **UI impact**
 - Season list and forms.
 - Season selector.
+- Visible event and shift admin cards and creation/status controls for `ADMIN` and `KOORDINATION`.
 
 ## F004 Events
 

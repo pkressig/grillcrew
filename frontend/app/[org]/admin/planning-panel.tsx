@@ -3,13 +3,23 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   createClubYear,
+  createEvent,
   createSeason,
+  createShift,
+  loadEvents,
   loadPlanning,
+  loadShifts,
+  updateEventStatus,
   updateSeasonStatus,
+  updateShiftStatus,
   type ClubYear,
+  type EventStatus,
+  type PlanningEvent,
   type PlanningStatus,
   type Season,
   type SeasonType,
+  type Shift,
+  type ShiftStatus,
 } from "@/lib/planning";
 
 const statusLabels: Record<PlanningStatus, string> = {
@@ -34,6 +44,41 @@ const actionLabels: Partial<Record<PlanningStatus, string>> = {
   CLOSED: "Schliessen",
   ARCHIVED: "Archivieren",
 };
+const eventStatusLabels: Record<EventStatus, string> = {
+  DRAFT: "Entwurf",
+  PUBLISHED: "Veröffentlicht",
+  POSTPONED: "Verschoben",
+  CANCELLED: "Abgesagt",
+  COMPLETED: "Erledigt",
+};
+const shiftStatusLabels: Record<ShiftStatus, string> = {
+  OPEN: "Offen",
+  CLOSED: "Geschlossen",
+  CANCELLED: "Abgesagt",
+};
+const eventActions: Record<EventStatus, EventStatus[]> = {
+  DRAFT: ["PUBLISHED", "CANCELLED"],
+  PUBLISHED: ["POSTPONED", "COMPLETED", "CANCELLED"],
+  POSTPONED: ["PUBLISHED", "CANCELLED"],
+  CANCELLED: [],
+  COMPLETED: [],
+};
+const eventActionLabels: Partial<Record<EventStatus, string>> = {
+  PUBLISHED: "Veröffentlichen",
+  POSTPONED: "Verschieben",
+  CANCELLED: "Absagen",
+  COMPLETED: "Erledigen",
+};
+const shiftActions: Record<ShiftStatus, ShiftStatus[]> = {
+  OPEN: ["CLOSED", "CANCELLED"],
+  CLOSED: ["OPEN"],
+  CANCELLED: [],
+};
+const shiftActionLabels: Record<ShiftStatus, string> = {
+  OPEN: "Öffnen",
+  CLOSED: "Schliessen",
+  CANCELLED: "Absagen",
+};
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
 const button =
   "inline-flex min-h-11 items-center justify-center rounded-md border px-4 font-medium disabled:opacity-50";
@@ -44,10 +89,67 @@ function dateRange(start: string, end: string) {
   return `${format(start)} – ${format(end)}`;
 }
 
-export function PlanningPanel({ org }: Readonly<{ org: string }>) {
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" }).format(
+    new Date(`${value}T00:00:00`),
+  );
+}
+
+function formatDateTime(value: string, timezone: string) {
+  return new Intl.DateTimeFormat("de-CH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: timezone,
+  }).format(new Date(value));
+}
+
+function organizationDateTimeToIso(value: string, timezone: string) {
+  const [datePart, timePart] = value.split("T");
+  const dateValues = datePart!.split("-").map(Number);
+  const timeValues = timePart!.split(":").map(Number);
+  const year = dateValues[0]!;
+  const month = dateValues[1]!;
+  const day = dateValues[2]!;
+  const hour = timeValues[0]!;
+  const minute = timeValues[1]!;
+  const target = Date.UTC(year, month - 1, day, hour, minute);
+  let instant = target;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  for (let pass = 0; pass < 2; pass += 1) {
+    const parts = Object.fromEntries(
+      formatter
+        .formatToParts(new Date(instant))
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, Number(part.value)]),
+    );
+    const represented = Date.UTC(
+      parts.year!,
+      parts.month! - 1,
+      parts.day!,
+      parts.hour!,
+      parts.minute!,
+      parts.second!,
+    );
+    instant += target - represented;
+  }
+  return new Date(instant).toISOString();
+}
+
+export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezone: string }>) {
   const [clubYears, setClubYears] = useState<ClubYear[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [currentSeason, setCurrentSeason] = useState<Season | null>(null);
+  const [events, setEvents] = useState<PlanningEvent[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +162,15 @@ export function PlanningPanel({ org }: Readonly<{ org: string }>) {
       setClubYears(data.clubYears);
       setSeasons(data.seasons);
       setCurrentSeason(data.currentSeason);
+      const eventGroups = await Promise.all(
+        data.seasons.map((season) => loadEvents(org, season.id)),
+      );
+      const loadedEvents = eventGroups.flat();
+      setEvents(loadedEvents);
+      const shiftGroups = await Promise.all(
+        loadedEvents.map((planningEvent) => loadShifts(org, planningEvent.id)),
+      );
+      setShifts(shiftGroups.flat());
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -127,6 +238,46 @@ export function PlanningPanel({ org }: Readonly<{ org: string }>) {
     if (created) form.reset();
   }
 
+  async function submitEvent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const created = await run(
+      () =>
+        createEvent(org, String(data.get("season_id")), {
+          title: String(data.get("title")),
+          date: String(data.get("date")),
+          location: String(data.get("location")),
+          event_type: String(data.get("event_type")),
+          public_description: String(data.get("public_description")) || null,
+          internal_note: String(data.get("internal_note")) || null,
+          status: "DRAFT",
+        }),
+      "Anlass wurde erstellt.",
+    );
+    if (created) form.reset();
+  }
+
+  async function submitShift(event: FormEvent<HTMLFormElement>, eventId: string) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const created = await run(
+      () =>
+        createShift(org, eventId, {
+          starts_at: organizationDateTimeToIso(String(data.get("starts_at")), timezone),
+          ends_at: organizationDateTimeToIso(String(data.get("ends_at")), timezone),
+          required_volunteers: Number(data.get("required_volunteers")),
+          public_note: String(data.get("public_note")) || null,
+          internal_note: String(data.get("internal_note")) || null,
+          status: "OPEN",
+          sort_order: 0,
+        }),
+      "Einsatz wurde erstellt.",
+    );
+    if (created) form.reset();
+  }
+
   function updateStatus(season: Season, next: PlanningStatus) {
     const confirmation =
       next === "CLOSED"
@@ -138,6 +289,26 @@ export function PlanningPanel({ org }: Readonly<{ org: string }>) {
     if (confirmation && !window.confirm(confirmation)) return;
 
     void run(() => updateSeasonStatus(org, season.id, next), "Saisonstatus wurde aktualisiert.");
+  }
+
+  function changeEventStatus(planningEvent: PlanningEvent, next: EventStatus) {
+    if (
+      (next === "CANCELLED" || next === "COMPLETED") &&
+      !window.confirm(
+        `Anlass "${planningEvent.title}" wirklich als ${eventStatusLabels[next].toLocaleLowerCase("de-CH")} markieren?`,
+      )
+    )
+      return;
+    void run(
+      () => updateEventStatus(org, planningEvent.id, next),
+      "Anlassstatus wurde aktualisiert.",
+    );
+  }
+
+  function changeShiftStatus(shift: Shift, eventTitle: string, next: ShiftStatus) {
+    if (next === "CANCELLED" && !window.confirm(`Einsatz für "${eventTitle}" wirklich absagen?`))
+      return;
+    void run(() => updateShiftStatus(org, shift.id, next), "Einsatzstatus wurde aktualisiert.");
   }
 
   if (loading)
@@ -304,6 +475,274 @@ export function PlanningPanel({ org }: Readonly<{ org: string }>) {
             Saison erstellen
           </button>
         </form>
+      </section>
+      <section className="grid gap-4" aria-labelledby="events-title">
+        <div>
+          <h3 id="events-title" className="text-lg font-semibold">
+            Anlässe und Einsätze
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Anlässe nach Saison planen und die benötigten Einsätze erfassen.
+          </p>
+        </div>
+        <details className="rounded-lg border p-4">
+          <summary className="min-h-11 cursor-pointer font-medium">Anlass erstellen</summary>
+          <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={submitEvent}>
+            <label htmlFor="create-event-season">
+              Anlass-Saison
+              <select
+                className={control}
+                id="create-event-season"
+                name="season_id"
+                required
+                disabled={seasons.length === 0}
+              >
+                <option value="">Bitte wählen</option>
+                {seasons.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {season.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label htmlFor="create-event-title">
+              Anlasstitel
+              <input className={control} id="create-event-title" name="title" required />
+            </label>
+            <label htmlFor="create-event-date">
+              Anlassdatum
+              <input className={control} id="create-event-date" name="date" type="date" required />
+            </label>
+            <label htmlFor="create-event-location">
+              Ort
+              <input className={control} id="create-event-location" name="location" required />
+            </label>
+            <label htmlFor="create-event-type">
+              Anlassart
+              <input
+                className={control}
+                id="create-event-type"
+                name="event_type"
+                placeholder="z. B. Heimspiel"
+                required
+              />
+            </label>
+            <label htmlFor="create-event-public-description">
+              Öffentliche Beschreibung
+              <textarea
+                className={control}
+                id="create-event-public-description"
+                name="public_description"
+              />
+            </label>
+            <label htmlFor="create-event-internal-note">
+              Interne Notiz
+              <textarea className={control} id="create-event-internal-note" name="internal_note" />
+            </label>
+            <button
+              className={`${button} sm:self-end`}
+              disabled={busy || seasons.length === 0}
+              type="submit"
+            >
+              Anlass erstellen
+            </button>
+          </form>
+        </details>
+        {seasons.length === 0 ? (
+          <p className="text-muted-foreground">
+            Erstellen Sie zuerst eine Saison, bevor Sie Anlässe planen.
+          </p>
+        ) : (
+          seasons.map((season) => {
+            const seasonEvents = events.filter((item) => item.season_id === season.id);
+            return (
+              <section
+                className="grid gap-3"
+                key={season.id}
+                aria-labelledby={`events-${season.id}`}
+              >
+                <h4 id={`events-${season.id}`} className="font-semibold">
+                  {season.name}
+                </h4>
+                {seasonEvents.length === 0 ? (
+                  <p className="text-muted-foreground">
+                    In dieser Saison sind noch keine Anlässe vorhanden.
+                  </p>
+                ) : (
+                  <ul className="grid gap-5">
+                    {seasonEvents.map((planningEvent) => {
+                      const eventShifts = shifts.filter(
+                        (shift) => shift.event_id === planningEvent.id,
+                      );
+                      return (
+                        <li className="grid gap-3" key={planningEvent.id}>
+                          <article className="rounded-lg border p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <h5 className="font-semibold">{planningEvent.title}</h5>
+                                <p className="mt-1 text-sm">
+                                  {formatDate(planningEvent.date)} · {planningEvent.location}
+                                </p>
+                              </div>
+                              <span className="rounded-full border px-3 py-1 text-sm">
+                                {eventStatusLabels[planningEvent.status]}
+                              </span>
+                            </div>
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              {planningEvent.event_type} · {eventShifts.length}{" "}
+                              {eventShifts.length === 1 ? "Einsatz" : "Einsätze"}
+                            </p>
+                            {planningEvent.public_description ? (
+                              <p className="mt-2 text-sm">{planningEvent.public_description}</p>
+                            ) : null}
+                            {eventActions[planningEvent.status].length ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {eventActions[planningEvent.status].map((next) => (
+                                  <button
+                                    className={button}
+                                    disabled={busy}
+                                    key={next}
+                                    aria-label={`Anlass ${planningEvent.title} ${eventActionLabels[next]?.toLocaleLowerCase("de-CH")}`}
+                                    onClick={() => changeEventStatus(planningEvent, next)}
+                                    type="button"
+                                  >
+                                    {eventActionLabels[next]}
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                          </article>
+                          <div className="grid gap-3 pl-3 sm:pl-6">
+                            <h6 className="font-semibold">Einsätze</h6>
+                            {eventShifts.length === 0 ? (
+                              <p className="text-muted-foreground">
+                                Für diesen Anlass sind noch keine Einsätze vorhanden.
+                              </p>
+                            ) : (
+                              <ul className="grid gap-3">
+                                {eventShifts.map((shift) => (
+                                  <li className="rounded-lg border p-4" key={shift.id}>
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                      <div>
+                                        <p className="font-medium">
+                                          {formatDateTime(shift.starts_at, timezone)} –{" "}
+                                          {formatDateTime(shift.ends_at, timezone)}
+                                        </p>
+                                        <p className="mt-1 text-sm">
+                                          {shift.required_volunteers} benötigte Helfende
+                                        </p>
+                                      </div>
+                                      <span className="rounded-full border px-3 py-1 text-sm">
+                                        {shiftStatusLabels[shift.status]}
+                                      </span>
+                                    </div>
+                                    {shift.public_note ? (
+                                      <p className="mt-2 text-sm">
+                                        Öffentlich: {shift.public_note}
+                                      </p>
+                                    ) : null}
+                                    {shift.internal_note ? (
+                                      <p className="mt-1 text-sm text-muted-foreground">
+                                        Intern: {shift.internal_note}
+                                      </p>
+                                    ) : null}
+                                    {shiftActions[shift.status].length ? (
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {shiftActions[shift.status].map((next) => (
+                                          <button
+                                            className={button}
+                                            disabled={busy}
+                                            key={next}
+                                            aria-label={`Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title} ${shiftActionLabels[next].toLocaleLowerCase("de-CH")}`}
+                                            onClick={() =>
+                                              changeShiftStatus(shift, planningEvent.title, next)
+                                            }
+                                            type="button"
+                                          >
+                                            {shiftActionLabels[next]}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            <details className="rounded-lg border p-4">
+                              <summary className="min-h-11 cursor-pointer font-medium">
+                                Einsatz erstellen
+                              </summary>
+                              <form
+                                className="mt-3 grid gap-3 sm:grid-cols-2"
+                                onSubmit={(formEvent) => submitShift(formEvent, planningEvent.id)}
+                              >
+                                <label htmlFor={`shift-${planningEvent.id}-starts-at`}>
+                                  Beginn
+                                  <input
+                                    className={control}
+                                    id={`shift-${planningEvent.id}-starts-at`}
+                                    name="starts_at"
+                                    type="datetime-local"
+                                    required
+                                  />
+                                </label>
+                                <label htmlFor={`shift-${planningEvent.id}-ends-at`}>
+                                  Ende
+                                  <input
+                                    className={control}
+                                    id={`shift-${planningEvent.id}-ends-at`}
+                                    name="ends_at"
+                                    type="datetime-local"
+                                    required
+                                  />
+                                </label>
+                                <label htmlFor={`shift-${planningEvent.id}-required-volunteers`}>
+                                  Benötigte Helfende
+                                  <input
+                                    className={control}
+                                    id={`shift-${planningEvent.id}-required-volunteers`}
+                                    min="1"
+                                    name="required_volunteers"
+                                    type="number"
+                                    required
+                                  />
+                                </label>
+                                <label htmlFor={`shift-${planningEvent.id}-public-note`}>
+                                  Öffentliche Notiz
+                                  <textarea
+                                    className={control}
+                                    id={`shift-${planningEvent.id}-public-note`}
+                                    name="public_note"
+                                  />
+                                </label>
+                                <label htmlFor={`shift-${planningEvent.id}-internal-note`}>
+                                  Interne Notiz
+                                  <textarea
+                                    className={control}
+                                    id={`shift-${planningEvent.id}-internal-note`}
+                                    name="internal_note"
+                                  />
+                                </label>
+                                <button
+                                  className={`${button} sm:self-end`}
+                                  disabled={busy}
+                                  aria-label={`Einsatz für ${planningEvent.title} erstellen`}
+                                  type="submit"
+                                >
+                                  Einsatz erstellen
+                                </button>
+                              </form>
+                            </details>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            );
+          })
+        )}
       </section>
     </section>
   );
