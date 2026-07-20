@@ -12,6 +12,7 @@ from app.core.security.csrf import (
     CSRF_COOKIE_NAME,
     CSRF_HEADER_NAME,
     derive_csrf_secret,
+    generate_csrf_token,
     verify_csrf_token,
 )
 from app.core.security.origins import (
@@ -26,6 +27,7 @@ from app.schemas.auth import (
     AcceptInvitationRequest,
     AcceptInvitationResponse,
     AuthSessionResponse,
+    CsrfTokenResponse,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
     LoginRequest,
@@ -241,6 +243,28 @@ def refresh(
 @router.get("/me", response_model=AuthSessionResponse)
 def me(current_user: CurrentUser = Depends(get_current_user)) -> AuthSessionResponse:  # noqa: B008
     return build_session_response(current_user.user)
+
+
+@router.get("/csrf", response_model=CsrfTokenResponse)
+def csrf_token(
+    request: Request,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> CsrfTokenResponse:
+    settings = get_settings()
+    _ensure_origin_and_host(request, db, settings)
+    raw_refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
+    try:
+        validated = RefreshService(db, settings).validate(refresh_token=raw_refresh_token)
+    except InvalidRefreshTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid refresh token",
+        ) from None
+    token = generate_csrf_token(
+        binding_key=str(validated.token.family_id),
+        secret=derive_csrf_secret(settings.jwt_secret_key),
+    )
+    return CsrfTokenResponse(csrf_token=token)
 
 
 def set_auth_cookies(response: Response, session: IssuedSession, settings: Settings) -> None:

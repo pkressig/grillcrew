@@ -50,6 +50,21 @@ live gehen:
 
 Keine Secrets committen. Render- und Vercel-Werte werden in den Provider-Dashboards gepflegt.
 
+### Cross-Origin-CSRF
+
+Bei der direkten Vercel-zu-Render-Architektur kann JavaScript auf der Vercel-Origin das auf der
+Render-Domain gesetzte `gc_csrf`-Cookie nicht lesen. Nach erfolgreicher Session-Pruefung ruft das
+Frontend deshalb `GET /api/auth/csrf` mit Cookies ab und haelt den zur Refresh-Token-Familie
+gehoerenden CSRF-Token nur im Arbeitsspeicher. Der Endpunkt akzeptiert ausschliesslich erlaubte
+Origins und eine gueltige Refresh-Session. Schreibende Requests senden den Token weiterhin als
+`X-CSRF-Token`; Access- und Refresh-Token bleiben ausschliesslich in `HttpOnly`-Cookies.
+
+Dies loest nur das Lesbarkeits-Problem des `gc_csrf`-Cookies. Browser, die `SameSite=None`-Cookies
+im Cross-Site-Kontext grundsaetzlich blockieren (z. B. strikte Tracking-Prevention-Einstellungen),
+senden dann auch die `HttpOnly`-Session-Cookies nicht mehr mit, wodurch die Sitzung insgesamt
+fehlschlaegt, nicht nur die CSRF-Ausstellung. Der dafuer vorgesehene Same-Site-BFF-Proxy ist gemaess
+D-039 in `docs/BACKLOG.md` zurueckgestellt, nicht in Version 1 umgesetzt.
+
 ## Healthchecks
 
 - Backend: `GET /api/health`

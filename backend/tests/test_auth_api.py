@@ -10,7 +10,12 @@ from fastapi.testclient import TestClient
 from app.api import auth
 from app.api.dependencies import CurrentUser, get_current_user
 from app.core.config import Settings, get_settings
-from app.core.security.csrf import CSRF_HEADER_NAME, derive_csrf_secret, generate_csrf_token
+from app.core.security.csrf import (
+    CSRF_HEADER_NAME,
+    derive_csrf_secret,
+    generate_csrf_token,
+    verify_csrf_token,
+)
 from app.core.security.password import PasswordPolicyError
 from app.core.security.rate_limit import AuthRateLimits, InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
@@ -90,6 +95,82 @@ def test_login_rejects_invalid_credentials(
 
     assert response.status_code == 401
     assert response.json()["detail"] == "invalid credentials"
+
+
+def test_csrf_token_requires_valid_refresh_session_and_returns_bound_proof(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    family_id = uuid4()
+
+    class FakeRefreshService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def validate(self, *, refresh_token: str | None) -> object:
+            assert refresh_token == "valid-refresh"
+            return SimpleNamespace(token=SimpleNamespace(family_id=family_id))
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "RefreshService", FakeRefreshService)
+    try:
+        response = client.get(
+            "/api/auth/csrf",
+            headers=_origin_headers(),
+            cookies={REFRESH_TOKEN_COOKIE_NAME: "valid-refresh"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert set(response.json()) == {"csrf_token"}
+    assert "access" not in response.text
+    assert "refresh" not in response.text
+    assert verify_csrf_token(
+        response.json()["csrf_token"],
+        binding_key=str(family_id),
+        secret=derive_csrf_secret(get_settings().jwt_secret_key),
+    )
+
+
+def test_csrf_token_rejects_missing_or_invalid_refresh_session(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeRefreshService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def validate(self, *, refresh_token: str | None) -> object:
+            raise InvalidRefreshTokenError
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "RefreshService", FakeRefreshService)
+    try:
+        response = client.get("/api/auth/csrf", headers=_origin_headers())
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("headers", [{}, {"Origin": "https://evil.example"}])
+def test_csrf_token_rejects_missing_or_unapproved_origin(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, headers: dict[str, str]
+) -> None:
+    class FakeRefreshService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def validate(self, *, refresh_token: str | None) -> object:
+            raise AssertionError("refresh validation must follow origin validation")
+
+    app.dependency_overrides[get_db] = _fake_db
+    monkeypatch.setattr(auth, "RefreshService", FakeRefreshService)
+    try:
+        response = client.get("/api/auth/csrf", headers=headers)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
 
 
 def test_logout_without_active_session_skips_csrf_and_clears_cookies(

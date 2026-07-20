@@ -302,8 +302,12 @@ possession of the emailed token, not by a cookie session).
    not hand over the other).
 2. The token is set as a **readable** (non-`HttpOnly`) cookie (`gc_csrf`), alongside the `HttpOnly`
    access/refresh cookies, with the same `Secure`/`SameSite=None` attributes.
-3. The frontend reads the cookie value in JS and echoes it in the `X-CSRF-Token` request header on
-   every state-changing call.
+3. Because the frontend and API use different origins, the authenticated frontend obtains the same
+   family-bound proof through `GET /api/auth/csrf` after session hydration. That safe endpoint requires
+   an allowlisted `Origin` and a valid refresh cookie, returns only `{csrf_token}`, and does not rotate
+   or expose access/refresh tokens. The frontend keeps the returned token in memory and echoes it in
+   the `X-CSRF-Token` request header on every state-changing call; the readable cookie remains a
+   same-origin fallback.
 4. The server recomputes the HMAC over the presented nonce and the caller's *current*
    `refresh_token_family_id`, and compares it to the presented signature with a constant-time
    comparison (`hmac.compare_digest`). A missing header, a mismatched signature, or a token bound to a
@@ -435,6 +439,7 @@ public-endpoint origin/Host handling with `/api/auth/reset-password`.
 /api/auth/logout                         POST   authenticated
 /api/auth/refresh                        POST   refresh-cookie only
 /api/auth/me                             GET    authenticated
+/api/auth/csrf                           GET    refresh-cookie only, allowlisted Origin
 /api/auth/forgot-password                POST   public
 /api/auth/reset-password                 POST   public (token-gated)
 /api/auth/accept-invitation              POST   public (token-gated)
@@ -596,9 +601,9 @@ independently testable and mergeable to that branch (or split into sub-PRs again
 8. **Frontend auth shell** — `AuthProvider`, `/login`, `/invite/[token]`, `/reset-password/[token]`,
    protected `app/[org]/admin/**` shell, organization switcher, forbidden-state handling, CSRF header
    plumbing; Vitest coverage. **Completed in Step 8:** the frontend uses the existing cookie session
-   without storing tokens in JavaScript-accessible storage, adds clear loading/unauthenticated/
+   without storing access or refresh tokens in JavaScript-accessible storage, adds clear loading/unauthenticated/
    forbidden states and navigation-only organization switching, and echoes the readable `gc_csrf`
-   cookie on logout. `GET /api/invitations/{token}` now returns only organization name, offered role,
+   cookie or the in-memory token from `GET /api/auth/csrf` on logout. `GET /api/invitations/{token}` now returns only organization name, offered role,
    and whether a password is required for safe invitation rendering.
 9. **Documentation and rollout** — finish any remaining detail in `docs/ARCHITECTURE.md`,
    `docs/DATA_MODEL.md`, `docs/PERMISSIONS.md`, `docs/DEPLOYMENT.md` once Steps 2–7's concrete shape

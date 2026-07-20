@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { fetchAuthSession, type AuthMembership, type AuthUser } from "@/lib/auth";
+import { clearCsrfToken } from "@/lib/api";
 
 type AuthContextValue = {
   user: AuthUser | null;
@@ -28,6 +29,7 @@ export function AuthProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const clear = useCallback(() => {
+    clearCsrfToken();
     setUser(null);
     setMemberships([]);
     setError(null);
