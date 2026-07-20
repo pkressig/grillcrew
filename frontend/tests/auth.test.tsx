@@ -4,9 +4,11 @@ import { AuthProvider, useAuth } from "@/components/auth-provider";
 import { OrganizationSwitcher } from "@/components/organization-switcher";
 import { LoginForm } from "@/app/login/login-form";
 import { AdminShell } from "@/app/[org]/admin/admin-shell";
+import { LogoutButton } from "@/components/logout-button";
 import { ResetPasswordForm } from "@/app/reset-password/[token]/reset-password-form";
 import { InvitationForm } from "@/app/invite/[token]/invitation-form";
 import type { AuthSession } from "@/lib/auth";
+import { clearCsrfToken } from "@/lib/api";
 import { platformFallbackOrganization } from "@/lib/organization";
 
 const replace = vi.fn();
@@ -33,6 +35,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
+  clearCsrfToken();
 });
 
 function AuthProbe() {
@@ -60,13 +63,21 @@ describe("AuthProvider", () => {
   });
 
   it("exposes an authenticated user and memberships", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(session)));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(session))
+      .mockResolvedValueOnce(Response.json({ csrf_token: "hydrated-token" }));
+    vi.stubGlobal("fetch", fetchMock);
     render(
       <AuthProvider>
         <AuthProbe />
       </AuthProvider>,
     );
     expect(await screen.findByText("Example Org")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/api/auth/csrf"),
+      expect.objectContaining({ credentials: "include" }),
+    );
   });
 });
 
@@ -76,7 +87,8 @@ describe("LoginForm", () => {
       .fn()
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
       .mockResolvedValueOnce(Response.json(session))
-      .mockResolvedValueOnce(Response.json(session));
+      .mockResolvedValueOnce(Response.json(session))
+      .mockResolvedValueOnce(Response.json({ csrf_token: "login-token" }));
     vi.stubGlobal("fetch", fetchMock);
     render(
       <AuthProvider>
@@ -117,6 +129,40 @@ describe("LoginForm", () => {
   });
 });
 
+describe("LogoutButton", () => {
+  it("sends the hydrated CSRF token when the API cookie is not readable", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/me")) return Response.json(session);
+      if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "logout-token" });
+      if (url.endsWith("/api/auth/logout")) return Response.json({ ok: true });
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <AuthProvider>
+        <LogoutButton />
+      </AuthProvider>,
+    );
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/auth/csrf"),
+        expect.objectContaining({ credentials: "include" }),
+      ),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Abmelden" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining("/api/auth/logout"),
+        expect.objectContaining({
+          method: "POST",
+          headers: { "X-CSRF-Token": "logout-token" },
+        }),
+      ),
+    );
+  });
+});
+
 describe("AdminShell", () => {
   it("renders an unauthenticated state", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
@@ -133,7 +179,10 @@ describe("AdminShell", () => {
   it("renders a forbidden state without route membership", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(Response.json({ ...session, memberships: [] })),
+      vi
+        .fn()
+        .mockResolvedValueOnce(Response.json({ ...session, memberships: [] }))
+        .mockResolvedValueOnce(Response.json({ csrf_token: "hydrated-token" })),
     );
     render(
       <AuthProvider>

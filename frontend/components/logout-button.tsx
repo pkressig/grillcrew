@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
-import { apiBaseUrl, csrfHeaders } from "@/lib/api";
+import { apiBaseUrl, csrfHeaders, ensureCsrfToken } from "@/lib/api";
 
 export function LogoutButton() {
   const auth = useAuth();
@@ -12,6 +12,7 @@ export function LogoutButton() {
   async function logout() {
     setPending(true);
     try {
+      await ensureCsrfToken();
       await fetch(apiBaseUrl + "/api/auth/logout", {
         method: "POST",
         credentials: "include",

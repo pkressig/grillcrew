@@ -31,6 +31,10 @@ class AuthSessionResponse(BaseModel):  # type: ignore[explicit-any]
     memberships: list[AuthMembershipResponse]
 
 
+class CsrfTokenResponse(BaseModel):  # type: ignore[explicit-any]
+    csrf_token: str
+
+
 class LogoutResponse(BaseModel):  # type: ignore[explicit-any]
     ok: bool = True
 

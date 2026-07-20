@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminShell } from "@/app/[org]/admin/admin-shell";
 import { AuthProvider } from "@/components/auth-provider";
 import type { AuthSession } from "@/lib/auth";
+import { clearCsrfToken } from "@/lib/api";
 import { platformFallbackOrganization } from "@/lib/organization";
 
 const year = {
@@ -90,6 +91,7 @@ function planningFetch(
     const url = String(input);
     const method = init?.method ?? "GET";
     if (url.endsWith("/api/auth/me")) return Response.json(session(role));
+    if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "memory-token" });
     if (url.endsWith("/club-years") && method === "GET") return Response.json(empty ? [] : [year]);
     if (url.endsWith("/seasons") && method === "GET")
       return Response.json(empty ? [] : returnedSeasons);
@@ -134,6 +136,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   document.cookie = "gc_csrf=; Max-Age=0";
+  clearCsrfToken();
 });
 
 describe("planning admin", () => {
@@ -153,7 +156,7 @@ describe("planning admin", () => {
       expect(
         screen.queryByRole("button", { name: "Vereinsjahr erstellen" }),
       ).not.toBeInTheDocument();
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(fetchMock.mock.calls.some(([url]) => /\/events|\/shifts/.test(String(url)))).toBe(
         false,
       );
@@ -225,6 +228,26 @@ describe("planning admin", () => {
             end_date: "2028-06-30",
             status: "DRAFT",
           }),
+        }),
+      ),
+    );
+  });
+
+  it("uses the hydrated CSRF token when the API cookie is not readable", async () => {
+    const fetchMock = renderAdmin("ADMIN");
+    await screen.findAllByText("2026/27");
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "2027/28" } });
+    const dates = screen.getAllByLabelText(/datum/);
+    fireEvent.change(dates[0]!, { target: { value: "2027-07-01" } });
+    fireEvent.change(dates[1]!, { target: { value: "2028-06-30" } });
+    fireEvent.click(screen.getByRole("button", { name: "Vereinsjahr erstellen" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/admin\/example\/club-years$/),
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({ "X-CSRF-Token": "memory-token" }),
         }),
       ),
     );
