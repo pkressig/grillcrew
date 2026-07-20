@@ -20,6 +20,33 @@ export type Season = {
 };
 export type ClubYearInput = Omit<ClubYear, "id">;
 export type SeasonInput = Omit<Season, "id" | "club_year_id">;
+export type EventStatus = "DRAFT" | "PUBLISHED" | "POSTPONED" | "CANCELLED" | "COMPLETED";
+export type ShiftStatus = "OPEN" | "CLOSED" | "CANCELLED";
+export type PlanningEvent = {
+  id: string;
+  season_id: string;
+  title: string;
+  date: string;
+  location: string;
+  event_type: string;
+  public_description: string | null;
+  internal_note: string | null;
+  status: EventStatus;
+  published_at: string | null;
+};
+export type Shift = {
+  id: string;
+  event_id: string;
+  starts_at: string;
+  ends_at: string;
+  required_volunteers: number;
+  public_note: string | null;
+  internal_note: string | null;
+  status: ShiftStatus;
+  sort_order: number;
+};
+export type EventInput = Omit<PlanningEvent, "id" | "season_id" | "published_at">;
+export type ShiftInput = Omit<Shift, "id" | "event_id">;
 
 async function request<T>(
   path: string,
@@ -67,4 +94,41 @@ export const updateSeasonStatus = (org: string, seasonId: string, status: Planni
   request<Season>(
     `/api/admin/${encodeURIComponent(org)}/seasons/${encodeURIComponent(seasonId)}`,
     writeInit("PATCH", { status }),
+  );
+
+export const loadEvents = (org: string, seasonId: string) =>
+  request<PlanningEvent[]>(
+    `/api/admin/${encodeURIComponent(org)}/seasons/${encodeURIComponent(seasonId)}/events`,
+    undefined,
+    "Die Anlässe konnten nicht geladen werden.",
+  );
+export const createEvent = (org: string, seasonId: string, payload: EventInput) =>
+  request<PlanningEvent>(
+    `/api/admin/${encodeURIComponent(org)}/seasons/${encodeURIComponent(seasonId)}/events`,
+    writeInit("POST", payload),
+    "Der Anlass konnte nicht erstellt werden.",
+  );
+export const updateEventStatus = (org: string, eventId: string, status: EventStatus) =>
+  request<PlanningEvent>(
+    `/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}`,
+    writeInit("PATCH", { status }),
+    "Der Anlassstatus konnte nicht gespeichert werden.",
+  );
+export const loadShifts = (org: string, eventId: string) =>
+  request<Shift[]>(
+    `/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}/shifts`,
+    undefined,
+    "Die Einsätze konnten nicht geladen werden.",
+  );
+export const createShift = (org: string, eventId: string, payload: ShiftInput) =>
+  request<Shift>(
+    `/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}/shifts`,
+    writeInit("POST", payload),
+    "Der Einsatz konnte nicht erstellt werden.",
+  );
+export const updateShiftStatus = (org: string, shiftId: string, status: ShiftStatus) =>
+  request<Shift>(
+    `/api/admin/${encodeURIComponent(org)}/shifts/${encodeURIComponent(shiftId)}`,
+    writeInit("PATCH", { status }),
+    "Der Einsatzstatus konnte nicht gespeichert werden.",
   );

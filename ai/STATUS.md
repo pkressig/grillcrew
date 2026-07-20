@@ -3,11 +3,11 @@
 ## Manual Status
 
 - Current feature: F003 - Seasons, Events, and Shifts
-- Current step: Step 3 Events and Shifts backend foundation
+- Current step: Step 4 Event and Shift admin UI
 - Last merged feature: F003 Step 2 - Visible season and club-year admin UI
-- Current phase: Backend implementation
-- Active blockers: None; independent review remains required
-- Next intended action: Claude architecture/security/migration review, then release-gate decision
+- Current phase: UX/accessibility polish complete
+- Active blockers: None; final release-gate decision remains required
+- Next intended action: Request the final F003 Step 4 release-gate decision
 - Production frontend URL: Not configured in repository; see Vercel project settings
 - Production backend URL: Not configured in repository; see Render service settings
 - F002 Step 1 completed: yes
@@ -21,15 +21,16 @@
 - F003 Step 1 completed: yes
 - F003 Step 2 completed: yes
 - F003 Step 3 completed: implemented locally, awaiting review/release gate
+- F003 Step 4 completed: implemented locally, awaiting review/release gate
 - F000.5 completed: yes
 - F000.6 completed: yes
 
 ## Generated Status
 
 <!-- GENERATED:START -->
-- Current branch: feature/f003-step3-events-shifts-backend
-- Current commit: d2935e3e3f7922e773f96f363c7ed58edbcddcd1
-- Working tree state: dirty (13 changed path(s))
-- Latest commit subject: fix(auth): allow approved frontend origins for Render API
-- Latest update timestamp: 2026-07-19T21:46:34.947Z
+- Current branch: feature/f003-step4-event-shift-admin-ui
+- Current commit: 4e25bd04ba3377f1d1f3d167fe186591e034a633
+- Working tree state: dirty (8 changed path(s))
+- Latest commit subject: feat(planning): add tenant-scoped Event and Shift backend foundation
+- Latest update timestamp: 2026-07-20T13:28:53.981Z
 <!-- GENERATED:END -->

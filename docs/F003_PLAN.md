@@ -55,6 +55,18 @@ This step adds tenant-scoped Event and Shift persistence and authenticated admin
 
 ### Deferred
 
-Public planning and signup, volunteer/family/capacity behavior, imports, notifications, and event/shift frontend UI remain deferred to their planned features or later F003 steps.
+Public planning and signup, volunteer/family/capacity behavior, imports, and notifications remain deferred to their planned features or later F003 steps.
 
 All requests are scoped by the route organization slug. Writes include cookie credentials and the existing double-submit CSRF header when available.
+
+## Step 4 — Event and shift admin UI
+
+Status: implemented locally, awaiting independent code/security and UX review.
+
+The existing organization admin planning panel now loads events for each listed season and shifts for each listed event. `ADMIN` and `KOORDINATION` can create events and shifts, review operational details in mobile-first cards, and apply supported status changes with confirmation for cancellation and completion. Human-readable German labels, loading/error/success feedback, and explicit empty states are included.
+
+The frontend API client uses the Step 3 organization-scoped endpoints, cookie credentials, JSON content type, and the existing CSRF helper for writes. `KIOSK` and `VORSTAND_LESEN` do not mount the planning panel and therefore make no event or shift requests.
+
+### Deferred
+
+Public event pages and signup, volunteer/family/work/payment records, capacity calculations from signups, imports, notifications, calendar presentation, and full inline editing of event or shift fields remain deferred. Step 4 supports creation and operational status editing only.
