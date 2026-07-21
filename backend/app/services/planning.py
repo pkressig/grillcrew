@@ -13,6 +13,7 @@ from app.models.planning import (
     PlanningStatus,
     Season,
     Shift,
+    Signup,
 )
 from app.schemas.planning import (
     ClubYearCreate,
@@ -212,6 +213,7 @@ class PlanningService:
         return list(
             self.db.scalars(
                 select(Shift)
+                .options(selectinload(Shift.signups).selectinload(Signup.volunteer))
                 .where(Shift.event_id == event.id)
                 .order_by(Shift.sort_order, Shift.starts_at, Shift.id)
             )

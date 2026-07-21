@@ -1,6 +1,6 @@
 """Focused F003 planning model, validation, lifecycle, and tenant tests."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
 from uuid import uuid4
@@ -25,6 +25,7 @@ from app.models.planning import (
     SeasonType,
     Shift,
     ShiftStatus,
+    SignupStatus,
 )
 from app.schemas.planning import (
     ClubYearCreate,
@@ -233,6 +234,64 @@ def test_wrong_organization_slug_is_forbidden(client: TestClient) -> None:
 
 def test_admin_and_coordination_role_dependency_is_configured() -> None:
     assert callable(planning.manage)
+
+
+def test_admin_shift_response_includes_only_active_contact_details_in_stable_order() -> None:
+    now = datetime.now(UTC)
+    volunteer = SimpleNamespace(
+        first_name="Mia",
+        last_name="Muster",
+        phone_display="+41 79 123 45 67",
+        email_display="mia@example.test",
+    )
+    first_id = uuid4()
+    second_id = uuid4()
+    active_signups = [
+        SimpleNamespace(
+            id=signup_id,
+            status=SignupStatus.ACTIVE,
+            public_name_snapshot=public_name,
+            volunteer=volunteer,
+            created_at=created_at,
+        )
+        for signup_id, public_name, created_at in [
+            (second_id, "Zweite Person", now),
+            (first_id, "Mia Muster", now - timedelta(seconds=1)),
+        ]
+    ]
+    cancelled = SimpleNamespace(
+        id=uuid4(),
+        status=SignupStatus.CANCELLED_BY_ADMIN,
+        public_name_snapshot="Nicht anzeigen",
+        volunteer=volunteer,
+        created_at=now,
+    )
+    shift = cast(
+        Shift,
+        SimpleNamespace(
+            id=uuid4(),
+            event_id=uuid4(),
+            starts_at=now,
+            ends_at=now + timedelta(hours=1),
+            required_volunteers=3,
+            public_note=None,
+            internal_note=None,
+            status=ShiftStatus.OPEN,
+            sort_order=0,
+            created_at=now,
+            updated_at=now,
+            signups=[active_signups[0], cancelled, active_signups[1]],
+        ),
+    )
+
+    response = planning._admin_shift_response(shift)
+
+    assert response.occupied_volunteers == 2
+    assert response.open_places == 1
+    assert [signup.public_name for signup in response.signups] == ["Mia Muster", "Zweite Person"]
+    assert response.signups[0].phone == "+41 79 123 45 67"
+    assert response.signups[0].email == "mia@example.test"
+    assert "internal_note" not in response.signups[0].model_dump()
 
 
 @pytest.mark.parametrize(
