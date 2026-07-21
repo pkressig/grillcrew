@@ -173,3 +173,27 @@ class ShiftResponse(BaseModel):  # type: ignore[explicit-any]
     sort_order: int
     created_at: datetime
     updated_at: datetime
+
+
+class PublicShiftResponse(BaseModel):  # type: ignore[explicit-any]
+    id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+    required_volunteers: int
+    occupied_volunteers: int = 0
+    public_note: str | None
+    status: ShiftStatus
+
+
+class PublicEventResponse(BaseModel):  # type: ignore[explicit-any]
+    id: uuid.UUID
+    title: str
+    date: date_type
+    location: str
+    event_type: str
+    public_description: str | None
+    shifts: list[PublicShiftResponse]
+
+
+class PublicPlanResponse(BaseModel):  # type: ignore[explicit-any]
+    events: list[PublicEventResponse]

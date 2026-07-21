@@ -123,6 +123,10 @@ Medium.
 
 ## F004 Events
 
+**Status**
+
+Step 1 is implemented locally: the organization public route presents upcoming published events and non-cancelled shifts through a public-safe, unauthenticated API. Signup remains deferred and the future action is disabled.
+
 **Goal**  
 Allow each organization to manage public events or operating days.
 

@@ -4,9 +4,16 @@ import uuid
 from datetime import date, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from app.models.planning import ClubYear, Event, PlanningStatus, Season, Shift
+from app.models.planning import (
+    ClubYear,
+    Event,
+    EventStatus,
+    PlanningStatus,
+    Season,
+    Shift,
+)
 from app.schemas.planning import (
     ClubYearCreate,
     ClubYearUpdate,
@@ -158,6 +165,24 @@ class PlanningService:
                 select(Event).where(Event.season_id == season.id).order_by(Event.date, Event.id)
             )
         )
+
+    def list_public_events(self, from_date: date) -> list[Event]:
+        """Return upcoming published events with public-visible shifts for this tenant."""
+        events = list(
+            self.db.scalars(
+                select(Event)
+                .join(Season)
+                .join(ClubYear)
+                .options(selectinload(Event.shifts))
+                .where(
+                    ClubYear.organization_id == self.organization_id,
+                    Event.status == EventStatus.PUBLISHED,
+                    Event.date >= from_date,
+                )
+                .order_by(Event.date, Event.id)
+            )
+        )
+        return events
 
     def create_event(self, season_id: uuid.UUID, payload: EventCreate) -> Event:
         season = self._get_season(season_id)
