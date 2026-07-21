@@ -59,11 +59,24 @@ gehoerenden CSRF-Token nur im Arbeitsspeicher. Der Endpunkt akzeptiert ausschlie
 Origins und eine gueltige Refresh-Session. Schreibende Requests senden den Token weiterhin als
 `X-CSRF-Token`; Access- und Refresh-Token bleiben ausschliesslich in `HttpOnly`-Cookies.
 
+Das Refresh-Cookie verwendet `Path=/api`, damit die serverseitige CSRF-Pruefung bei
+`/api/admin/...` die aktuelle Refresh-Token-Familie validieren kann. Der bewusst in Kauf genommene
+Trade-off ist, dass das `HttpOnly`-Cookie an alle Backend-API-Pfade statt nur `/api/auth` angehaengt
+wird. Es bleibt fuer JavaScript unlesbar, wird nicht an Nicht-API-Pfade gesendet, und ein gueltiger,
+familiengebundener `X-CSRF-Token` sowie die bestehenden Origin-, Tenant- und Rollenpruefungen bleiben
+zwingend erforderlich.
+
 Dies loest nur das Lesbarkeits-Problem des `gc_csrf`-Cookies. Browser, die `SameSite=None`-Cookies
 im Cross-Site-Kontext grundsaetzlich blockieren (z. B. strikte Tracking-Prevention-Einstellungen),
 senden dann auch die `HttpOnly`-Session-Cookies nicht mehr mit, wodurch die Sitzung insgesamt
 fehlschlaegt, nicht nur die CSRF-Ausstellung. Der dafuer vorgesehene Same-Site-BFF-Proxy ist gemaess
 D-039 in `docs/BACKLOG.md` zurueckgestellt, nicht in Version 1 umgesetzt.
+
+Sessions, die vor dieser Pfad-Migration ausgestellt wurden, halten im Browser noch ein
+Refresh-Cookie mit dem alten `Path=/api/auth`; da der Pfad Teil der Cookie-Identitaet ist, loescht
+das neue `Path=/api`-Cookie dieses alte Cookie nicht automatisch. Login, Refresh und Logout loeschen
+deshalb zusaetzlich explizit ein eventuell vorhandenes Cookie am alten Pfad, damit es nicht bis zu
+seinem urspruenglichen 30-Tage-Ablauf inert im Browser verbleibt.
 
 ## Healthchecks
 

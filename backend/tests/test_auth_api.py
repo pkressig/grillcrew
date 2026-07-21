@@ -68,8 +68,12 @@ def test_login_sets_http_only_tokens_and_readable_csrf_cookie(
     assert "HttpOnly" in _cookie_header(set_cookie, ACCESS_TOKEN_COOKIE_NAME)
     assert "Path=/" in _cookie_header(set_cookie, ACCESS_TOKEN_COOKIE_NAME)
     assert "HttpOnly" in _cookie_header(set_cookie, REFRESH_TOKEN_COOKIE_NAME)
-    assert "Path=/api/auth" in _cookie_header(set_cookie, REFRESH_TOKEN_COOKIE_NAME)
+    assert "Path=/api;" in _cookie_header(set_cookie, REFRESH_TOKEN_COOKIE_NAME)
     assert "HttpOnly" not in _cookie_header(set_cookie, "gc_csrf")
+    refresh_cookie_headers = _cookie_headers(set_cookie, REFRESH_TOKEN_COOKIE_NAME)
+    assert len(refresh_cookie_headers) == 2
+    legacy_header = next(h for h in refresh_cookie_headers if "Path=/api/auth;" in h)
+    assert "Max-Age=0" in legacy_header
 
 
 def test_login_rejects_invalid_credentials(
@@ -212,6 +216,11 @@ def test_logout_without_active_session_skips_csrf_and_clears_cookies(
     assert "Max-Age=0" in _cookie_header(set_cookie, ACCESS_TOKEN_COOKIE_NAME)
     assert "Max-Age=0" in _cookie_header(set_cookie, REFRESH_TOKEN_COOKIE_NAME)
     assert "Max-Age=0" in _cookie_header(set_cookie, "gc_csrf")
+    refresh_cookie_headers = _cookie_headers(set_cookie, REFRESH_TOKEN_COOKIE_NAME)
+    assert len(refresh_cookie_headers) == 2
+    assert all("Max-Age=0" in header for header in refresh_cookie_headers)
+    assert any("Path=/api/auth;" in header for header in refresh_cookie_headers)
+    assert any("Path=/api;" in header for header in refresh_cookie_headers)
 
 
 def test_logout_with_active_session_rejects_missing_csrf(
@@ -799,6 +808,14 @@ def _cookie_header(headers: list[str], name: str) -> str:
         if header.startswith(prefix):
             return header
     raise AssertionError(f"missing cookie {name}")
+
+
+def _cookie_headers(headers: list[str], name: str) -> list[str]:
+    prefix = f"{name}="
+    matches = [header for header in headers if header.startswith(prefix)]
+    if not matches:
+        raise AssertionError(f"missing cookie {name}")
+    return matches
 
 
 def _origin_headers() -> dict[str, str]:

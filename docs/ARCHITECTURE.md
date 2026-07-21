@@ -109,6 +109,13 @@ Full design in `docs/F002_PLAN.md`; decisions ratified as D-037–D-040 in `docs
   from the database (platform and organization domains), never a static list or a wildcard combined
   with credentials, and every state-changing cookie-authenticated request requires a signed
   double-submit CSRF token (D-039).
+- The `HttpOnly` refresh cookie is scoped to `Path=/api` so both auth endpoints and authenticated
+  admin writes can validate the signed CSRF token against the current refresh-token family. This
+  deliberately exposes the cookie to all backend API paths, but not frontend/non-API paths; API
+  authorization, Origin validation, and the family-bound CSRF header remain mandatory. Because the
+  path is part of a cookie's browser-side identity, login, refresh, and logout also explicitly clear
+  any leftover refresh cookie at the previous `Path=/api/auth` scope, so sessions issued before this
+  path migration do not leave an inert cookie sitting in the browser until its original expiry.
 - Rate limits for login, refresh, password reset, and invitation acceptance are platform-wide,
   environment-configured, and set independently per action (D-038).
 - Password reset uses opaque high-entropy bearer tokens stored only as SHA-256 hashes. Reset requests

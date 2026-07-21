@@ -256,8 +256,9 @@ actual resolution already happens per-request via the dependency, which F002 reu
   is revoked and both cookies are cleared — this is the standard signal that a refresh token was
   stolen and later reused by both the legitimate client and an attacker.
 - Lifetime: 30 days, refreshed (sliding) on each successful rotation.
-- Transport: `HttpOnly`, `Secure`, `SameSite=None` cookie, scoped via `Path=/api/auth` so it is never
-  sent to unrelated endpoints.
+- Transport: `HttpOnly`, `Secure`, `SameSite=None` cookie, scoped via `Path=/api`. CSRF validation on
+  authenticated admin writes needs the refresh-family binding, so the cookie must reach `/api/admin`
+  as well as `/api/auth`; the API-only path avoids attaching it to frontend/non-API routes.
 - `family_id` doubles as the CSRF-token binding key (§10) — revoking a family invalidates its CSRF
   tokens as a side effect, with no separate cleanup mechanism needed.
 

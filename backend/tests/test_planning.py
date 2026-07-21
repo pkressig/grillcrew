@@ -9,8 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from app.api import planning
+from app.api import dependencies, planning
 from app.api.dependencies import CurrentStaffMembership
+from app.core.config import get_settings
+from app.core.security.csrf import CSRF_HEADER_NAME, derive_csrf_secret, generate_csrf_token
 from app.db.session import get_db
 from app.main import app
 from app.models.organization import Organization
@@ -33,6 +35,7 @@ from app.schemas.planning import (
     ShiftCreate,
     ShiftUpdate,
 )
+from app.services.auth import REFRESH_TOKEN_COOKIE_NAME
 from app.services.planning import (
     PlanningConflictError,
     PlanningNotFoundError,
@@ -230,6 +233,80 @@ def test_wrong_organization_slug_is_forbidden(client: TestClient) -> None:
 
 def test_admin_and_coordination_role_dependency_is_configured() -> None:
     assert callable(planning.manage)
+
+
+@pytest.mark.parametrize(
+    ("csrf_token_kind", "expected_status"),
+    [("valid", 201), ("missing", 403), ("invalid", 403)],
+)
+def test_admin_planning_write_enforces_csrf_with_api_scoped_refresh_cookie(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    csrf_token_kind: str,
+    expected_status: int,
+) -> None:
+    """Regression: the refresh cookie must reach /api/admin for family-bound CSRF."""
+    family_id = uuid4()
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
+    current = cast(CurrentStaffMembership, SimpleNamespace(organization=organization))
+    now = datetime.now(UTC)
+    created = SimpleNamespace(
+        id=uuid4(),
+        label="2026/27",
+        start_date=date(2026, 7, 1),
+        end_date=date(2027, 6, 30),
+        status=PlanningStatus.DRAFT,
+        created_at=now,
+        updated_at=now,
+    )
+
+    class FakeRefreshService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def validate(self, *, refresh_token: str | None) -> object:
+            if refresh_token != "valid-refresh":
+                raise AssertionError("the /api-scoped refresh cookie must reach the admin route")
+            return SimpleNamespace(token=SimpleNamespace(family_id=family_id))
+
+    class FakePlanningService:
+        def __init__(self, _db: object, _organization_id: object) -> None:
+            pass
+
+        def create_club_year(self, _payload: ClubYearCreate) -> object:
+            return created
+
+    valid_token = generate_csrf_token(
+        binding_key=str(family_id),
+        secret=derive_csrf_secret(get_settings().jwt_secret_key),
+    )
+    headers = {"Origin": "http://testserver"}
+    if csrf_token_kind == "valid":
+        headers[CSRF_HEADER_NAME] = valid_token
+    elif csrf_token_kind == "invalid":
+        headers[CSRF_HEADER_NAME] = "invalid-token"
+
+    app.dependency_overrides[planning.manage] = lambda: current
+    app.dependency_overrides[get_db] = lambda: _ListDb()
+    monkeypatch.setattr(dependencies, "RefreshService", FakeRefreshService)
+    monkeypatch.setattr(planning, "PlanningService", FakePlanningService)
+    monkeypatch.setattr(planning, "_ensure_origin_and_host", lambda *_args: None)
+    client.cookies.set(REFRESH_TOKEN_COOKIE_NAME, "valid-refresh", path="/api")
+    try:
+        response = client.post(
+            "/api/admin/tenant-a/club-years",
+            headers=headers,
+            json={
+                "label": "2026/27",
+                "start_date": "2026-07-01",
+                "end_date": "2027-06-30",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+        client.cookies.clear()
+
+    assert response.status_code == expected_status
 
 
 class _ListDb:
