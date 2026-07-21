@@ -267,6 +267,15 @@ def csrf_token(
     return CsrfTokenResponse(csrf_token=token)
 
 
+# Refresh cookies issued before the Path=/api/auth -> Path=/api migration are a distinct
+# browser-side cookie (path is part of a cookie's identity), so neither set_cookie nor
+# delete_cookie at the new path touches them. Clearing the old path too, on every session
+# issuance and on logout, lets any such leftover cookie actually disappear from the browser
+# instead of lingering (inert, since the underlying token is separately revoked) until its
+# original 30-day expiry.
+_LEGACY_REFRESH_COOKIE_PATH = "/api/auth"
+
+
 def set_auth_cookies(response: Response, session: IssuedSession, settings: Settings) -> None:
     response.set_cookie(
         ACCESS_TOKEN_COOKIE_NAME,
@@ -283,7 +292,7 @@ def set_auth_cookies(response: Response, session: IssuedSession, settings: Setti
         session.refresh_token,
         max_age=session.refresh_token_max_age,
         httponly=True,
-        path="/api/auth",
+        path="/api",
         secure=settings.auth_cookie_secure,
         samesite="none",
         domain=settings.auth_cookie_domain,
@@ -298,6 +307,7 @@ def set_auth_cookies(response: Response, session: IssuedSession, settings: Setti
         samesite="none",
         domain=settings.auth_cookie_domain,
     )
+    _clear_legacy_refresh_cookie(response, settings)
 
 
 def clear_auth_cookies(response: Response, settings: Settings) -> None:
@@ -310,7 +320,7 @@ def clear_auth_cookies(response: Response, settings: Settings) -> None:
     )
     response.delete_cookie(
         REFRESH_TOKEN_COOKIE_NAME,
-        path="/api/auth",
+        path="/api",
         secure=settings.auth_cookie_secure,
         samesite="none",
         domain=settings.auth_cookie_domain,
@@ -318,6 +328,17 @@ def clear_auth_cookies(response: Response, settings: Settings) -> None:
     response.delete_cookie(
         CSRF_COOKIE_NAME,
         path="/",
+        secure=settings.auth_cookie_secure,
+        samesite="none",
+        domain=settings.auth_cookie_domain,
+    )
+    _clear_legacy_refresh_cookie(response, settings)
+
+
+def _clear_legacy_refresh_cookie(response: Response, settings: Settings) -> None:
+    response.delete_cookie(
+        REFRESH_TOKEN_COOKIE_NAME,
+        path=_LEGACY_REFRESH_COOKIE_PATH,
         secure=settings.auth_cookie_secure,
         samesite="none",
         domain=settings.auth_cookie_domain,

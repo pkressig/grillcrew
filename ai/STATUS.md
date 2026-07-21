@@ -5,7 +5,7 @@
 - Current feature: F003 - Seasons, Events, and Shifts
 - Current step: Step 4 Event and Shift admin UI
 - Last merged feature: F003 Step 2 - Visible season and club-year admin UI
-- Current phase: Production cross-origin CSRF bugfix implemented and validated
+- Current phase: Production admin-write CSRF cookie-path follow-up implemented and validated
 - Active blockers: None
 - Next intended action: Request Claude security review
 - Production frontend URL: Not configured in repository; see Vercel project settings
@@ -28,9 +28,9 @@
 ## Generated Status
 
 <!-- GENERATED:START -->
-- Current branch: feature/f002-cross-origin-csrf-fix
-- Current commit: fdb428168b11223c8e00ebac8c55910ec832f16c
-- Working tree state: dirty (16 changed path(s))
-- Latest commit subject: feat(planning): add event and shift admin UI
-- Latest update timestamp: 2026-07-20T20:27:55.737Z
+- Current branch: feature/f003-admin-write-csrf-path-fix
+- Current commit: 13cd1a1b03b2ff8e3f004549a9be6ab257e8f3ef
+- Working tree state: dirty (14 changed path(s))
+- Latest commit subject: fix(auth): deliver cross-origin CSRF token via authenticated endpoint
+- Latest update timestamp: 2026-07-20T23:06:27.577Z
 <!-- GENERATED:END -->
