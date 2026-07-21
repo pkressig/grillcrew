@@ -84,6 +84,11 @@ Public organization resolution follows this order:
 
 The fallback is forbidden in production.
 
+Public planning follows the same resolution convention at `GET /api/public/{organization_slug}/plan`.
+The response is an explicit public-safe projection: it is tenant-filtered through club year and season,
+includes only upcoming published events and non-cancelled shifts, and never serializes internal notes,
+contact/person data, parent tenant identifiers, or staff-only metadata.
+
 ## Permissions
 
 Permissions are organization-local. A user may be Admin in one organization and have no access to another. Role checks must combine:

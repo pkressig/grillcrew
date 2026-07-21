@@ -1,11 +1,10 @@
 # Latest AI Handoff
 
-- Current work: Production follow-up for 403 responses on authenticated admin planning writes.
-- Goal: Ensure Vercel-originated admin writes can validate the in-memory CSRF token against the active Render refresh session without weakening CSRF protection.
-- Scope: Refresh-cookie path, focused auth/planning regression tests, deployment/auth architecture documentation, and current AI status files.
-- Completed work: Widened the `HttpOnly` refresh cookie from `Path=/api/auth` to `Path=/api`, allowing `/api/admin/...` CSRF validation to retain refresh-family binding while excluding non-API paths.
-- Tests: Updated cookie-attribute coverage and added admin club-year write coverage for valid, missing, and invalid CSRF headers with an API-scoped refresh cookie.
-- Validation results: Focused tests passed (49); `check:backend`, `check:frontend`, and combined `check` passed with 226 backend tests, 35 frontend tests, and a successful production build; `ai:prepare` and `git diff --check` also passed.
-- Next exact action: Request Claude security review, then obtain a release-gate decision if approved.
-- Commit or uncommitted state: Bugfix is implemented locally and uncommitted; do not commit or push.
-- Timestamp: 2026-07-20.
+- Current work: F004 Step 1 public read-only event and shift plan.
+- Goal: Give visitors a useful mobile-first view of upcoming published planning data without signup or public PII.
+- Scope: Public-safe planning API, organization public route UI, focused backend/frontend tests, and feature/architecture/status documentation.
+- Completed work: Added `GET /api/public/{organization_slug}/plan` and replaced the placeholder organization landing screen with branded event/shift cards, capacity/status summaries, and loading/error/empty states.
+- Privacy: Only explicit event/shift display fields are returned. Draft events, cancelled shifts, internal notes, contacts, people, child data, staff metadata, and tenant/parent IDs are excluded.
+- Next exact action: Run independent Claude architecture/security review and AGY UX/accessibility review.
+- Commit or uncommitted state: Implemented locally and uncommitted; do not commit or push.
+- Timestamp: 2026-07-21.

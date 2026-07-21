@@ -89,8 +89,10 @@ def _path_slug(path: str) -> str | None:
     parts = [part for part in path.split("/") if part]
     if not parts:
         return None
-    if parts[0] == "api" and len(parts) >= 4 and parts[1] == "public":
-        return parts[3]
+    if parts[0] == "api" and len(parts) >= 2 and parts[1] == "public":
+        if len(parts) >= 3 and parts[2] == "organization":
+            return parts[3] if len(parts) >= 4 else None
+        return parts[2] if len(parts) >= 3 else None
     if parts[0] == "api" and len(parts) >= 3 and parts[1] == "admin":
         return parts[2]
     if (
