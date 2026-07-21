@@ -13,7 +13,7 @@ from app.api import public
 from app.db.session import get_db
 from app.main import app
 from app.models.organization import Organization
-from app.models.planning import ShiftStatus
+from app.models.planning import ShiftStatus, SignupStatus
 
 
 def test_public_plan_is_unauthenticated_sorted_and_public_safe(
@@ -77,7 +77,9 @@ def test_public_plan_is_unauthenticated_sorted_and_public_safe(
         "event_id",
     ):
         assert forbidden not in serialized
-    assert body["events"][0]["shifts"][0]["occupied_volunteers"] == 0
+    assert body["events"][0]["shifts"][0]["occupied_volunteers"] == 1
+    assert body["events"][0]["shifts"][0]["volunteer_names"] == ["Mia Muster"]
+    assert "cancelled person" not in serialized
 
 
 def test_public_plan_unknown_organization_returns_404(
@@ -144,4 +146,11 @@ def _shift(
         internal_note=internal_note,
         status=status,
         sort_order=order,
+        signups=[
+            SimpleNamespace(status=SignupStatus.ACTIVE, public_name_snapshot="Mia Muster"),
+            SimpleNamespace(
+                status=SignupStatus.CANCELLED_BY_ADMIN,
+                public_name_snapshot="cancelled person",
+            ),
+        ],
     )

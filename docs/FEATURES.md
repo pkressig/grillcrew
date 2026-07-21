@@ -125,7 +125,9 @@ Medium.
 
 **Status**
 
-Step 1 is implemented locally: the organization public route presents upcoming published events and non-cancelled shifts through a public-safe, unauthenticated API. Signup remains deferred and the future action is disabled.
+Steps 1 and 2 are implemented locally: the organization public route presents upcoming published
+events and non-cancelled shifts through a public-safe API, and visitors can reserve an open place
+without an account. Active occupancy and consented public names are visible; contacts remain private.
 
 **Goal**  
 Allow each organization to manage public events or operating days.

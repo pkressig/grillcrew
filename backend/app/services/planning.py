@@ -173,7 +173,7 @@ class PlanningService:
                 select(Event)
                 .join(Season)
                 .join(ClubYear)
-                .options(selectinload(Event.shifts))
+                .options(selectinload(Event.shifts).selectinload(Shift.signups))
                 .where(
                     ClubYear.organization_id == self.organization_id,
                     Event.status == EventStatus.PUBLISHED,

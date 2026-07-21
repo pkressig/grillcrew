@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Clock3, MapPin, Users } from "lucide-react";
 import { useOrganization } from "@/components/organization-provider";
-import { fetchPublicPlan, type PublicPlan } from "@/lib/public-plan";
+import {
+  createPublicSignup,
+  fetchPublicPlan,
+  PublicSignupError,
+  type PublicPlan,
+} from "@/lib/public-plan";
 
 const dateFormatter = new Intl.DateTimeFormat("de-CH", {
   weekday: "long",
@@ -16,6 +21,78 @@ export function OrganizationLanding() {
   const organization = useOrganization();
   const [plan, setPlan] = useState<PublicPlan | null>(null);
   const [error, setError] = useState(false);
+  const [selectedShift, setSelectedShift] = useState<string | null>(null);
+  const [formStartedAt, setFormStartedAt] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [signupError, setSignupError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  function openSignup(shiftId: string) {
+    setSelectedShift(shiftId);
+    setFormStartedAt(new Date().toISOString());
+    setSignupError(null);
+    setSuccess(null);
+  }
+
+  async function submitSignup(event: FormEvent<HTMLFormElement>, shiftId: string) {
+    event.preventDefault();
+    setSubmitting(true);
+    setSignupError(null);
+    const data = new FormData(event.currentTarget);
+    try {
+      const result = await createPublicSignup(organization.slug, shiftId, {
+        first_name: String(data.get("first_name") ?? ""),
+        last_name: String(data.get("last_name") ?? ""),
+        phone: String(data.get("phone") ?? ""),
+        email: String(data.get("email") ?? ""),
+        public_display_consent: data.get("public_display_consent") === "on",
+        website: String(data.get("website") ?? ""),
+        form_started_at: formStartedAt,
+      });
+      if (result.signup) {
+        setPlan((current) =>
+          current
+            ? {
+                events: current.events.map((eventItem) => ({
+                  ...eventItem,
+                  shifts: eventItem.shifts.map((shift) =>
+                    shift.id === shiftId
+                      ? {
+                          ...shift,
+                          occupied_volunteers: result.signup!.occupied_volunteers,
+                          volunteer_names: [...shift.volunteer_names, result.signup!.public_name],
+                        }
+                      : shift,
+                  ),
+                })),
+              }
+            : current,
+        );
+      }
+      setSuccess(result.message);
+      setSelectedShift(null);
+    } catch (err) {
+      if (err instanceof PublicSignupError) {
+        if (err.statusCode === 409) {
+          setSignupError("Diese Schicht ist leider bereits ausgebucht oder nicht mehr verfügbar.");
+        } else if (err.statusCode === 429) {
+          setSignupError(
+            "Zu viele Anfragen. Bitte warte einen kurzen Moment und versuche es nochmals.",
+          );
+        } else {
+          setSignupError(
+            "Die Eintragung ist nicht gelungen. Bitte prüfe deine Angaben und versuche es nochmals.",
+          );
+        }
+      } else {
+        setSignupError(
+          "Die Eintragung ist nicht gelungen. Bitte prüfe deine Angaben und versuche es nochmals.",
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -95,6 +172,22 @@ export function OrganizationLanding() {
               <Summary value={summary.shifts} label="kommende Einsätze" />
               <Summary value={summary.places} label="offene Plätze" />
             </section>
+            {success ? (
+              <div
+                role="status"
+                className="flex items-center justify-between gap-3 rounded-xl bg-green-100 p-4 font-semibold text-green-900"
+              >
+                <span>{success}</span>
+                <button
+                  type="button"
+                  onClick={() => setSuccess(null)}
+                  className="rounded-md px-2 py-1 text-sm hover:bg-green-200"
+                  aria-label="Hinweis schliessen"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : null}
             <section aria-label="Kommende Anlässe" className="space-y-5">
               {plan.events.map((event) => (
                 <article
@@ -134,7 +227,7 @@ export function OrganizationLanding() {
                       return (
                         <section
                           key={shift.id}
-                          aria-label={`Einsatz ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)}`}
+                          aria-label={`Einsatz ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
                           className="p-5"
                         >
                           <div className="flex items-start justify-between gap-3">
@@ -159,13 +252,108 @@ export function OrganizationLanding() {
                           {shift.public_note ? (
                             <p className="mt-3 text-sm">{shift.public_note}</p>
                           ) : null}
+                          {shift.volunteer_names.length > 0 ? (
+                            <p className="mt-3 text-sm">
+                              Eingetragen: {shift.volunteer_names.join(", ")}
+                            </p>
+                          ) : null}
                           <button
-                            disabled
-                            aria-label={`Bald eintragen: ${event.title}, ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
-                            className="mt-4 min-h-11 w-full cursor-not-allowed rounded-lg border px-4 font-semibold opacity-60"
+                            type="button"
+                            disabled={shift.status !== "OPEN" || full}
+                            onClick={() => openSignup(shift.id)}
+                            aria-label={`Eintragen: ${event.title}, ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
+                            className="mt-4 min-h-11 w-full rounded-lg border px-4 font-semibold disabled:cursor-not-allowed disabled:opacity-60"
                           >
-                            Bald eintragen
+                            {shift.status !== "OPEN"
+                              ? "Geschlossen"
+                              : full
+                                ? "Besetzt"
+                                : "Eintragen"}
                           </button>
+                          {selectedShift === shift.id ? (
+                            <form
+                              aria-label={`Eintragung für ${event.title}, ${formatTime(shift.starts_at, organization.timezone)} Uhr`}
+                              className="mt-4 space-y-3 rounded-xl bg-muted/60 p-4"
+                              onSubmit={(formEvent) => void submitSignup(formEvent, shift.id)}
+                            >
+                              <div className="border-b pb-2">
+                                <h3 className="text-base font-bold text-foreground">
+                                  Eintragung für{" "}
+                                  {formatTime(shift.starts_at, organization.timezone)}–
+                                  {formatTime(shift.ends_at, organization.timezone)} Uhr
+                                </h3>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  Alle Angaben sind Pflichtfelder.
+                                </p>
+                              </div>
+                              <SignupField
+                                id={`first_name-${shift.id}`}
+                                name="first_name"
+                                label="Vorname"
+                              />
+                              <SignupField
+                                id={`last_name-${shift.id}`}
+                                name="last_name"
+                                label="Nachname"
+                              />
+                              <SignupField
+                                id={`phone-${shift.id}`}
+                                name="phone"
+                                label="Telefon"
+                                type="tel"
+                              />
+                              <SignupField
+                                id={`email-${shift.id}`}
+                                name="email"
+                                label="E-Mail"
+                                type="email"
+                              />
+                              <div hidden aria-hidden="true" style={{ display: "none" }}>
+                                <label htmlFor={`website-${shift.id}`}>Website</label>
+                                <input
+                                  id={`website-${shift.id}`}
+                                  name="website"
+                                  tabIndex={-1}
+                                  autoComplete="off"
+                                />
+                              </div>
+                              <label className="flex min-h-11 items-start gap-3 text-sm">
+                                <input
+                                  className="mt-1 h-5 w-5 shrink-0"
+                                  type="checkbox"
+                                  name="public_display_consent"
+                                  required
+                                />
+                                <span>
+                                  Ich bin einverstanden, dass mein Vor- und Nachname im öffentlichen
+                                  Einsatzplan angezeigt wird. Telefonnummer und E-Mail sehen nur
+                                  berechtigte Verantwortliche.
+                                </span>
+                              </label>
+                              {signupError ? (
+                                <p role="alert" className="text-sm text-red-700">
+                                  {signupError}
+                                </p>
+                              ) : null}
+                              <div className="flex flex-col gap-2 sm:flex-row">
+                                <button
+                                  type="submit"
+                                  disabled={submitting}
+                                  className="min-h-11 flex-1 rounded-lg bg-foreground px-4 font-semibold text-background disabled:opacity-60"
+                                >
+                                  {submitting ? "Wird eingetragen …" : "Verbindlich eintragen"}
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={submitting}
+                                  onClick={() => setSelectedShift(null)}
+                                  className="min-h-11 rounded-lg border bg-background px-4 font-semibold text-foreground hover:bg-muted disabled:opacity-60"
+                                >
+                                  Abbrechen
+                                </button>
+                              </div>
+                            </form>
+                          ) : null}
                         </section>
                       );
                     })}
@@ -177,6 +365,26 @@ export function OrganizationLanding() {
         )}
       </div>
     </main>
+  );
+}
+
+function SignupField({
+  id,
+  name,
+  label,
+  type = "text",
+}: Readonly<{ id?: string; name: string; label: string; type?: string }>) {
+  return (
+    <label htmlFor={id} className="block text-sm font-semibold">
+      {label}
+      <input
+        id={id}
+        className="mt-1 min-h-11 w-full rounded-lg border bg-background px-3 font-normal text-base"
+        name={name}
+        type={type}
+        required
+      />
+    </label>
   );
 }
 

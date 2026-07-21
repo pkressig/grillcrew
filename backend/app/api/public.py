@@ -1,32 +1,51 @@
 """Public platform endpoints that do not require authentication."""
 
 import logging
-from datetime import datetime
+import uuid
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.core.security.rate_limit import InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
 from app.models.organization import Organization
-from app.models.planning import ShiftStatus
+from app.models.planning import ShiftStatus, SignupStatus
 from app.schemas.organization import (
     OrganizationContact,
     PublicOrganizationResponse,
     PublicOrganizationSettings,
     PublicTheme,
 )
-from app.schemas.planning import PublicEventResponse, PublicPlanResponse, PublicShiftResponse
+from app.schemas.planning import (
+    PublicEventResponse,
+    PublicPlanResponse,
+    PublicShiftResponse,
+    PublicSignupCreate,
+    PublicSignupResponse,
+    PublicSignupSummary,
+)
 from app.services.organization_context import (
     OrganizationLookup,
     build_organization_lookup,
     resolve_organization,
 )
 from app.services.planning import PlanningService
+from app.services.public_signup import (
+    PublicSignupConflictError,
+    PublicSignupNotFoundError,
+    PublicSignupService,
+    PublicSignupValidationError,
+    normalize_email,
+    normalize_phone,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/public", tags=["public"])
+signup_rate_limiter = InMemoryRateLimiter()
+MINIMUM_FILL_SECONDS = 2
 
 
 @router.get("/organization", response_model=PublicOrganizationResponse)
@@ -96,9 +115,17 @@ def public_plan(
                         starts_at=shift.starts_at,
                         ends_at=shift.ends_at,
                         required_volunteers=shift.required_volunteers,
-                        occupied_volunteers=0,
+                        occupied_volunteers=sum(
+                            signup.status == SignupStatus.ACTIVE
+                            for signup in getattr(shift, "signups", [])
+                        ),
                         public_note=shift.public_note,
                         status=shift.status,
+                        volunteer_names=[
+                            signup.public_name_snapshot
+                            for signup in getattr(shift, "signups", [])
+                            if signup.status == SignupStatus.ACTIVE
+                        ],
                     )
                     for shift in sorted(
                         (item for item in event.shifts if item.status != ShiftStatus.CANCELLED),
@@ -109,6 +136,88 @@ def public_plan(
             for event in events
         ]
     )
+
+
+@router.post(
+    "/{organization_slug}/shifts/{shift_id}/signups",
+    response_model=PublicSignupResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def public_signup(
+    request: Request,
+    organization_slug: str,
+    shift_id: uuid.UUID,
+    payload: PublicSignupCreate,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> PublicSignupResponse:
+    organization = _resolve_path_organization(request, organization_slug, db)
+    if payload.website.strip():
+        return PublicSignupResponse(message="Danke. Deine Anfrage wurde entgegengenommen.")
+    now = datetime.now(UTC)
+    started_at = payload.form_started_at
+    if started_at.tzinfo is None or (now - started_at).total_seconds() < MINIMUM_FILL_SECONDS:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="try again")
+    if not payload.public_display_consent:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="consent required"
+        )
+    settings = organization.settings
+    window_seconds = settings.signup_rate_limit_window_minutes * 60
+    contact = f"{normalize_email(payload.email)}:{normalize_phone(payload.phone)}"
+    client_ip = request.client.host if request.client else "unknown"
+    contact_allowed = signup_rate_limiter.allow(
+        key=f"signup:contact:{organization.id}:{contact}",
+        rule=RateLimitRule(
+            max_attempts=settings.signup_rate_limit_per_contact,
+            window_seconds=window_seconds,
+        ),
+    )
+    ip_allowed = signup_rate_limiter.allow(
+        key=f"signup:ip:{organization.id}:{client_ip}",
+        rule=RateLimitRule(max_attempts=20, window_seconds=window_seconds),
+    )
+    if not contact_allowed or not ip_allowed:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="try again")
+    try:
+        signup, occupied, required = PublicSignupService(db, organization.id).create(
+            shift_id, payload
+        )
+    except PublicSignupNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="shift not found"
+        ) from exc
+    except PublicSignupConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="shift unavailable"
+        ) from exc
+    except PublicSignupValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid signup"
+        ) from exc
+    return PublicSignupResponse(
+        message="Du bist eingetragen.",
+        signup=PublicSignupSummary(
+            public_name=signup.public_name_snapshot,
+            occupied_volunteers=occupied,
+            required_volunteers=required,
+        ),
+    )
+
+
+def _resolve_path_organization(request: Request, slug: str, db: Session) -> Organization:
+    lookup = getattr(request.state, "organization_lookup", None)
+    if not isinstance(lookup, OrganizationLookup):
+        lookup = build_organization_lookup(request)
+    lookup = OrganizationLookup(
+        custom_domain=lookup.custom_domain,
+        subdomain=lookup.subdomain,
+        path_slug=slug,
+        development_override=lookup.development_override,
+    )
+    organization = resolve_organization(db, lookup, get_settings().app_env)
+    if organization is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="organization not found")
+    return organization
 
 
 def to_public_response(organization: Organization) -> PublicOrganizationResponse:

@@ -89,6 +89,11 @@ The response is an explicit public-safe projection: it is tenant-filtered throug
 includes only upcoming published events and non-cancelled shifts, and never serializes internal notes,
 contact/person data, parent tenant identifiers, or staff-only metadata.
 
+Public signup uses `POST /api/public/{organization_slug}/shifts/{shift_id}/signups`. It is tokenless
+and therefore does not use cookie CSRF protection. The backend resolves the tenant, applies a
+honeypot, minimum-fill-time and IP/contact rate limits, and locks the shift row while checking active
+capacity. Public responses contain only a public-name snapshot and capacity, never contact data.
+
 ## Permissions
 
 Permissions are organization-local. A user may be Admin in one organization and have no access to another. Role checks must combine:

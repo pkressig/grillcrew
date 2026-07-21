@@ -21,6 +21,12 @@ from app.models.planning import (
     SeasonType,
     Shift,
     ShiftStatus,
+    Signup,
+    SignupOutcome,
+    SignupSource,
+    SignupStatus,
+    Volunteer,
+    VolunteerStatus,
 )
 
 __all__ = [
@@ -39,9 +45,15 @@ __all__ = [
     "SeasonType",
     "Shift",
     "ShiftStatus",
+    "Signup",
+    "SignupOutcome",
+    "SignupSource",
+    "SignupStatus",
     "StaffMembership",
     "StaffRole",
     "Theme",
     "User",
     "UserStatus",
+    "Volunteer",
+    "VolunteerStatus",
 ]
