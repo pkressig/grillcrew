@@ -40,13 +40,28 @@ export type Shift = {
   starts_at: string;
   ends_at: string;
   required_volunteers: number;
+  occupied_volunteers: number;
+  open_places: number;
+  signups: AdminSignup[];
   public_note: string | null;
   internal_note: string | null;
   status: ShiftStatus;
   sort_order: number;
 };
+export type AdminSignup = {
+  id: string;
+  public_name: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+  created_at: string;
+};
 export type EventInput = Omit<PlanningEvent, "id" | "season_id" | "published_at">;
-export type ShiftInput = Omit<Shift, "id" | "event_id">;
+export type ShiftInput = Omit<
+  Shift,
+  "id" | "event_id" | "occupied_volunteers" | "open_places" | "signups"
+>;
 
 async function request<T>(
   path: string,

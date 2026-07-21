@@ -28,3 +28,23 @@ rate-limited IP/contact buckets receive `429`.
 Family/Sollstunden assignment, final compensation-type confirmation, full-shift waiting lists,
 hashed management links and self-service cancellation, confirmation/reminder emails, and admin
 volunteer/signup management remain deferred to later steps.
+
+## Step 2.1 — Admin signup visibility
+
+Status: implemented locally, awaiting independent architecture/security and UX review.
+
+The authenticated admin planning shift response for `ADMIN` and `KOORDINATION` includes active
+occupancy, remaining places, and a compact signup summary with volunteer name, phone number, email
+address, and signup timestamp. The admin planning cards show these details with tappable phone and
+email links. Cancelled signups are excluded and ordering is deterministic by signup creation time
+and ID.
+
+The public plan and public signup responses remain separate schemas and never expose phone or email.
+The editable planning endpoint remains unavailable to `KIOSK` and `VORSTAND_LESEN`; no separate
+KIOSK operational view is introduced in this step.
+
+### Deferred
+
+Signup editing or cancellation, attendance and work records, family/Sollstunden assignment,
+compensation, management links, notifications, and a separate event-related KIOSK staff view remain
+deferred.

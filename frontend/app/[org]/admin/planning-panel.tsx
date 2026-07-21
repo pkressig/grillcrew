@@ -628,8 +628,16 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                           {formatDateTime(shift.starts_at, timezone)} –{" "}
                                           {formatDateTime(shift.ends_at, timezone)}
                                         </p>
-                                        <p className="mt-1 text-sm">
-                                          {shift.required_volunteers} benötigte Helfende
+                                        <p className="mt-1 text-sm font-medium">
+                                          {shift.occupied_volunteers} von{" "}
+                                          {shift.required_volunteers} belegt
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                          {shift.open_places === 0
+                                            ? "Vollständig besetzt"
+                                            : shift.open_places === 1
+                                              ? "1 Platz offen"
+                                              : `${shift.open_places} Plätze offen`}
                                         </p>
                                       </div>
                                       <span className="rounded-full border px-3 py-1 text-sm">
@@ -646,6 +654,43 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                         Intern: {shift.internal_note}
                                       </p>
                                     ) : null}
+                                    <div className="mt-3 border-t pt-3">
+                                      <p className="text-sm font-medium">Eingetragene Helfende</p>
+                                      {shift.signups.length === 0 ? (
+                                        <p className="mt-1 text-sm text-muted-foreground">
+                                          Noch niemand eingetragen.
+                                        </p>
+                                      ) : (
+                                        <ul className="mt-2 grid gap-2">
+                                          {shift.signups.map((signup) => (
+                                            <li
+                                              className="flex flex-col gap-2 rounded-md border bg-muted/30 p-2.5 text-sm sm:flex-row sm:items-center sm:justify-between"
+                                              key={signup.id}
+                                            >
+                                              <span className="font-medium">
+                                                {signup.public_name}
+                                              </span>
+                                              <div className="flex flex-wrap items-center gap-2">
+                                                <a
+                                                  className="inline-flex min-h-11 items-center rounded-md border bg-background px-3 py-1 text-xs font-medium underline transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                  href={`tel:${signup.phone}`}
+                                                  aria-label={`Telefonnummer von ${signup.public_name} anrufen: ${signup.phone}`}
+                                                >
+                                                  {signup.phone}
+                                                </a>
+                                                <a
+                                                  className="inline-flex min-h-11 items-center break-all rounded-md border bg-background px-3 py-1 text-xs font-medium underline transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                  href={`mailto:${signup.email}`}
+                                                  aria-label={`E-Mail an ${signup.public_name} senden: ${signup.email}`}
+                                                >
+                                                  {signup.email}
+                                                </a>
+                                              </div>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
                                     {shiftActions[shift.status].length ? (
                                       <div className="mt-3 flex flex-wrap gap-2">
                                         {shiftActions[shift.status].map((next) => (

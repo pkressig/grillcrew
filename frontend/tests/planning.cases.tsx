@@ -1,4 +1,4 @@
-﻿import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminShell } from "@/app/[org]/admin/admin-shell";
 import { AuthProvider } from "@/components/auth-provider";
@@ -54,6 +54,19 @@ const shift = {
   starts_at: "2026-09-12T16:00:00Z",
   ends_at: "2026-09-12T18:00:00Z",
   required_volunteers: 3,
+  occupied_volunteers: 1,
+  open_places: 2,
+  signups: [
+    {
+      id: "signup-1",
+      public_name: "Mia Muster",
+      first_name: "Mia",
+      last_name: "Muster",
+      phone: "+41 79 123 45 67",
+      email: "mia@example.test",
+      created_at: "2026-07-21T10:00:00Z",
+    },
+  ],
   public_note: "Bitte frühzeitig melden",
   internal_note: "Kasse bereitstellen",
   status: "OPEN",
@@ -189,7 +202,19 @@ describe("planning admin", () => {
     expect(await screen.findByText("Sommerfest")).toBeInTheDocument();
     expect(screen.getByText("Veröffentlicht")).toBeInTheDocument();
     expect(screen.getByText("Offen")).toBeInTheDocument();
-    expect(screen.getByText("3 benötigte Helfende")).toBeInTheDocument();
+    expect(screen.getByText("1 von 3 belegt")).toBeInTheDocument();
+    expect(screen.getByText("2 Plätze offen")).toBeInTheDocument();
+    expect(screen.getByText("Mia Muster")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", {
+        name: "Telefonnummer von Mia Muster anrufen: +41 79 123 45 67",
+      }),
+    ).toHaveAttribute("href", "tel:+41 79 123 45 67");
+    expect(
+      screen.getByRole("link", {
+        name: "E-Mail an Mia Muster senden: mia@example.test",
+      }),
+    ).toHaveAttribute("href", "mailto:mia@example.test");
     expect(screen.getByText("Öffentlich: Bitte frühzeitig melden")).toBeInTheDocument();
   });
 
@@ -204,6 +229,40 @@ describe("planning admin", () => {
     expect(
       await screen.findByText("Für diesen Anlass sind noch keine Einsätze vorhanden."),
     ).toBeInTheDocument();
+  });
+
+  it("renders the empty signup state", async () => {
+    const emptySignupShift = {
+      ...shift,
+      occupied_volunteers: 0,
+      open_places: 3,
+      signups: [],
+    };
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([emptySignupShift]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+    expect(await screen.findByText("Noch niemand eingetragen.")).toBeInTheDocument();
+  });
+
+  it("renders 'Vollständig besetzt' when open_places is 0", async () => {
+    const fullShift = {
+      ...shift,
+      occupied_volunteers: 3,
+      open_places: 0,
+    };
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([fullShift]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+    expect(await screen.findByText("Vollständig besetzt")).toBeInTheDocument();
+    expect(screen.getByText("3 von 3 belegt")).toBeInTheDocument();
   });
 
   it("creates a club year with credentials and a CSRF header", async () => {

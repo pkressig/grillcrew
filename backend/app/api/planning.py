@@ -14,7 +14,10 @@ from app.api.dependencies import CurrentStaffMembership, require_staff_role, val
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.identity import StaffRole
+from app.models.planning import Shift, SignupStatus
 from app.schemas.planning import (
+    AdminShiftResponse,
+    AdminSignupResponse,
     ClubYearCreate,
     ClubYearResponse,
     ClubYearUpdate,
@@ -37,6 +40,31 @@ from app.services.planning import (
 
 router = APIRouter(prefix="/api/admin/{organization_slug}", tags=["planning"])
 manage = require_staff_role(StaffRole.KOORDINATION)
+
+
+def _admin_shift_response(shift: Shift) -> AdminShiftResponse:
+    active_signups = sorted(
+        (signup for signup in shift.signups if signup.status == SignupStatus.ACTIVE),
+        key=lambda signup: (signup.created_at, signup.id),
+    )
+    occupied = len(active_signups)
+    return AdminShiftResponse(
+        **ShiftResponse.model_validate(shift).model_dump(),
+        occupied_volunteers=occupied,
+        open_places=max(shift.required_volunteers - occupied, 0),
+        signups=[
+            AdminSignupResponse(
+                id=signup.id,
+                public_name=signup.public_name_snapshot,
+                first_name=signup.volunteer.first_name,
+                last_name=signup.volunteer.last_name,
+                phone=signup.volunteer.phone_display,
+                email=signup.volunteer.email_display,
+                created_at=signup.created_at,
+            )
+            for signup in active_signups
+        ],
+    )
 
 
 def _service(
@@ -239,23 +267,23 @@ def update_event(
         raise _translate(error) from None
 
 
-@router.get("/events/{event_id}/shifts", response_model=list[ShiftResponse])
+@router.get("/events/{event_id}/shifts", response_model=list[AdminShiftResponse])
 def list_shifts(
     organization_slug: str,
     event_id: uuid.UUID,
     current: CurrentStaffMembership = Depends(manage),
     db: Session = Depends(get_db),
-) -> list[ShiftResponse]:
+) -> list[AdminShiftResponse]:
     try:
         return [
-            ShiftResponse.model_validate(item)
+            _admin_shift_response(item)
             for item in _service(organization_slug, current, db).list_shifts(event_id)
         ]
     except PlanningNotFoundError as error:
         raise _translate(error) from None
 
 
-@router.post("/events/{event_id}/shifts", response_model=ShiftResponse, status_code=201)
+@router.post("/events/{event_id}/shifts", response_model=AdminShiftResponse, status_code=201)
 def create_shift(
     organization_slug: str,
     event_id: uuid.UUID,
@@ -264,16 +292,16 @@ def create_shift(
     current: CurrentStaffMembership = Depends(manage),
     _: None = Depends(validate_csrf),
     db: Session = Depends(get_db),
-) -> ShiftResponse:
+) -> AdminShiftResponse:
     try:
-        return ShiftResponse.model_validate(
+        return _admin_shift_response(
             _write_service(organization_slug, current, db, request).create_shift(event_id, payload)
         )
     except (PlanningNotFoundError, PlanningValidationError) as error:
         raise _translate(error) from None
 
 
-@router.patch("/shifts/{shift_id}", response_model=ShiftResponse)
+@router.patch("/shifts/{shift_id}", response_model=AdminShiftResponse)
 def update_shift(
     organization_slug: str,
     shift_id: uuid.UUID,
@@ -282,9 +310,9 @@ def update_shift(
     current: CurrentStaffMembership = Depends(manage),
     _: None = Depends(validate_csrf),
     db: Session = Depends(get_db),
-) -> ShiftResponse:
+) -> AdminShiftResponse:
     try:
-        return ShiftResponse.model_validate(
+        return _admin_shift_response(
             _write_service(organization_slug, current, db, request).update_shift(shift_id, payload)
         )
     except (PlanningNotFoundError, PlanningValidationError) as error:

@@ -175,6 +175,22 @@ class ShiftResponse(BaseModel):  # type: ignore[explicit-any]
     updated_at: datetime
 
 
+class AdminSignupResponse(BaseModel):  # type: ignore[explicit-any]
+    id: uuid.UUID
+    public_name: str
+    first_name: str
+    last_name: str
+    phone: str
+    email: str
+    created_at: datetime
+
+
+class AdminShiftResponse(ShiftResponse):  # type: ignore[explicit-any]
+    occupied_volunteers: int
+    open_places: int
+    signups: list[AdminSignupResponse]
+
+
 class PublicShiftResponse(BaseModel):  # type: ignore[explicit-any]
     id: uuid.UUID
     starts_at: datetime
