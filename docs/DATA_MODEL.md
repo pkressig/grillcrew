@@ -200,6 +200,9 @@ Shifts inherit organization scope through their event. Event/order/time lookup i
 
 ### Volunteer
 
+Materialized for public self-signup in F004 Step 2. `preferredLanguage`, `accountUserId`, and
+`mergedIntoId` remain deferred; created and updated timestamps are included.
+
 - id
 - organizationId
 - firstName
@@ -217,6 +220,9 @@ Shifts inherit organization scope through their event. Event/order/time lookup i
 - createdFrom: PUBLIC_SIGNUP | IMPORT | ADMIN
 
 ### Signup
+
+Materialized for immediate public reservations in F004 Step 2. Compensation/family assignment,
+confirmation/cancellation details, and management-token generation remain deferred.
 
 - id
 - shiftId

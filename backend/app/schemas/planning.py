@@ -183,6 +183,29 @@ class PublicShiftResponse(BaseModel):  # type: ignore[explicit-any]
     occupied_volunteers: int = 0
     public_note: str | None
     status: ShiftStatus
+    volunteer_names: list[str] = []
+
+
+class PublicSignupCreate(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    phone: str = Field(min_length=7, max_length=50)
+    email: str = Field(min_length=3, max_length=255)
+    public_display_consent: bool
+    website: str = Field(default="", max_length=500)
+    form_started_at: datetime
+
+
+class PublicSignupSummary(BaseModel):  # type: ignore[explicit-any]
+    public_name: str
+    occupied_volunteers: int
+    required_volunteers: int
+
+
+class PublicSignupResponse(BaseModel):  # type: ignore[explicit-any]
+    message: str
+    signup: PublicSignupSummary | None = None
 
 
 class PublicEventResponse(BaseModel):  # type: ignore[explicit-any]
