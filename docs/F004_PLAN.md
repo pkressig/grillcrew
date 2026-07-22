@@ -77,3 +77,23 @@ update automatically after cancellation.
 
 Confirmation/reminder email delivery, editing submitted contact/name data, admin manual cancellation,
 family/Sollstunden assignment, compensation, attendance, and work records remain deferred.
+
+## Step 3.1 — Admin manual signup cancellation
+
+Status: implemented locally, awaiting independent architecture/security and UX review.
+
+`ADMIN` and `KOORDINATION` can cancel an active signup from its row in the authenticated planning
+card. The guarded `POST /api/admin/{organization_slug}/signups/{signup_id}/cancel` write uses the
+existing origin/host and CSRF validation and scopes signup lookup through shift, event, season, club
+year, and organization. It records `CANCELLED_BY_ADMIN`, `cancelledAt`, and the stable reason
+`ADMIN_MANUAL` without deleting the signup or volunteer.
+
+Repeating an admin cancellation is idempotent and preserves its original metadata. A signup already
+cancelled by the volunteer is not overwritten and returns a conflict. Active-only admin and public
+projections immediately remove the signup and release its occupied place; the personal management
+link continues to show the resulting cancelled state.
+
+### Deferred
+
+Full audit-log events, rebooking, replacement assignment, contact editing, notifications, attendance,
+work records, and KIOSK-specific actions remain deferred.

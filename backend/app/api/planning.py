@@ -317,3 +317,19 @@ def update_shift(
         )
     except (PlanningNotFoundError, PlanningValidationError) as error:
         raise _translate(error) from None
+
+
+@router.post("/signups/{signup_id}/cancel", response_model=AdminShiftResponse)
+def cancel_signup(
+    organization_slug: str,
+    signup_id: uuid.UUID,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> AdminShiftResponse:
+    try:
+        shift = _write_service(organization_slug, current, db, request).cancel_signup(signup_id)
+        return _admin_shift_response(shift)
+    except (PlanningNotFoundError, PlanningConflictError) as error:
+        raise _translate(error) from None

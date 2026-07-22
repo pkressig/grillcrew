@@ -147,3 +147,9 @@ export const updateShiftStatus = (org: string, shiftId: string, status: ShiftSta
     writeInit("PATCH", { status }),
     "Der Einsatzstatus konnte nicht gespeichert werden.",
   );
+export const cancelSignup = (org: string, signupId: string) =>
+  request<Shift>(
+    `/api/admin/${encodeURIComponent(org)}/signups/${encodeURIComponent(signupId)}/cancel`,
+    writeInit("POST", {}),
+    "Die Eintragung konnte nicht abgesagt werden.",
+  );

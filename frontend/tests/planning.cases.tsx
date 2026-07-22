@@ -248,6 +248,69 @@ describe("planning admin", () => {
     expect(await screen.findByText("Noch niemand eingetragen.")).toBeInTheDocument();
   });
 
+  it("cancels a signup after confirmation and refreshes occupancy", async () => {
+    document.cookie = "gc_csrf=cancel-token";
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
+    let cancelled = false;
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      if (url.endsWith("/signups/signup-1/cancel") && method === "POST") {
+        cancelled = true;
+        return Response.json({ ...shift, occupied_volunteers: 0, open_places: 3, signups: [] });
+      }
+      if (url.endsWith("/events/event-1/shifts") && method === "GET")
+        return Response.json([
+          cancelled ? { ...shift, occupied_volunteers: 0, open_places: 3, signups: [] } : shift,
+        ]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    const cancelButton = await screen.findByRole("button", {
+      name: "Eintragung von Mia Muster absagen",
+    });
+    fireEvent.click(cancelButton);
+
+    expect(confirm).toHaveBeenCalledWith(
+      "Möchtest du die Eintragung von Mia Muster wirklich absagen? Der Platz wird danach wieder frei.",
+    );
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/admin\/example\/signups\/signup-1\/cancel$/),
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+          headers: expect.objectContaining({ "X-CSRF-Token": "cancel-token" }),
+        }),
+      ),
+    );
+    expect(await screen.findByText("0 von 3 belegt")).toBeInTheDocument();
+    expect(screen.getByText("3 Plätze offen")).toBeInTheDocument();
+    expect(screen.queryByText("Mia Muster")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Die Eintragung von Mia Muster wurde abgesagt.",
+    );
+  });
+
+  it("does not cancel a signup when confirmation is declined", async () => {
+    const confirmMock = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirmMock);
+    const fetchMock = renderAdmin("ADMIN", planningFetch("ADMIN", false, [season], true));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Eintragung von Mia Muster absagen" }),
+    );
+
+    expect(confirmMock).toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).includes("/signups/signup-1/cancel")),
+    ).toBe(false);
+  });
+
   it("renders 'Vollständig besetzt' when open_places is 0", async () => {
     const fullShift = {
       ...shift,

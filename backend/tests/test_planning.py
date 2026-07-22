@@ -211,6 +211,7 @@ def test_event_shift_routes_are_registered_with_manage_guard() -> None:
         ("GET", "/api/admin/{organization_slug}/events/{event_id}/shifts"),
         ("POST", "/api/admin/{organization_slug}/events/{event_id}/shifts"),
         ("PATCH", "/api/admin/{organization_slug}/shifts/{shift_id}"),
+        ("POST", "/api/admin/{organization_slug}/signups/{signup_id}/cancel"),
     }
     actual = {
         (method, getattr(route, "path", ""))
@@ -234,6 +235,64 @@ def test_wrong_organization_slug_is_forbidden(client: TestClient) -> None:
 
 def test_admin_and_coordination_role_dependency_is_configured() -> None:
     assert callable(planning.manage)
+
+
+def test_admin_cancel_sets_stable_metadata_and_returns_updated_shift() -> None:
+    now = datetime.now(UTC)
+    shift = SimpleNamespace(id=uuid4())
+    signup = SimpleNamespace(
+        id=uuid4(),
+        status=SignupStatus.ACTIVE,
+        cancelled_at=None,
+        cancellation_reason=None,
+        shift=shift,
+    )
+    db = _SignupDb(signup)
+
+    result = PlanningService(cast(object, db), uuid4()).cancel_signup(  # type: ignore[arg-type]
+        signup.id, now
+    )
+
+    assert result.id == shift.id
+    assert signup.status == SignupStatus.CANCELLED_BY_ADMIN
+    assert signup.cancelled_at == now
+    assert signup.cancellation_reason == "ADMIN_MANUAL"
+    assert db.commits == 1
+
+
+def test_admin_cancel_is_idempotent_for_admin_cancellation() -> None:
+    cancelled_at = datetime.now(UTC)
+    signup = SimpleNamespace(
+        id=uuid4(),
+        status=SignupStatus.CANCELLED_BY_ADMIN,
+        cancelled_at=cancelled_at,
+        cancellation_reason="ADMIN_MANUAL",
+        shift=SimpleNamespace(id=uuid4()),
+    )
+    db = _SignupDb(signup)
+
+    PlanningService(cast(object, db), uuid4()).cancel_signup(  # type: ignore[arg-type]
+        signup.id
+    )
+
+    assert signup.cancelled_at == cancelled_at
+    assert db.commits == 0
+
+
+def test_admin_cancel_does_not_overwrite_volunteer_cancellation() -> None:
+    signup = SimpleNamespace(
+        id=uuid4(),
+        status=SignupStatus.CANCELLED_BY_VOLUNTEER,
+        shift=SimpleNamespace(id=uuid4()),
+    )
+    db = _SignupDb(signup)
+
+    with pytest.raises(PlanningConflictError, match="volunteer"):
+        PlanningService(cast(object, db), uuid4()).cancel_signup(  # type: ignore[arg-type]
+            signup.id
+        )
+
+    assert db.commits == 0
 
 
 def test_admin_shift_response_includes_only_active_contact_details_in_stable_order() -> None:
@@ -384,3 +443,15 @@ class _SeasonDb:
 class _MissingDb:
     def scalar(self, _statement: object) -> None:
         return None
+
+
+class _SignupDb:
+    def __init__(self, signup: object | None) -> None:
+        self.signup = signup
+        self.commits = 0
+
+    def scalar(self, _statement: object) -> object | None:
+        return self.signup
+
+    def commit(self) -> None:
+        self.commits += 1
