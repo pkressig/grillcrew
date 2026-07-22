@@ -134,6 +134,9 @@ calendar-day deadline. Public contacts remain private and cancelled signups are 
 occupancy.
 ADMIN and KOORDINATION can also manually cancel an active signup from the planning card without
 deleting its history; active admin/public occupancy and name projections update immediately.
+Successful public signups also schedule an informational confirmation email containing an absolute
+personal management link. Delivery failure does not affect the already reserved place, and the
+public success UI continues to show the link immediately.
 
 **Goal**  
 Allow each organization to manage public events or operating days.

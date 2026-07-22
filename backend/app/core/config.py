@@ -6,6 +6,7 @@ Geheimnisse werden niemals im Code hinterlegt.
 
 from enum import StrEnum
 from functools import lru_cache
+from urllib.parse import urlsplit
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -71,6 +72,7 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_use_tls: bool = True
+    frontend_public_url: str = "http://localhost:3000"
 
     @field_validator("database_url")
     @classmethod
@@ -81,6 +83,24 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
         if value.startswith("postgresql://"):
             return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
+
+    @field_validator("frontend_public_url")
+    @classmethod
+    def validate_frontend_public_url(cls, value: str) -> str:
+        """Require an HTTP(S) origin so emailed bearer links cannot be malformed."""
+        normalized = value.rstrip("/")
+        parsed = urlsplit(normalized)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or parsed.username
+            or parsed.password
+        ):
+            raise ValueError("FRONTEND_PUBLIC_URL must be an HTTP(S) origin")
+        return normalized
 
     @model_validator(mode="after")
     def _validate_production_security(self) -> "Settings":

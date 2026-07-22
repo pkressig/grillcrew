@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
@@ -44,6 +44,7 @@ from app.services.public_signup import (
     normalize_email,
     normalize_phone,
 )
+from app.services.signup_confirmation import dispatch_signup_confirmation_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -148,6 +149,7 @@ def public_plan(
 )
 def public_signup(
     request: Request,
+    background_tasks: BackgroundTasks,
     organization_slug: str,
     shift_id: uuid.UUID,
     payload: PublicSignupCreate,
@@ -195,6 +197,22 @@ def public_signup(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="invalid signup"
         ) from exc
+    signup = created.signup
+    background_tasks.add_task(
+        dispatch_signup_confirmation_email,
+        get_settings(),
+        recipient=signup.volunteer.email_display,
+        signup_id=signup.id,
+        organization_name=organization.name,
+        organization_slug=organization.slug,
+        event_title=signup.shift.event.title,
+        event_type=signup.shift.event.event_type,
+        shift_starts_at=signup.shift.starts_at,
+        shift_ends_at=signup.shift.ends_at,
+        organization_timezone=organization.timezone,
+        volunteer_public_name=signup.public_name_snapshot,
+        management_token=created.management_token,
+    )
     return PublicSignupResponse(
         message="Du bist eingetragen.",
         signup=PublicSignupSummary(
