@@ -9,6 +9,7 @@ import uuid
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from typing import cast
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import Table, create_engine, event
@@ -35,6 +36,9 @@ from app.services.public_signup import (
     PublicSignupConflictError,
     PublicSignupNotFoundError,
     PublicSignupService,
+    can_self_cancel,
+    cancellation_deadline,
+    hash_management_token,
 )
 
 _TABLES = cast(
@@ -84,6 +88,7 @@ def _seed_shift(
     required_volunteers: int = 1,
     event_status: EventStatus = EventStatus.PUBLISHED,
     shift_status: ShiftStatus = ShiftStatus.OPEN,
+    event_date: date = date(2026, 6, 1),
 ) -> tuple[Organization, Shift]:
     theme = Theme(name="Theme")
     db_session.add(theme)
@@ -113,7 +118,7 @@ def _seed_shift(
     event_row = Event(
         season_id=season.id,
         title="Match",
-        date=date(2026, 6, 1),
+        date=event_date,
         location="Home",
         event_type="match",
         status=event_status,
@@ -122,8 +127,8 @@ def _seed_shift(
     db_session.flush()
     shift = Shift(
         event_id=event_row.id,
-        starts_at=datetime(2026, 6, 1, 10, 0, tzinfo=UTC),
-        ends_at=datetime(2026, 6, 1, 12, 0, tzinfo=UTC),
+        starts_at=datetime.combine(event_date, datetime.min.time(), UTC) + timedelta(hours=10),
+        ends_at=datetime.combine(event_date, datetime.min.time(), UTC) + timedelta(hours=12),
         required_volunteers=required_volunteers,
         status=shift_status,
     )
@@ -148,11 +153,60 @@ def _payload(**overrides: object) -> PublicSignupCreate:
 
 def test_create_signup_reserves_the_shift(session: Session) -> None:
     organization, shift = _seed_shift(session)
-    signup, occupied, required = PublicSignupService(session, organization.id).create(
-        shift.id, _payload()
-    )
-    assert signup.public_name_snapshot == "Mia Muster"
-    assert (occupied, required) == (1, 1)
+    created = PublicSignupService(session, organization.id).create(shift.id, _payload())
+    assert created.signup.public_name_snapshot == "Mia Muster"
+    assert (created.occupied, created.required) == (1, 1)
+    assert len(created.management_token) >= 43
+    assert created.signup.management_token_hash == hash_management_token(created.management_token)
+    assert created.management_token != created.signup.management_token_hash
+
+
+def test_management_lookup_is_tenant_scoped_and_excludes_legacy_rows(session: Session) -> None:
+    organization, shift = _seed_shift(session)
+    other_organization, _ = _seed_shift(session)
+    service = PublicSignupService(session, organization.id)
+    created = service.create(shift.id, _payload())
+    assert service.get_managed(created.management_token).id == created.signup.id
+    with pytest.raises(PublicSignupNotFoundError):
+        PublicSignupService(session, other_organization.id).get_managed(created.management_token)
+    created.signup.management_token_hash = None
+    session.commit()
+    with pytest.raises(PublicSignupNotFoundError):
+        service.get_managed(created.management_token)
+
+
+def test_cancellation_deadline_uses_zurich_calendar_days_and_exact_boundary() -> None:
+    zurich = ZoneInfo("Europe/Zurich")
+    shift_start = datetime(2026, 11, 2, 0, 30, tzinfo=zurich)
+    deadline = cancellation_deadline(shift_start, "Europe/Zurich")
+    assert deadline == datetime(2026, 10, 25, 23, 59, 59, tzinfo=zurich)
+    assert can_self_cancel(shift_start, "Europe/Zurich", deadline)
+    assert not can_self_cancel(shift_start, "Europe/Zurich", deadline + timedelta(seconds=1))
+
+
+def test_volunteer_cancellation_is_idempotent_and_records_metadata(session: Session) -> None:
+    organization, shift = _seed_shift(session, event_date=date(2027, 6, 1))
+    service = PublicSignupService(session, organization.id)
+    created = service.create(shift.id, _payload())
+    now = datetime(2027, 5, 20, 12, tzinfo=UTC)
+    cancelled = service.cancel(created.management_token, "Europe/Zurich", now)
+    assert cancelled.status == SignupStatus.CANCELLED_BY_VOLUNTEER
+    assert cancelled.cancellation_reason == "VOLUNTEER_SELF_SERVICE"
+    assert cancelled.cancelled_at is not None
+    assert service.cancel(created.management_token, "Europe/Zurich", now) is cancelled
+
+
+def test_volunteer_cancellation_after_deadline_is_rejected(session: Session) -> None:
+    organization, shift = _seed_shift(session, event_date=date(2027, 6, 1))
+    service = PublicSignupService(session, organization.id)
+    created = service.create(shift.id, _payload())
+    with pytest.raises(PublicSignupConflictError):
+        service.cancel(
+            created.management_token,
+            "Europe/Zurich",
+            datetime(2027, 5, 25, 0, 0, tzinfo=ZoneInfo("Europe/Zurich")),
+        )
+    assert created.signup.status == SignupStatus.ACTIVE
 
 
 def test_full_shift_rejects_further_signups(session: Session) -> None:
@@ -198,10 +252,10 @@ def test_duplicate_active_contact_rejects_second_signup_for_same_shift(
 def test_cancelled_signup_does_not_count_toward_capacity(session: Session) -> None:
     organization, shift = _seed_shift(session, required_volunteers=1)
     service = PublicSignupService(session, organization.id)
-    signup, _occupied, _required = service.create(shift.id, _payload())
-    signup.status = SignupStatus.CANCELLED_BY_ADMIN
+    created = service.create(shift.id, _payload())
+    created.signup.status = SignupStatus.CANCELLED_BY_ADMIN
     session.commit()
-    _new_signup, occupied, required = service.create(
+    new_signup = service.create(
         shift.id, _payload(email="second@example.test", phone="+41791234569")
     )
-    assert (occupied, required) == (1, 1)
+    assert (new_signup.occupied, new_signup.required) == (1, 1)

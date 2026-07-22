@@ -1,11 +1,15 @@
 """Transaction-safe, tenant-scoped public signup reservation."""
 
+import hashlib
 import re
+import secrets
 import uuid
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.planning import (
     ClubYear,
@@ -35,6 +39,28 @@ class PublicSignupValidationError(Exception):
     pass
 
 
+@dataclass(frozen=True)
+class CreatedPublicSignup:
+    signup: Signup
+    occupied: int
+    required: int
+    management_token: str
+
+
+def hash_management_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def cancellation_deadline(shift_start: datetime, timezone: str) -> datetime:
+    local_shift_date = shift_start.astimezone(ZoneInfo(timezone)).date()
+    deadline_date = local_shift_date - timedelta(days=8)
+    return datetime.combine(deadline_date, time(23, 59, 59), ZoneInfo(timezone))
+
+
+def can_self_cancel(shift_start: datetime, timezone: str, now: datetime) -> bool:
+    return now.astimezone(ZoneInfo(timezone)) <= cancellation_deadline(shift_start, timezone)
+
+
 def normalize_email(value: str) -> str:
     return value.strip().casefold()
 
@@ -57,7 +83,7 @@ class PublicSignupService:
         self.db = db
         self.organization_id = organization_id
 
-    def create(self, shift_id: uuid.UUID, payload: PublicSignupCreate) -> tuple[Signup, int, int]:
+    def create(self, shift_id: uuid.UUID, payload: PublicSignupCreate) -> CreatedPublicSignup:
         email = normalize_email(payload.email)
         phone = normalize_phone(payload.phone)
         validate_contact(email, phone)
@@ -108,6 +134,7 @@ class PublicSignupService:
             public_display_consent_at=now,
             created_from=SignupSource.PUBLIC_SIGNUP,
         )
+        management_token = secrets.token_urlsafe(32)
         signup = Signup(
             shift=shift,
             volunteer=volunteer,
@@ -115,11 +142,50 @@ class PublicSignupService:
             status=SignupStatus.ACTIVE,
             outcome=SignupOutcome.OPEN,
             source=SignupSource.PUBLIC_SIGNUP,
+            management_token_hash=hash_management_token(management_token),
         )
         self.db.add(signup)
         self.db.commit()
         self.db.refresh(signup)
-        return signup, occupied + 1, shift.required_volunteers
+        return CreatedPublicSignup(
+            signup, occupied + 1, shift.required_volunteers, management_token
+        )
+
+    def get_managed(self, token: str) -> Signup:
+        signup = self.db.scalar(
+            select(Signup)
+            .join(Shift)
+            .join(Event)
+            .join(Season)
+            .join(ClubYear)
+            .options(
+                joinedload(Signup.volunteer),
+                joinedload(Signup.shift).joinedload(Shift.event),
+            )
+            .where(
+                Signup.management_token_hash == hash_management_token(token),
+                ClubYear.organization_id == self.organization_id,
+            )
+        )
+        if signup is None:
+            raise PublicSignupNotFoundError
+        return signup
+
+    def cancel(self, token: str, timezone: str, now: datetime | None = None) -> Signup:
+        signup = self.get_managed(token)
+        if signup.status == SignupStatus.CANCELLED_BY_VOLUNTEER:
+            return signup
+        if signup.status != SignupStatus.ACTIVE:
+            raise PublicSignupConflictError("signup unavailable")
+        cancellation_time = now or datetime.now(UTC)
+        if not can_self_cancel(signup.shift.starts_at, timezone, cancellation_time):
+            raise PublicSignupConflictError("cancellation deadline passed")
+        signup.status = SignupStatus.CANCELLED_BY_VOLUNTEER
+        signup.cancelled_at = cancellation_time
+        signup.cancellation_reason = "VOLUNTEER_SELF_SERVICE"
+        self.db.commit()
+        self.db.refresh(signup)
+        return signup
 
     def _occupied(self, shift_id: uuid.UUID) -> int:
         return int(

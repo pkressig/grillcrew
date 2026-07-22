@@ -12,7 +12,7 @@ from app.core.config import get_settings
 from app.core.security.rate_limit import InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
 from app.models.organization import Organization
-from app.models.planning import ShiftStatus, SignupStatus
+from app.models.planning import ShiftStatus, Signup, SignupStatus
 from app.schemas.organization import (
     OrganizationContact,
     PublicOrganizationResponse,
@@ -20,6 +20,7 @@ from app.schemas.organization import (
     PublicTheme,
 )
 from app.schemas.planning import (
+    ManagedSignupResponse,
     PublicEventResponse,
     PublicPlanResponse,
     PublicShiftResponse,
@@ -38,6 +39,8 @@ from app.services.public_signup import (
     PublicSignupNotFoundError,
     PublicSignupService,
     PublicSignupValidationError,
+    can_self_cancel,
+    cancellation_deadline,
     normalize_email,
     normalize_phone,
 )
@@ -179,9 +182,7 @@ def public_signup(
     if not contact_allowed or not ip_allowed:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="try again")
     try:
-        signup, occupied, required = PublicSignupService(db, organization.id).create(
-            shift_id, payload
-        )
+        created = PublicSignupService(db, organization.id).create(shift_id, payload)
     except PublicSignupNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="shift not found"
@@ -197,10 +198,90 @@ def public_signup(
     return PublicSignupResponse(
         message="Du bist eingetragen.",
         signup=PublicSignupSummary(
-            public_name=signup.public_name_snapshot,
-            occupied_volunteers=occupied,
-            required_volunteers=required,
+            public_name=created.signup.public_name_snapshot,
+            occupied_volunteers=created.occupied,
+            required_volunteers=created.required,
         ),
+        management_url=(f"/{organization.slug}/manage-signup/{created.management_token}"),
+    )
+
+
+@router.get("/{organization_slug}/signups/manage/{token}", response_model=ManagedSignupResponse)
+def manage_public_signup(
+    request: Request,
+    organization_slug: str,
+    token: str,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> ManagedSignupResponse:
+    organization = _resolve_path_organization(request, organization_slug, db)
+    try:
+        signup = PublicSignupService(db, organization.id).get_managed(token)
+    except PublicSignupNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="invalid link") from exc
+    return _managed_signup_response(organization, signup)
+
+
+@router.post(
+    "/{organization_slug}/signups/manage/{token}/cancel",
+    response_model=ManagedSignupResponse,
+)
+def cancel_public_signup(
+    request: Request,
+    organization_slug: str,
+    token: str,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> ManagedSignupResponse:
+    organization = _resolve_path_organization(request, organization_slug, db)
+    service = PublicSignupService(db, organization.id)
+    try:
+        signup = service.cancel(token, organization.timezone)
+    except PublicSignupNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="invalid link") from exc
+    except PublicSignupConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="signup cannot be cancelled directly",
+        ) from exc
+    return _managed_signup_response(organization, signup)
+
+
+def _managed_signup_response(organization: Organization, signup: Signup) -> ManagedSignupResponse:
+    # The token authorizes this broader projection; it must never be reused by the public plan.
+    shift = signup.shift
+    event = shift.event
+    volunteer = signup.volunteer
+    allowed = signup.status == SignupStatus.ACTIVE and can_self_cancel(
+        shift.starts_at, organization.timezone, datetime.now(UTC)
+    )
+    guidance = None
+    if signup.status == SignupStatus.ACTIVE and not allowed:
+        label = organization.settings.coordination_contact_label
+        guidance = (
+            f"Bitte kontaktiere {label}, um deine Eintragung abzusagen."
+            if label
+            else "Bitte kontaktiere die Koordination, um deine Eintragung abzusagen."
+        )
+    return ManagedSignupResponse(
+        organization_name=organization.name,
+        organization_slug=organization.slug,
+        event_title=event.title,
+        event_type=event.event_type,
+        event_date=event.date,
+        event_location=event.location,
+        event_public_description=event.public_description,
+        shift_starts_at=shift.starts_at,
+        shift_ends_at=shift.ends_at,
+        shift_status=shift.status,
+        public_name=signup.public_name_snapshot,
+        first_name=volunteer.first_name,
+        last_name=volunteer.last_name,
+        phone=volunteer.phone_display,
+        email=volunteer.email_display,
+        signup_status=signup.status,
+        cancellation_deadline=cancellation_deadline(shift.starts_at, organization.timezone),
+        can_cancel=allowed,
+        cancellation_guidance=guidance,
+        cancelled_at=signup.cancelled_at,
     )
 
 

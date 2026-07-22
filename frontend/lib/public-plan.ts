@@ -48,6 +48,30 @@ export type PublicSignupResult = {
     occupied_volunteers: number;
     required_volunteers: number;
   } | null;
+  management_url: string | null;
+};
+
+export type ManagedSignup = {
+  organization_name: string;
+  organization_slug: string;
+  event_title: string;
+  event_type: string;
+  event_date: string;
+  event_location: string;
+  event_public_description: string | null;
+  shift_starts_at: string;
+  shift_ends_at: string;
+  shift_status: "OPEN" | "CLOSED" | "CANCELLED";
+  public_name: string;
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+  signup_status: "ACTIVE" | "CANCELLED_BY_VOLUNTEER" | "CANCELLED_BY_ADMIN";
+  cancellation_deadline: string;
+  can_cancel: boolean;
+  cancellation_guidance: string | null;
+  cancelled_at: string | null;
 };
 
 export class PublicSignupError extends Error {
@@ -77,4 +101,21 @@ export async function createPublicSignup(
     throw new PublicSignupError("signup failed", response.status);
   }
   return (await response.json()) as PublicSignupResult;
+}
+
+export async function fetchManagedSignup(org: string, token: string): Promise<ManagedSignup> {
+  const response = await fetch(
+    `${apiBaseUrl}/api/public/${encodeURIComponent(org)}/signups/manage/${encodeURIComponent(token)}`,
+  );
+  if (!response.ok) throw new PublicSignupError("invalid management link", response.status);
+  return (await response.json()) as ManagedSignup;
+}
+
+export async function cancelManagedSignup(org: string, token: string): Promise<ManagedSignup> {
+  const response = await fetch(
+    `${apiBaseUrl}/api/public/${encodeURIComponent(org)}/signups/manage/${encodeURIComponent(token)}/cancel`,
+    { method: "POST" },
+  );
+  if (!response.ok) throw new PublicSignupError("cancellation failed", response.status);
+  return (await response.json()) as ManagedSignup;
 }

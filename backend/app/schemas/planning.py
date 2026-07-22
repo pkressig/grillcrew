@@ -8,7 +8,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.planning import EventStatus, PlanningStatus, SeasonType, ShiftStatus
+from app.models.planning import EventStatus, PlanningStatus, SeasonType, ShiftStatus, SignupStatus
 
 
 class DateRangeModel(BaseModel):  # type: ignore[explicit-any]
@@ -222,6 +222,30 @@ class PublicSignupSummary(BaseModel):  # type: ignore[explicit-any]
 class PublicSignupResponse(BaseModel):  # type: ignore[explicit-any]
     message: str
     signup: PublicSignupSummary | None = None
+    management_url: str | None = None
+
+
+class ManagedSignupResponse(BaseModel):  # type: ignore[explicit-any]
+    organization_name: str
+    organization_slug: str
+    event_title: str
+    event_type: str
+    event_date: date_type
+    event_location: str
+    event_public_description: str | None
+    shift_starts_at: datetime
+    shift_ends_at: datetime
+    shift_status: ShiftStatus
+    public_name: str
+    first_name: str
+    last_name: str
+    phone: str
+    email: str
+    signup_status: SignupStatus
+    cancellation_deadline: datetime
+    can_cancel: bool
+    cancellation_guidance: str | None
+    cancelled_at: datetime | None
 
 
 class PublicEventResponse(BaseModel):  # type: ignore[explicit-any]
