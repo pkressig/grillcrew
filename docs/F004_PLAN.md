@@ -26,8 +26,7 @@ rate-limited IP/contact buckets receive `429`.
 ### Deferred
 
 Family/Sollstunden assignment, final compensation-type confirmation, full-shift waiting lists,
-hashed management links and self-service cancellation, confirmation/reminder emails, and admin
-volunteer/signup management remain deferred to later steps.
+confirmation/reminder emails and admin volunteer/signup management remain deferred to later steps.
 
 ## Step 2.1 — Admin signup visibility
 
@@ -48,3 +47,33 @@ KIOSK operational view is introduced in this step.
 Signup editing or cancellation, attendance and work records, family/Sollstunden assignment,
 compensation, management links, notifications, and a separate event-related KIOSK staff view remain
 deferred.
+
+## Step 3 — Personal management link and volunteer self-cancellation
+
+Status: implemented locally, awaiting independent architecture/security and UX review.
+
+Each new public signup receives a cryptographically random management token. Only its SHA-256 hash
+is stored; the raw token is returned once in the signup response as the organization-aware frontend
+route `/{organization_slug}/manage-signup/{token}`. Existing signups without a hash are intentionally
+not manageable through this flow.
+
+The unauthenticated, bearer-token endpoints are:
+
+- `GET /api/public/{organization_slug}/signups/manage/{token}`
+- `POST /api/public/{organization_slug}/signups/manage/{token}/cancel`
+
+Lookup is scoped through signup, shift, event, season, and club year to the resolved organization.
+The token-holder projection includes the submitted contact details, but excludes token hashes,
+internal notes, child/family data, and audit data. Public-plan projections remain contact-free.
+
+Self-cancellation is allowed through 23:59:59 in the organization timezone on the calendar day eight
+days before the local shift date. The API returns the concrete deadline, `can_cancel`, and friendly
+coordination guidance after the deadline. Successful cancellation records
+`CANCELLED_BY_VOLUNTEER`, `cancelledAt`, and the self-service source without deleting the row.
+Repeated self-cancellation is idempotent. Active-only public/admin occupancy and name lists therefore
+update automatically after cancellation.
+
+### Deferred
+
+Confirmation/reminder email delivery, editing submitted contact/name data, admin manual cancellation,
+family/Sollstunden assignment, compensation, attendance, and work records remain deferred.

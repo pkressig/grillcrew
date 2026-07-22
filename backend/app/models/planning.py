@@ -288,6 +288,8 @@ class Signup(Base):
         Enum(SignupSource, name="signup_source", create_type=False), nullable=False
     )
     management_token_hash: Mapped[str | None] = mapped_column(String(64))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancellation_reason: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

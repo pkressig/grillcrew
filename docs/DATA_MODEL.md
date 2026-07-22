@@ -221,8 +221,9 @@ Materialized for public self-signup in F004 Step 2. `preferredLanguage`, `accoun
 
 ### Signup
 
-Materialized for immediate public reservations in F004 Step 2. Compensation/family assignment,
-confirmation/cancellation details, and management-token generation remain deferred.
+Materialized for immediate public reservations in F004 Step 2. F004 Step 3 generates management
+tokens for new public signups, persists only their SHA-256 hashes, and materializes cancellation
+timestamp/reason metadata. Compensation/family assignment and confirmation delivery remain deferred.
 
 - id
 - shiftId
@@ -232,10 +233,10 @@ confirmation/cancellation details, and management-token generation remain deferr
 - publicNameSnapshot
 - status: ACTIVE | CANCELLED_BY_VOLUNTEER | CANCELLED_BY_ADMIN
 - outcome: OPEN | ATTENDED | EXCUSED_CANCELLED | LATE_CANCELLED | NO_SHOW | SUBSTITUTE_ORGANIZED
-- managementTokenHash
+- managementTokenHash nullable (SHA-256 hex digest only; raw token is never persisted)
 - confirmedAt
-- cancelledAt
-- cancellationReason
+- cancelledAt nullable
+- cancellationReason nullable (`VOLUNTEER_SELF_SERVICE` for the Step 3 public flow)
 - source: PUBLIC_SIGNUP | ADMIN | IMPORT
 
 ### Family

@@ -116,11 +116,17 @@ describe("OrganizationLanding", () => {
     mockedSignup.mockResolvedValue({
       message: "Du bist eingetragen.",
       signup: { public_name: "Mia Muster", occupied_volunteers: 1, required_volunteers: 2 },
+      management_url: "/example/manage-signup/secret-token",
     });
     fireEvent.submit(screen.getByRole("form"));
     await waitFor(() => expect(screen.getByText("1 von 2 Plätzen besetzt")).toBeInTheDocument());
     expect(screen.getByText("Eingetragen: Mia Muster")).toBeInTheDocument();
     expect(screen.queryByText("mia@example.test")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Meine Eintragung öffnen" })).toHaveAttribute(
+      "href",
+      "/example/manage-signup/secret-token",
+    );
+    expect(screen.getByText(/speichere oder öffne diesen Link/)).toBeInTheDocument();
   });
 
   it("allows closing the signup form using the cancel button", async () => {

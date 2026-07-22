@@ -94,6 +94,14 @@ and therefore does not use cookie CSRF protection. The backend resolves the tena
 honeypot, minimum-fill-time and IP/contact rate limits, and locks the shift row while checking active
 capacity. Public responses contain only a public-name snapshot and capacity, never contact data.
 
+Public signup management uses bearer tokens at
+`GET /api/public/{organization_slug}/signups/manage/{token}` and its `/cancel` POST companion. Tokens
+are high-entropy values stored only as SHA-256 hashes and are scoped through the planning hierarchy to
+the resolved organization. These endpoints do not use cookie authentication or cookie CSRF; possession
+of the token is the authorization proof. Only this token-holder projection may return the volunteer's
+submitted contact details. Unknown, legacy tokenless, and cross-tenant lookups return the same generic
+not-found response.
+
 ## Permissions
 
 Permissions are organization-local. A user may be Admin in one organization and have no access to another. Role checks must combine:

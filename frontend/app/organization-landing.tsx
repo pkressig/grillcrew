@@ -25,7 +25,9 @@ export function OrganizationLanding() {
   const [formStartedAt, setFormStartedAt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [signupError, setSignupError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ message: string; managementUrl: string | null } | null>(
+    null,
+  );
 
   function openSignup(shiftId: string) {
     setSelectedShift(shiftId);
@@ -69,7 +71,7 @@ export function OrganizationLanding() {
             : current,
         );
       }
-      setSuccess(result.message);
+      setSuccess({ message: result.message, managementUrl: result.management_url });
       setSelectedShift(null);
     } catch (err) {
       if (err instanceof PublicSignupError) {
@@ -175,13 +177,30 @@ export function OrganizationLanding() {
             {success ? (
               <div
                 role="status"
-                className="flex items-center justify-between gap-3 rounded-xl bg-green-100 p-4 font-semibold text-green-900"
+                className="flex items-start justify-between gap-3 rounded-xl bg-green-100 p-4 font-semibold text-green-900"
               >
-                <span>{success}</span>
+                <div>
+                  <p>{success.message} Dein Platz ist reserviert.</p>
+                  {success.managementUrl ? (
+                    <>
+                      <a
+                        href={success.managementUrl}
+                        className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-green-900 px-4 text-white hover:bg-green-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-900"
+                      >
+                        Meine Eintragung öffnen
+                      </a>
+                      <p className="mt-2 text-sm font-normal text-green-950">
+                        Wichtig: Da der E-Mail-Versand noch nicht aktiv ist, speichere oder öffne
+                        diesen Link jetzt. Damit kannst du deine Eintragung später ansehen oder
+                        rechtzeitig absagen.
+                      </p>
+                    </>
+                  ) : null}
+                </div>
                 <button
                   type="button"
                   onClick={() => setSuccess(null)}
-                  className="rounded-md px-2 py-1 text-sm hover:bg-green-200"
+                  className="flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-green-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-900"
                   aria-label="Hinweis schliessen"
                 >
                   ✕
