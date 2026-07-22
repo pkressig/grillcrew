@@ -13,6 +13,7 @@ import {
   updateEventStatus,
   updateSeasonStatus,
   updateShiftStatus,
+  updateSignupAttendance,
   type AdminSignup,
   type ClubYear,
   type EventStatus,
@@ -22,6 +23,7 @@ import {
   type SeasonType,
   type Shift,
   type ShiftStatus,
+  type SignupOutcome,
 } from "@/lib/planning";
 
 const statusLabels: Record<PlanningStatus, string> = {
@@ -57,6 +59,14 @@ const shiftStatusLabels: Record<ShiftStatus, string> = {
   OPEN: "Offen",
   CLOSED: "Geschlossen",
   CANCELLED: "Abgesagt",
+};
+const attendanceLabels: Record<SignupOutcome, string> = {
+  OPEN: "Noch offen",
+  ATTENDED: "Anwesend",
+  EXCUSED_CANCELLED: "Entschuldigt",
+  LATE_CANCELLED: "Kurzfristig abgesagt",
+  NO_SHOW: "Nicht erschienen",
+  SUBSTITUTE_ORGANIZED: "Ersatz organisiert",
 };
 const eventActions: Record<EventStatus, EventStatus[]> = {
   DRAFT: ["PUBLISHED", "CANCELLED"],
@@ -324,6 +334,19 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
       () => cancelSignup(org, signup.id),
       `Die Eintragung von ${signup.public_name} wurde abgesagt.`,
     );
+  }
+
+  function changeAttendance(signup: AdminSignup, outcome: SignupOutcome): boolean {
+    if (
+      outcome === "NO_SHOW" &&
+      !window.confirm(`${signup.public_name} wirklich als nicht erschienen markieren?`)
+    )
+      return false;
+    void run(
+      () => updateSignupAttendance(org, signup.id, outcome),
+      `Anwesenheit von ${signup.public_name} wurde auf „${attendanceLabels[outcome]}“ gesetzt.`,
+    );
+    return true;
   }
 
   if (loading)
@@ -671,6 +694,10 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                     ) : null}
                                     <div className="mt-3 border-t pt-3">
                                       <p className="text-sm font-medium">Eingetragene Helfende</p>
+                                      <p className="mt-0.5 text-xs text-muted-foreground">
+                                        Teilnahmestatus erfassen (keine automatische Stunden- oder
+                                        Auszahlungsbuchung).
+                                      </p>
                                       {shift.signups.length === 0 ? (
                                         <p className="mt-1 text-sm text-muted-foreground">
                                           Noch niemand eingetragen.
@@ -686,6 +713,37 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                 {signup.public_name}
                                               </span>
                                               <div className="flex flex-wrap items-center gap-2">
+                                                <label className="grid gap-1 text-xs font-medium">
+                                                  <span>Anwesenheit</span>
+                                                  <select
+                                                    className="min-h-11 rounded-md border bg-background px-3 py-1"
+                                                    value={signup.outcome}
+                                                    disabled={busy}
+                                                    aria-label={`Anwesenheit von ${signup.public_name} im Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title}`}
+                                                    onChange={(event) => {
+                                                      if (
+                                                        !changeAttendance(
+                                                          signup,
+                                                          event.target.value as SignupOutcome,
+                                                        )
+                                                      )
+                                                        event.currentTarget.value = signup.outcome;
+                                                    }}
+                                                  >
+                                                    {(
+                                                      [
+                                                        "OPEN",
+                                                        "ATTENDED",
+                                                        "EXCUSED_CANCELLED",
+                                                        "NO_SHOW",
+                                                      ] as const
+                                                    ).map((outcome) => (
+                                                      <option key={outcome} value={outcome}>
+                                                        {attendanceLabels[outcome]}
+                                                      </option>
+                                                    ))}
+                                                  </select>
+                                                </label>
                                                 <a
                                                   className="inline-flex min-h-11 items-center rounded-md border bg-background px-3 py-1 text-xs font-medium underline transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                                   href={`tel:${signup.phone}`}

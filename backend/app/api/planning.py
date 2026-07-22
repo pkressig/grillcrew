@@ -14,7 +14,7 @@ from app.api.dependencies import CurrentStaffMembership, require_staff_role, val
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.identity import StaffRole
-from app.models.planning import Shift, SignupStatus
+from app.models.planning import Shift, Signup, SignupStatus
 from app.schemas.planning import (
     AdminShiftResponse,
     AdminSignupResponse,
@@ -30,6 +30,7 @@ from app.schemas.planning import (
     ShiftCreate,
     ShiftResponse,
     ShiftUpdate,
+    SignupAttendanceUpdate,
 )
 from app.services.planning import (
     PlanningConflictError,
@@ -52,18 +53,20 @@ def _admin_shift_response(shift: Shift) -> AdminShiftResponse:
         **ShiftResponse.model_validate(shift).model_dump(),
         occupied_volunteers=occupied,
         open_places=max(shift.required_volunteers - occupied, 0),
-        signups=[
-            AdminSignupResponse(
-                id=signup.id,
-                public_name=signup.public_name_snapshot,
-                first_name=signup.volunteer.first_name,
-                last_name=signup.volunteer.last_name,
-                phone=signup.volunteer.phone_display,
-                email=signup.volunteer.email_display,
-                created_at=signup.created_at,
-            )
-            for signup in active_signups
-        ],
+        signups=[_admin_signup_response(signup) for signup in active_signups],
+    )
+
+
+def _admin_signup_response(signup: Signup) -> AdminSignupResponse:
+    return AdminSignupResponse(
+        id=signup.id,
+        public_name=signup.public_name_snapshot,
+        first_name=signup.volunteer.first_name,
+        last_name=signup.volunteer.last_name,
+        phone=signup.volunteer.phone_display,
+        email=signup.volunteer.email_display,
+        outcome=signup.outcome,
+        created_at=signup.created_at,
     )
 
 
@@ -331,5 +334,24 @@ def cancel_signup(
     try:
         shift = _write_service(organization_slug, current, db, request).cancel_signup(signup_id)
         return _admin_shift_response(shift)
+    except (PlanningNotFoundError, PlanningConflictError) as error:
+        raise _translate(error) from None
+
+
+@router.patch("/signups/{signup_id}/attendance", response_model=AdminSignupResponse)
+def update_signup_attendance(
+    organization_slug: str,
+    signup_id: uuid.UUID,
+    payload: SignupAttendanceUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> AdminSignupResponse:
+    try:
+        signup = _write_service(organization_slug, current, db, request).update_signup_attendance(
+            signup_id, payload.outcome
+        )
+        return _admin_signup_response(signup)
     except (PlanningNotFoundError, PlanningConflictError) as error:
         raise _translate(error) from None

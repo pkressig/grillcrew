@@ -14,6 +14,7 @@ from app.models.planning import (
     Season,
     Shift,
     Signup,
+    SignupOutcome,
     SignupStatus,
 )
 from app.schemas.planning import (
@@ -271,6 +272,32 @@ class PlanningService:
         signup.cancellation_reason = "ADMIN_MANUAL"
         self.db.commit()
         return signup.shift
+
+    def update_signup_attendance(self, signup_id: uuid.UUID, outcome: SignupOutcome) -> Signup:
+        signup = self.db.scalar(
+            select(Signup)
+            .join(Shift)
+            .join(Event)
+            .join(Season)
+            .join(ClubYear)
+            .options(selectinload(Signup.volunteer))
+            .where(
+                Signup.id == signup_id,
+                ClubYear.organization_id == self.organization_id,
+            )
+            .with_for_update(of=Signup)
+        )
+        if signup is None:
+            raise PlanningNotFoundError
+        if signup.status != SignupStatus.ACTIVE:
+            raise PlanningConflictError("attendance can only be updated for an active signup")
+        if signup.outcome == outcome:
+            return signup
+
+        signup.outcome = outcome
+        self.db.commit()
+        self.db.refresh(signup)
+        return signup
 
     def _get_season(self, season_id: uuid.UUID) -> Season:
         item = self.db.scalar(

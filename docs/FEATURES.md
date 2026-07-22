@@ -313,6 +313,14 @@ High.
 
 ## F009 Attendance
 
+**Status**
+
+Step 1 is implemented locally. ADMIN and KOORDINATION can update the outcome of an active signup
+from the existing planning shift card. The authenticated admin projection includes the outcome; public
+plan and signup projections do not. Cancelled signups remain historical and cannot be marked through
+the attendance endpoint. Work records, compensation, credits, exports, reminders, and detailed
+attendance audit remain outside this step.
+
 **Goal**  
 Track the outcome of organization-local signups.
 

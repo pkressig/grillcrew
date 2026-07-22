@@ -25,6 +25,7 @@ from app.models.planning import (
     SeasonType,
     Shift,
     ShiftStatus,
+    SignupOutcome,
     SignupStatus,
 )
 from app.schemas.planning import (
@@ -35,6 +36,7 @@ from app.schemas.planning import (
     SeasonUpdate,
     ShiftCreate,
     ShiftUpdate,
+    SignupAttendanceUpdate,
 )
 from app.services.auth import REFRESH_TOKEN_COOKIE_NAME
 from app.services.planning import (
@@ -133,6 +135,13 @@ def test_client_payload_has_no_organization_id() -> None:
     assert "organization_id" not in payload.model_dump()
 
 
+def test_attendance_payload_rejects_extra_fields() -> None:
+    with pytest.raises(ValidationError):
+        SignupAttendanceUpdate.model_validate(
+            {"outcome": "ATTENDED", "organization_id": str(uuid4())}
+        )
+
+
 @pytest.mark.parametrize(
     ("schema", "parent_field"), [(EventCreate, "season_id"), (ShiftCreate, "event_id")]
 )
@@ -212,6 +221,7 @@ def test_event_shift_routes_are_registered_with_manage_guard() -> None:
         ("POST", "/api/admin/{organization_slug}/events/{event_id}/shifts"),
         ("PATCH", "/api/admin/{organization_slug}/shifts/{shift_id}"),
         ("POST", "/api/admin/{organization_slug}/signups/{signup_id}/cancel"),
+        ("PATCH", "/api/admin/{organization_slug}/signups/{signup_id}/attendance"),
     }
     actual = {
         (method, getattr(route, "path", ""))
@@ -295,6 +305,49 @@ def test_admin_cancel_does_not_overwrite_volunteer_cancellation() -> None:
     assert db.commits == 0
 
 
+def test_attendance_update_is_idempotent_and_active_only() -> None:
+    signup = SimpleNamespace(
+        id=uuid4(),
+        status=SignupStatus.ACTIVE,
+        outcome=SignupOutcome.OPEN,
+        volunteer=SimpleNamespace(),
+    )
+    db = _SignupDb(signup)
+    service = PlanningService(cast(object, db), uuid4())  # type: ignore[arg-type]
+
+    result = service.update_signup_attendance(signup.id, SignupOutcome.ATTENDED)
+    assert result.outcome == SignupOutcome.ATTENDED
+    assert db.commits == 1
+    assert db.refreshes == 1
+
+    service.update_signup_attendance(signup.id, SignupOutcome.ATTENDED)
+    assert db.commits == 1
+    assert db.refreshes == 1
+
+
+@pytest.mark.parametrize(
+    "signup_status",
+    [SignupStatus.CANCELLED_BY_VOLUNTEER, SignupStatus.CANCELLED_BY_ADMIN],
+)
+def test_cancelled_signup_rejects_attendance_update(signup_status: SignupStatus) -> None:
+    signup = SimpleNamespace(id=uuid4(), status=signup_status, outcome=SignupOutcome.OPEN)
+    db = _SignupDb(signup)
+
+    with pytest.raises(PlanningConflictError, match="active signup"):
+        PlanningService(cast(object, db), uuid4()).update_signup_attendance(  # type: ignore[arg-type]
+            signup.id, SignupOutcome.NO_SHOW
+        )
+
+    assert db.commits == 0
+
+
+def test_wrong_tenant_or_missing_signup_attendance_returns_not_found() -> None:
+    with pytest.raises(PlanningNotFoundError):
+        PlanningService(cast(object, _SignupDb(None)), uuid4()).update_signup_attendance(  # type: ignore[arg-type]
+            uuid4(), SignupOutcome.ATTENDED
+        )
+
+
 def test_admin_shift_response_includes_only_active_contact_details_in_stable_order() -> None:
     now = datetime.now(UTC)
     volunteer = SimpleNamespace(
@@ -309,6 +362,7 @@ def test_admin_shift_response_includes_only_active_contact_details_in_stable_ord
         SimpleNamespace(
             id=signup_id,
             status=SignupStatus.ACTIVE,
+            outcome=SignupOutcome.OPEN,
             public_name_snapshot=public_name,
             volunteer=volunteer,
             created_at=created_at,
@@ -350,6 +404,7 @@ def test_admin_shift_response_includes_only_active_contact_details_in_stable_ord
     assert [signup.public_name for signup in response.signups] == ["Mia Muster", "Zweite Person"]
     assert response.signups[0].phone == "+41 79 123 45 67"
     assert response.signups[0].email == "mia@example.test"
+    assert response.signups[0].outcome == SignupOutcome.OPEN
     assert "internal_note" not in response.signups[0].model_dump()
 
 
@@ -449,9 +504,13 @@ class _SignupDb:
     def __init__(self, signup: object | None) -> None:
         self.signup = signup
         self.commits = 0
+        self.refreshes = 0
 
     def scalar(self, _statement: object) -> object | None:
         return self.signup
 
     def commit(self) -> None:
         self.commits += 1
+
+    def refresh(self, _item: object) -> None:
+        self.refreshes += 1

@@ -64,6 +64,7 @@ const shift = {
       last_name: "Muster",
       phone: "+41 79 123 45 67",
       email: "mia@example.test",
+      outcome: "OPEN",
       created_at: "2026-07-21T10:00:00Z",
     },
   ],
@@ -216,6 +217,53 @@ describe("planning admin", () => {
       }),
     ).toHaveAttribute("href", "mailto:mia@example.test");
     expect(screen.getByText("Öffentlich: Bitte frühzeitig melden")).toBeInTheDocument();
+  });
+
+  it("renders and updates attendance with credentials and CSRF", async () => {
+    document.cookie = "gc_csrf=attendance-token";
+    const baseFetch = planningFetch("KOORDINATION", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/signups/signup-1/attendance") && init?.method === "PATCH")
+        return Response.json({ ...shift.signups[0], outcome: "ATTENDED" });
+      return baseFetch(input, init);
+    });
+    renderAdmin("KOORDINATION", fetchMock);
+
+    const attendance = await screen.findByRole("combobox", {
+      name: /Anwesenheit von Mia Muster im Einsatz .* f.r Sommerfest/,
+    });
+    expect(attendance).toHaveValue("OPEN");
+    expect(screen.getByText("Noch offen", { selector: "option" })).toBeInTheDocument();
+    fireEvent.change(attendance, { target: { value: "ATTENDED" } });
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/admin\/example\/signups\/signup-1\/attendance$/),
+        expect.objectContaining({
+          method: "PATCH",
+          credentials: "include",
+          headers: expect.objectContaining({ "X-CSRF-Token": "attendance-token" }),
+          body: JSON.stringify({ outcome: "ATTENDED" }),
+        }),
+      ),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Anwesend");
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/events/event-1/shifts")),
+    ).toHaveLength(2);
+  });
+
+  it("requires confirmation before marking a no-show", async () => {
+    const confirmMock = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirmMock);
+    const fetchMock = renderAdmin("ADMIN", planningFetch("ADMIN", false, [season], true));
+
+    fireEvent.change(await screen.findByRole("combobox", { name: /Anwesenheit von Mia Muster/ }), {
+      target: { value: "NO_SHOW" },
+    });
+
+    expect(confirmMock).toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/attendance"))).toBe(false);
   });
 
   it("renders clear event and shift empty states", async () => {

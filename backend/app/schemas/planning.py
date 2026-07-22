@@ -8,7 +8,14 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.models.planning import EventStatus, PlanningStatus, SeasonType, ShiftStatus, SignupStatus
+from app.models.planning import (
+    EventStatus,
+    PlanningStatus,
+    SeasonType,
+    ShiftStatus,
+    SignupOutcome,
+    SignupStatus,
+)
 
 
 class DateRangeModel(BaseModel):  # type: ignore[explicit-any]
@@ -182,7 +189,13 @@ class AdminSignupResponse(BaseModel):  # type: ignore[explicit-any]
     last_name: str
     phone: str
     email: str
+    outcome: SignupOutcome
     created_at: datetime
+
+
+class SignupAttendanceUpdate(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+    outcome: SignupOutcome
 
 
 class AdminShiftResponse(ShiftResponse):  # type: ignore[explicit-any]
