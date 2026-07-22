@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   createClubYear,
+  cancelSignup,
   createEvent,
   createSeason,
   createShift,
@@ -12,6 +13,7 @@ import {
   updateEventStatus,
   updateSeasonStatus,
   updateShiftStatus,
+  type AdminSignup,
   type ClubYear,
   type EventStatus,
   type PlanningEvent,
@@ -309,6 +311,19 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     if (next === "CANCELLED" && !window.confirm(`Einsatz für "${eventTitle}" wirklich absagen?`))
       return;
     void run(() => updateShiftStatus(org, shift.id, next), "Einsatzstatus wurde aktualisiert.");
+  }
+
+  function cancelVolunteerSignup(signup: AdminSignup) {
+    if (
+      !window.confirm(
+        `Möchtest du die Eintragung von ${signup.public_name} wirklich absagen? Der Platz wird danach wieder frei.`,
+      )
+    )
+      return;
+    void run(
+      () => cancelSignup(org, signup.id),
+      `Die Eintragung von ${signup.public_name} wurde abgesagt.`,
+    );
   }
 
   if (loading)
@@ -685,6 +700,15 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                 >
                                                   {signup.email}
                                                 </a>
+                                                <button
+                                                  className="inline-flex min-h-11 items-center rounded-md border border-status-error bg-background px-3 py-1 text-xs font-medium text-status-error transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                  disabled={busy}
+                                                  aria-label={`Eintragung von ${signup.public_name} absagen`}
+                                                  onClick={() => cancelVolunteerSignup(signup)}
+                                                  type="button"
+                                                >
+                                                  Eintragung absagen
+                                                </button>
                                               </div>
                                             </li>
                                           ))}

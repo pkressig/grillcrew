@@ -236,7 +236,8 @@ timestamp/reason metadata. Compensation/family assignment and confirmation deliv
 - managementTokenHash nullable (SHA-256 hex digest only; raw token is never persisted)
 - confirmedAt
 - cancelledAt nullable
-- cancellationReason nullable (`VOLUNTEER_SELF_SERVICE` for the Step 3 public flow)
+- cancellationReason nullable (`VOLUNTEER_SELF_SERVICE` for the Step 3 public flow;
+  `ADMIN_MANUAL` for the Step 3.1 staff flow)
 - source: PUBLIC_SIGNUP | ADMIN | IMPORT
 
 ### Family

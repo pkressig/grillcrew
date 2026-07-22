@@ -1,7 +1,7 @@
 """Tenant-safe planning CRUD and lifecycle rules."""
 
 import uuid
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -14,6 +14,7 @@ from app.models.planning import (
     Season,
     Shift,
     Signup,
+    SignupStatus,
 )
 from app.schemas.planning import (
     ClubYearCreate,
@@ -239,6 +240,37 @@ class PlanningService:
         self.db.commit()
         self.db.refresh(item)
         return item
+
+    def cancel_signup(self, signup_id: uuid.UUID, now: datetime | None = None) -> Shift:
+        signup = self.db.scalar(
+            select(Signup)
+            .join(Shift)
+            .join(Event)
+            .join(Season)
+            .join(ClubYear)
+            .options(
+                selectinload(Signup.shift)
+                .selectinload(Shift.signups)
+                .selectinload(Signup.volunteer)
+            )
+            .where(
+                Signup.id == signup_id,
+                ClubYear.organization_id == self.organization_id,
+            )
+            .with_for_update(of=Signup)
+        )
+        if signup is None:
+            raise PlanningNotFoundError
+        if signup.status == SignupStatus.CANCELLED_BY_ADMIN:
+            return signup.shift
+        if signup.status != SignupStatus.ACTIVE:
+            raise PlanningConflictError("signup was already cancelled by the volunteer")
+
+        signup.status = SignupStatus.CANCELLED_BY_ADMIN
+        signup.cancelled_at = now or datetime.now(UTC)
+        signup.cancellation_reason = "ADMIN_MANUAL"
+        self.db.commit()
+        return signup.shift
 
     def _get_season(self, season_id: uuid.UUID) -> Season:
         item = self.db.scalar(

@@ -125,13 +125,15 @@ Medium.
 
 **Status**
 
-Steps 1, 2, 2.1, and 3 are implemented locally: the organization public route
+Steps 1, 2, 2.1, 3, and 3.1 are implemented locally: the organization public route
 presents upcoming published events and non-cancelled shifts through a public-safe API, visitors can
 reserve an open place without an account, and ADMIN/KOORDINATION can see active occupancy plus
 volunteer contact details in the authenticated planning cards. New volunteers receive a hashed-at-rest
 personal management link where they can view their own submitted details and cancel before the
 calendar-day deadline. Public contacts remain private and cancelled signups are excluded from active
 occupancy.
+ADMIN and KOORDINATION can also manually cancel an active signup from the planning card without
+deleting its history; active admin/public occupancy and name projections update immediately.
 
 **Goal**  
 Allow each organization to manage public events or operating days.
