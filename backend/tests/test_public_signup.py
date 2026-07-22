@@ -45,12 +45,24 @@ def test_public_signup_returns_safe_summary(
 ) -> None:
     organization = SimpleNamespace(
         id=uuid4(),
+        name="Example Organization",
         slug="example",
+        timezone="Europe/Zurich",
         settings=SimpleNamespace(
             signup_rate_limit_per_contact=5, signup_rate_limit_window_minutes=60
         ),
     )
-    signup = SimpleNamespace(public_name_snapshot="Mia Muster")
+    signup = SimpleNamespace(
+        id=uuid4(),
+        public_name_snapshot="Mia Muster",
+        volunteer=SimpleNamespace(email_display="mia@example.test"),
+        shift=SimpleNamespace(
+            starts_at=datetime(2026, 8, 1, 8, tzinfo=UTC),
+            ends_at=datetime(2026, 8, 1, 10, tzinfo=UTC),
+            event=SimpleNamespace(title="Heimspiel", event_type="Match"),
+        ),
+    )
+    dispatched: list[dict[str, object]] = []
 
     class FakeService:
         def __init__(self, _db: object, organization_id: object) -> None:
@@ -63,6 +75,11 @@ def test_public_signup_returns_safe_summary(
     monkeypatch.setattr(public, "resolve_organization", lambda *_args: organization)
     monkeypatch.setattr(public, "PublicSignupService", FakeService)
     monkeypatch.setattr(public, "signup_rate_limiter", InMemoryRateLimiter())
+    monkeypatch.setattr(
+        public,
+        "dispatch_signup_confirmation_email",
+        lambda _settings, **kwargs: dispatched.append(kwargs),
+    )
     try:
         response = client.post(f"/api/public/example/shifts/{uuid4()}/signups", json=payload())
     finally:
@@ -74,6 +91,8 @@ def test_public_signup_returns_safe_summary(
         "required_volunteers": 2,
     }
     assert response.json()["management_url"] == "/example/manage-signup/secret-token"
+    assert len(dispatched) == 1
+    assert dispatched[0]["recipient"] == "mia@example.test"
     assert "phone" not in response.text
     assert "email" not in response.text
 
@@ -82,8 +101,14 @@ def test_honeypot_is_generic_and_does_not_create(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     organization = SimpleNamespace(id=uuid4())
+    dispatched: list[object] = []
     app.dependency_overrides[get_db] = lambda: object()
     monkeypatch.setattr(public, "resolve_organization", lambda *_args: organization)
+    monkeypatch.setattr(
+        public,
+        "dispatch_signup_confirmation_email",
+        lambda *_args, **_kwargs: dispatched.append(object()),
+    )
     try:
         response = client.post(
             f"/api/public/example/shifts/{uuid4()}/signups", json=payload(website="spam")
@@ -92,6 +117,7 @@ def test_honeypot_is_generic_and_does_not_create(
         app.dependency_overrides.clear()
     assert response.status_code == 201
     assert response.json()["signup"] is None
+    assert dispatched == []
 
 
 def test_management_endpoint_returns_token_holder_details_without_internals(
@@ -192,8 +218,14 @@ def test_public_signup_rejects_invalid_or_too_fast_requests(
     expected: int,
 ) -> None:
     organization = SimpleNamespace(id=uuid4())
+    dispatched: list[object] = []
     app.dependency_overrides[get_db] = lambda: object()
     monkeypatch.setattr(public, "resolve_organization", lambda *_args: organization)
+    monkeypatch.setattr(
+        public,
+        "dispatch_signup_confirmation_email",
+        lambda *_args, **_kwargs: dispatched.append(object()),
+    )
     try:
         response = client.post(
             f"/api/public/example/shifts/{uuid4()}/signups", json=payload(**change)
@@ -201,3 +233,4 @@ def test_public_signup_rejects_invalid_or_too_fast_requests(
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == expected
+    assert dispatched == []

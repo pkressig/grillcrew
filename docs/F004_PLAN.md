@@ -97,3 +97,25 @@ link continues to show the resulting cancelled state.
 
 Full audit-log events, rebooking, replacement assignment, contact editing, notifications, attendance,
 work records, and KIOSK-specific actions remain deferred.
+
+## Step 4 — Signup confirmation email
+
+Status: implemented locally, awaiting independent architecture/security and UX review.
+
+After a public signup has reserved its place and committed successfully, the API schedules exactly
+one informational confirmation email with FastAPI background tasks. The existing provider-neutral
+`EmailSender` delivers a German confirmation containing the organization, event/type, organization-
+local date and shift times, public volunteer name, public plan URL, and absolute personal management
+URL. The message asks the volunteer to save that link and explains that phone and email are visible
+only to authorized staff.
+
+The raw management token exists only in the one-time signup response and email body; it is not added
+to persisted rows, public/admin projections, or logs. Sender configuration and delivery failures are
+logged with safe metadata and never change the successful signup response or roll back its immediate
+reservation. `FRONTEND_PUBLIC_URL` supplies the absolute frontend origin and defaults safely to
+`http://localhost:3000` for local development.
+
+### Deferred
+
+Reminder and cancellation emails, resend controls, admin notifications, delivery-status tracking,
+queues/workers, provider-specific email features, and HTML templates remain deferred.

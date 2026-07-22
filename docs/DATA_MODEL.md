@@ -223,7 +223,9 @@ Materialized for public self-signup in F004 Step 2. `preferredLanguage`, `accoun
 
 Materialized for immediate public reservations in F004 Step 2. F004 Step 3 generates management
 tokens for new public signups, persists only their SHA-256 hashes, and materializes cancellation
-timestamp/reason metadata. Compensation/family assignment and confirmation delivery remain deferred.
+timestamp/reason metadata. F004 Step 4 dispatches a confirmation email using the raw token
+transiently; no additional column is persisted for it. Compensation/family assignment remain
+deferred.
 
 - id
 - shiftId

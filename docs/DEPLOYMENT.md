@@ -45,6 +45,9 @@ live gehen:
   zu versenden.
 - `EMAIL_FROM_ADDRESS`: plattformweite Absenderadresse; nicht pro Organisation konfigurierbar (siehe
   D-040, Deliverability-Begruendung).
+- `FRONTEND_PUBLIC_URL`: oeffentliche Frontend-Origin ohne organisationsspezifischen Pfad, z. B.
+  `https://grillcrew.vercel.app`; das Backend erzeugt daraus absolute Links fuer transaktionale
+  E-Mails. Der lokale Default ist `http://localhost:3000`.
 - `AUTH_COOKIE_SECURE`, `AUTH_COOKIE_DOMAIN`, Token-Laufzeiten sowie die `AUTH_RATE_LIMITS__*`-Variablen
   (D-038) haben produktionstaugliche Defaults und muessen nur bei abweichendem Bedarf gesetzt werden.
 

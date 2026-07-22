@@ -190,8 +190,9 @@ export function OrganizationLanding() {
                         Meine Eintragung öffnen
                       </a>
                       <p className="mt-2 text-sm font-normal text-green-950">
-                        Wichtig: Da der E-Mail-Versand noch nicht aktiv ist, speichere oder öffne
-                        diesen Link jetzt. Damit kannst du deine Eintragung später ansehen oder
+                        Wir haben dir eine Bestätigung per E-Mail gesendet. Speichere oder öffne
+                        diesen Link trotzdem jetzt – die E-Mail kann verspätet eintreffen oder im
+                        Spam-Ordner landen. Damit kannst du deine Eintragung später ansehen oder
                         rechtzeitig absagen.
                       </p>
                     </>
@@ -200,7 +201,7 @@ export function OrganizationLanding() {
                 <button
                   type="button"
                   onClick={() => setSuccess(null)}
-                  className="flex min-h-11 min-w-11 items-center justify-center rounded-lg hover:bg-green-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-900"
+                  className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg hover:bg-green-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-900"
                   aria-label="Hinweis schliessen"
                 >
                   ✕

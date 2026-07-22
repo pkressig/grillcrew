@@ -68,3 +68,11 @@ def test_email_defaults_use_in_memory_sender_path() -> None:
 
     assert settings.smtp_host is None
     assert settings.email_from_address
+
+
+def test_frontend_public_url_is_normalized_and_restricted_to_an_origin() -> None:
+    assert Settings(frontend_public_url="https://crew.example.test/").frontend_public_url == (
+        "https://crew.example.test"
+    )
+    with pytest.raises(ValueError, match="FRONTEND_PUBLIC_URL"):
+        Settings(frontend_public_url="https://crew.example.test/organization")

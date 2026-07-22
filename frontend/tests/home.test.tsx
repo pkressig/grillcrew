@@ -126,7 +126,8 @@ describe("OrganizationLanding", () => {
       "href",
       "/example/manage-signup/secret-token",
     );
-    expect(screen.getByText(/speichere oder öffne diesen Link/)).toBeInTheDocument();
+    expect(screen.getByText(/Speichere oder öffne diesen Link/)).toBeInTheDocument();
+    expect(screen.getByText(/Bestätigung per E-Mail gesendet/)).toBeInTheDocument();
   });
 
   it("allows closing the signup form using the cancel button", async () => {
