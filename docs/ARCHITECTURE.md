@@ -102,6 +102,12 @@ of the token is the authorization proof. Only this token-holder projection may r
 submitted contact details. Unknown, legacy tokenless, and cross-tenant lookups return the same generic
 not-found response.
 
+Authenticated attendance updates use
+`PATCH /api/admin/{organization_slug}/signups/{signup_id}/attendance`. The endpoint requires ADMIN or
+KOORDINATION membership, Origin/Host and CSRF validation, and resolves the signup through Shift →
+Event → Season → ClubYear → Organization. Attendance outcomes appear in admin planning projections
+only and never in public plan or signup responses.
+
 ## Permissions
 
 Permissions are organization-local. A user may be Admin in one organization and have no access to another. Role checks must combine:

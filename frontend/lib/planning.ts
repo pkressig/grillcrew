@@ -22,6 +22,8 @@ export type ClubYearInput = Omit<ClubYear, "id">;
 export type SeasonInput = Omit<Season, "id" | "club_year_id">;
 export type EventStatus = "DRAFT" | "PUBLISHED" | "POSTPONED" | "CANCELLED" | "COMPLETED";
 export type ShiftStatus = "OPEN" | "CLOSED" | "CANCELLED";
+export type SignupOutcome =
+  "OPEN" | "ATTENDED" | "EXCUSED_CANCELLED" | "LATE_CANCELLED" | "NO_SHOW" | "SUBSTITUTE_ORGANIZED";
 export type PlanningEvent = {
   id: string;
   season_id: string;
@@ -55,6 +57,7 @@ export type AdminSignup = {
   last_name: string;
   phone: string;
   email: string;
+  outcome: SignupOutcome;
   created_at: string;
 };
 export type EventInput = Omit<PlanningEvent, "id" | "season_id" | "published_at">;
@@ -152,4 +155,10 @@ export const cancelSignup = (org: string, signupId: string) =>
     `/api/admin/${encodeURIComponent(org)}/signups/${encodeURIComponent(signupId)}/cancel`,
     writeInit("POST", {}),
     "Die Eintragung konnte nicht abgesagt werden.",
+  );
+export const updateSignupAttendance = (org: string, signupId: string, outcome: SignupOutcome) =>
+  request<AdminSignup>(
+    `/api/admin/${encodeURIComponent(org)}/signups/${encodeURIComponent(signupId)}/attendance`,
+    writeInit("PATCH", { outcome }),
+    "Die Anwesenheit konnte nicht gespeichert werden.",
   );
