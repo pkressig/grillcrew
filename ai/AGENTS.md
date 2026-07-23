@@ -1,6 +1,6 @@
 ﻿# AI Agent Roles
 
-The repository is the single source of truth. Agents do not directly send prompts to one another. They communicate through repository documents, Git history, reports, and explicit handoffs approved by the Product Owner.
+The repository is the single source of truth. Paperclip may assign work and preserve recorded issue comments, but it does not override repository documents, Git history, reports, or explicit Product Owner approvals. Every agent follows `ai/OPERATING_MODEL.md`.
 
 ## ChatGPT
 
@@ -53,6 +53,7 @@ The repository is the single source of truth. Agents do not directly send prompt
 ## Workflow Automation
 
 - For real product features, prefer exact ChatGPT-authored handoffs in `ai/generated/`; see `ai/DIRECT_HANDOFF.md`.
+- Paperclip may orchestrate the same role sequence. Its issues must use the task contract in `ai/OPERATING_MODEL.md` and link the required repository sources.
 - Controlled Git automation is defined in `ai/GIT_AUTOMATION.md`.
 - Workflow scripts are helper and scaffold tools only. Review every generated file for correct scope before an agent executes it.
 - `npm.cmd run workflow:start` generates `ai/generated/current-task.md` for implementation work.
@@ -61,4 +62,4 @@ The repository is the single source of truth. Agents do not directly send prompt
 - `npm.cmd run workflow:handoff` creates an immutable report in `ai/reports/` and updates `ai/SESSION.md`.
 - Workflow scripts do not run agents, create branches, commit, push, open PRs, merge, or perform destructive Git operations.
 - Codex, Claude Code, and AGY / Antigravity read the applicable generated handoff and act according to their role.
-- Agents still do not communicate secretly or directly; communication occurs only through repository documents, Git history, reports, and explicit Product Owner handoffs.
+- Agent communication must remain inspectable in Paperclip issues/comments, repository documents, Git history, reports, or explicit Product Owner handoffs. Material outcomes are written back to the repository according to `ai/OPERATING_MODEL.md`.

@@ -1,5 +1,7 @@
 ﻿# Contributing
 
+Read `ai/OPERATING_MODEL.md` before non-trivial work. It defines the mandatory sources and which documents must be updated for each kind of change.
+
 Use feature branches for every feature, fix, or housekeeping change. Do not perform direct product development on `main`.
 
 Run local checks before pushing:
@@ -30,7 +32,7 @@ claude
 # Codex may then commit, push, create the PR, check CI, merge, and clean up only as explicitly instructed.
 ```
 
-The agent returns a structured report for ChatGPT to review. Git release actions require an explicit ChatGPT release-gate handoff. The Product Owner may run the Git steps manually or let Codex execute the approved handoff. CI must be green before merging; after merge run `npm.cmd run ai:prepare`. See `ai/DIRECT_HANDOFF.md` and `ai/GIT_AUTOMATION.md`.
+The agent returns a structured report for ChatGPT to review. Git release actions require an explicit ChatGPT release-gate handoff. The Product Owner may run the Git steps manually or let Codex execute the approved handoff. CI must be green before merging. After merge, run `npm.cmd run ai:prepare` and synchronize `ai/STATUS.md`, `ai/SESSION.md`, the active feature status/plan, GitHub, and Paperclip before starting new work. See `ai/OPERATING_MODEL.md`, `ai/DIRECT_HANDOFF.md`, and `ai/GIT_AUTOMATION.md`.
 
 The workflow scripts remain optional helpers for starting, reviewing, handing off, or preparing PR text:
 

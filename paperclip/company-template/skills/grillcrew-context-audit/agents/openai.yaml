@@ -1,0 +1,4 @@
+interface:
+  display_name: "GrillCrew Context Audit"
+  short_description: "Reconcile code, docs, GitHub, and Paperclip"
+  default_prompt: "Use $grillcrew-context-audit to verify that implementation, documentation, GitHub, and Paperclip are synchronized."

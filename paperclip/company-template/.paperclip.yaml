@@ -1,0 +1,136 @@
+schema: "paperclip/v1"
+agents:
+  grillcrew-product-orchestrator:
+    role: "cto"
+    capabilities: "Governed product orchestration, scope, planning, task contracts, review coordination, and release gates."
+    budgetMonthlyCents: 3000
+    permissions:
+      canCreateAgents: false
+      canCreateSkills: false
+    adapter:
+      type: "codex_local"
+      config:
+        command: "codex"
+        search: true
+        timeoutSec: 1800
+        dangerouslyBypassApprovalsAndSandbox: false
+    runtime:
+      heartbeat:
+        enabled: false
+        intervalSec: 0
+        wakeOnAssignment: true
+        wakeOnDemand: true
+        wakeOnAutomation: false
+        maxConcurrentRuns: 1
+        cooldownSec: 10
+        skipTimerWhenNoActionableWork: true
+  grillcrew-codex:
+    role: "engineer"
+    capabilities: "Approved-scope full-stack implementation, migrations, tests, documentation, and gated GitHub release execution."
+    budgetMonthlyCents: 4000
+    permissions:
+      canCreateAgents: false
+      canCreateSkills: false
+    adapter:
+      type: "codex_local"
+      config:
+        command: "codex"
+        search: true
+        timeoutSec: 3600
+        dangerouslyBypassApprovalsAndSandbox: false
+    runtime:
+      heartbeat:
+        enabled: false
+        intervalSec: 0
+        wakeOnAssignment: true
+        wakeOnDemand: true
+        wakeOnAutomation: false
+        maxConcurrentRuns: 1
+        cooldownSec: 10
+        skipTimerWhenNoActionableWork: true
+  grillcrew-claude-review:
+    role: "qa"
+    capabilities: "Independent architecture, security, tenant-isolation, migration, code, test, and documentation review."
+    budgetMonthlyCents: 2000
+    permissions:
+      canCreateAgents: false
+      canCreateSkills: false
+    adapter:
+      type: "claude_local"
+      config:
+        command: "claude"
+        timeoutSec: 2400
+        maxTurnsPerRun: 120
+        dangerouslySkipPermissions: false
+    runtime:
+      heartbeat:
+        enabled: false
+        intervalSec: 0
+        wakeOnAssignment: true
+        wakeOnDemand: true
+        wakeOnAutomation: false
+        maxConcurrentRuns: 1
+        cooldownSec: 10
+        skipTimerWhenNoActionableWork: true
+  grillcrew-agy-review:
+    role: "qa"
+    capabilities: "Independent product, mobile UX, accessibility, workflow, privacy, German-copy, and market review."
+    budgetMonthlyCents: 1000
+    permissions:
+      canCreateAgents: false
+      canCreateSkills: false
+    adapter:
+      type: "process"
+      config:
+        command: "node"
+        args:
+          - "paperclip/scripts/agy-review-bridge.mjs"
+        timeoutSec: 1800
+        graceSec: 20
+    runtime:
+      heartbeat:
+        enabled: false
+        intervalSec: 0
+        wakeOnAssignment: true
+        wakeOnDemand: true
+        wakeOnAutomation: false
+        maxConcurrentRuns: 1
+        cooldownSec: 10
+        skipTimerWhenNoActionableWork: true
+    metadata:
+      setupNote: "After import, set the machine-local workspace cwd, enable the instance-level enableIsolatedWorkspaces setting, prove a codex/ isolated-worktree smoke run, and verify the audited AGY bridge before live work."
+routines:
+  grillcrew-daily-workflow-triage:
+    triggers:
+      - kind: "schedule"
+        label: "Daily workflow triage"
+        enabled: true
+        cronExpression: "15 8 * * *"
+        timezone: "Europe/Zurich"
+  grillcrew-weekly-context-reconciliation:
+    triggers:
+      - kind: "schedule"
+        label: "Weekly context reconciliation"
+        enabled: true
+        cronExpression: "45 8 * * 1"
+        timezone: "Europe/Zurich"
+  grillcrew-weekly-governance-audit:
+    triggers:
+      - kind: "schedule"
+        label: "Weekly cost and review-findings audit"
+        enabled: true
+        cronExpression: "0 16 * * 5"
+        timezone: "Europe/Zurich"
+projects:
+  grillcrew:
+    leadAgentSlug: "grillcrew-product-orchestrator"
+    status: "in_progress"
+    color: "#E85D2A"
+    workspaces:
+      grillcrew:
+        name: "grillcrew"
+        sourceType: "git_repo"
+        repoUrl: "https://github.com/pkressig/grillcrew.git"
+        repoRef: "main"
+        defaultRef: "main"
+        isPrimary: true

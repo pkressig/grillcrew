@@ -49,3 +49,9 @@ db_data/
 # Generated AI context
 ai/generated/*
 !ai/generated/.gitkeep
+
+# Generated Paperclip diagnostic exports (canonical config is company-template)
+paperclip/company-export*/
+
+# Machine-local Paperclip execution worktrees
+.paperclip/

@@ -8,11 +8,13 @@ This roadmap describes the commercial multi-organization SaaS platform. No featu
 Build the multi-tenant foundation of the platform without authentication or business features.
 
 **User stories**
+
 - As a Platform Operator, I can provision the first organization as seed data.
 - As a visitor, I can load a landing page branded from the resolved organization.
 - As a developer, I have a reusable organization context architecture for all future features.
 
 **Acceptance criteria**
+
 - `Organization` is the tenant root.
 - Organization display data, Theme, and public settings come from the database.
 - `GET /api/public/organization` returns only public-safe organization information.
@@ -30,6 +32,7 @@ Existing technical foundation and deployment.
 High.
 
 **Database impact**
+
 - Extend `Organization` with slug, custom domain, language, currency, contact fields, and `themeId`.
 - Add `Theme` for logo and colors.
 - Add dedicated `OrganizationSettings` table for public-safe settings.
@@ -37,10 +40,12 @@ High.
 - Seed one initial organization.
 
 **API impact**
+
 - Add public organization metadata endpoint.
 - Add organization context lookup service and middleware.
 
 **UI impact**
+
 - Add organization provider and hook.
 - Replace hardcoded landing content with database-driven Theme and organization metadata.
 - Use neutral platform fallbacks only when the backend is unavailable.
@@ -51,12 +56,14 @@ High.
 Provide secure access for platform operators, organization admins, staff, and later volunteer accounts.
 
 **User stories**
+
 - As a user, I can sign in securely.
 - As a Platform Operator, I can access platform administration.
 - As an Organization Admin, I can assign roles within my organization.
 - As Staff, I only access permitted organization data.
 
 **Acceptance criteria**
+
 - Backend enforces authentication and authorization.
 - Role checks include organization context.
 - A user can have different roles across organizations.
@@ -69,16 +76,19 @@ F001 Platform Core.
 High.
 
 **Database impact**
+
 - User table.
 - StaffMembership table with organization role.
 - Audit events for role changes.
 
 **API impact**
+
 - Auth/session endpoints.
 - Current user and memberships endpoint.
 - Role guard utilities.
 
 **UI impact**
+
 - Login flow.
 - Organization switcher if user has multiple organizations.
 - Role-aware navigation and forbidden states.
@@ -93,11 +103,13 @@ Steps 1 through 3 are implemented. Step 4 adds visible, role-aware event and shi
 Let each organization manage its own planning periods.
 
 **User stories**
+
 - As an Organization Admin, I can create a club year.
 - As an Organization Admin, I can create seasons within a club year.
 - As Staff, I can filter work by season.
 
 **Acceptance criteria**
+
 - Club years belong to one organization.
 - Seasons belong to one club year.
 - Season status transitions are validated.
@@ -110,13 +122,16 @@ F001, F002.
 Medium.
 
 **Database impact**
+
 - ClubYear and Season tables with organization chain.
 
 **API impact**
+
 - Organization-scoped CRUD endpoints.
 - Active/current season endpoint.
 
 **UI impact**
+
 - Season list and forms.
 - Season selector.
 - Visible event and shift admin cards and creation/status controls for `ADMIN` and `KOORDINATION`.
@@ -125,7 +140,7 @@ Medium.
 
 **Status**
 
-Steps 1, 2, 2.1, 3, and 3.1 are implemented locally: the organization public route
+Steps 1, 2, 2.1, 3, 3.1, and 4 are merged on `main`: the organization public route
 presents upcoming published events and non-cancelled shifts through a public-safe API, visitors can
 reserve an open place without an account, and ADMIN/KOORDINATION can see active occupancy plus
 volunteer contact details in the authenticated planning cards. New volunteers receive a hashed-at-rest
@@ -142,11 +157,13 @@ public success UI continues to show the link immediately.
 Allow each organization to manage public events or operating days.
 
 **User stories**
+
 - As Staff, I can create events for a season.
 - As Staff, I can publish, postpone, cancel, or complete events.
 - As a volunteer, I see published events for the organization I opened.
 
 **Acceptance criteria**
+
 - Events are organization-scoped through season.
 - Only published events appear publicly.
 - Status values are approved English enum values.
@@ -159,14 +176,17 @@ F003 Seasons.
 Medium.
 
 **Database impact**
+
 - Event table.
 - Event status and indexes.
 
 **API impact**
+
 - Event CRUD and public listing.
 - Status transition validation.
 
 **UI impact**
+
 - Event admin list/calendar.
 - Event forms.
 - Public event list.
@@ -177,11 +197,13 @@ Medium.
 Define staffing slots for events.
 
 **User stories**
+
 - As Staff, I can add shifts to events.
 - As Staff, I can set capacity, time, and notes.
 - As a volunteer, I can see open places.
 
 **Acceptance criteria**
+
 - Shifts belong to organization-scoped events.
 - Capacity display is calculated from active signups.
 - Shift status supports open, closed, and cancelled.
@@ -194,14 +216,17 @@ F004 Events.
 Medium.
 
 **Database impact**
+
 - Shift table.
 - Event foreign key and indexes.
 
 **API impact**
+
 - Shift CRUD.
 - Public shift summary.
 
 **UI impact**
+
 - Shift editor.
 - Public shift cards.
 - Capacity indicators.
@@ -212,11 +237,13 @@ Medium.
 Manage organization-local volunteer/person records.
 
 **User stories**
+
 - As Staff, I can search and edit volunteers in my organization.
 - As Staff, I can review duplicates.
 - As a volunteer, my public display consent applies to the organization.
 
 **Acceptance criteria**
+
 - Volunteers are not global across organizations.
 - Contact data is normalized per organization.
 - Public display consent is organization-specific.
@@ -229,14 +256,17 @@ F001, F002.
 Medium.
 
 **Database impact**
+
 - Volunteer table with organizationId.
 - Normalized contact indexes.
 
 **API impact**
+
 - Volunteer CRUD/search.
 - Duplicate candidate endpoint.
 
 **UI impact**
+
 - Volunteer list/detail.
 - Duplicate review.
 
@@ -246,11 +276,13 @@ Medium.
 Support organization-local family accounts and volunteer-hour requirements.
 
 **User stories**
+
 - As Staff, I can create families and children.
 - As Staff, I can link volunteers to families.
 - As Staff, I can override requirements with a reason.
 
 **Acceptance criteria**
+
 - Families and children belong to one organization.
 - Children are never public.
 - Requirements are materialized and frozen per organization club year.
@@ -263,13 +295,16 @@ F003 Seasons, F006 Volunteers.
 High.
 
 **Database impact**
+
 - Family, Child, FamilyMember, FamilyRequirement.
 
 **API impact**
+
 - Family CRUD.
 - Requirement materialization and override endpoints.
 
 **UI impact**
+
 - Family list/detail.
 - Child/member management.
 - Fulfillment indicators.
@@ -280,11 +315,13 @@ High.
 Allow volunteers to reserve shifts on an organization-specific public plan.
 
 **User stories**
+
 - As a volunteer, I can sign up without an account.
 - As a volunteer, I immediately reserve a place.
 - As Staff, I can see suspicious signups for my organization.
 
 **Acceptance criteria**
+
 - Signup is scoped to the resolved organization.
 - Required contact and compensation fields are validated.
 - Capacity cannot be overbooked.
@@ -298,15 +335,18 @@ F005 Shifts, F006 Volunteers, F007 Families.
 High.
 
 **Database impact**
+
 - Signup table.
 - Capacity and organization-consistency constraints.
 
 **API impact**
+
 - Public plan endpoint.
 - Signup creation endpoint.
 - Management link endpoints.
 
 **UI impact**
+
 - Branded public plan.
 - Mobile signup form.
 - Confirmation and management pages.
@@ -315,7 +355,9 @@ High.
 
 **Status**
 
-Step 1 is implemented locally. ADMIN and KOORDINATION can update the outcome of an active signup
+Step 1 is merged on `main` through PR #29. The two post-merge AGY findings were corrected in PKA-12,
+and PKA-14 adds the matching server-side four-outcome write restriction. Both corrections are approved
+by Claude, AGY, and the Product Owner. ADMIN and KOORDINATION can update the outcome of an active signup
 from the existing planning shift card. The authenticated admin projection includes the outcome; public
 plan and signup projections do not. Cancelled signups remain historical and cannot be marked through
 the attendance endpoint. Work records, compensation, credits, exports, reminders, and detailed
@@ -325,10 +367,12 @@ attendance audit remain outside this step.
 Track the outcome of organization-local signups.
 
 **User stories**
+
 - As Staff, I can mark attendance outcomes.
 - As Staff, I can see unresolved past signups.
 
 **Acceptance criteria**
+
 - Outcome is stored on Signup.
 - Outcome changes are audited.
 - Work records are created only for actual work.
@@ -340,13 +384,16 @@ F008 Public Signup.
 Medium.
 
 **Database impact**
+
 - Signup outcome usage.
 - Audit events.
 
 **API impact**
+
 - Attendance update and unresolved-list endpoints.
 
 **UI impact**
+
 - Attendance review screen.
 - Outcome controls.
 
@@ -356,11 +403,13 @@ Medium.
 Capture actual worked time, compensation type, and family credit.
 
 **User stories**
+
 - As a volunteer, I can submit actual time.
 - As Staff, I can correct and confirm work records.
 - As Staff, I can enter paper records.
 
 **Acceptance criteria**
+
 - Work records require a signup.
 - Duration is stored in minutes.
 - Work records are organization-consistent with signup, volunteer, shift, and family.
@@ -373,12 +422,15 @@ F009 Attendance, F007 Families.
 High.
 
 **Database impact**
+
 - WorkRecord table and constraints.
 
 **API impact**
+
 - Submit, confirm, correct, and paper-entry endpoints.
 
 **UI impact**
+
 - Work completion form.
 - Admin correction flow.
 
@@ -388,11 +440,13 @@ High.
 Calculate, approve, and track organization-scoped payouts.
 
 **User stories**
+
 - As Admin, I can approve payouts.
 - As Admin, I can mark payouts as paid.
 - As Staff with read access, I can see payout summaries.
 
 **Acceptance criteria**
+
 - Amounts are stored in minor units.
 - Rate is frozen at approval.
 - Payment status is tracked.
@@ -405,12 +459,15 @@ F010 Work Records.
 Medium.
 
 **Database impact**
+
 - Payment table.
 
 **API impact**
+
 - Payment queue, approve, mark-paid, summary endpoints.
 
 **UI impact**
+
 - Payment queue and controls.
 
 ## F012 Dashboard and Operational Tasks
@@ -419,10 +476,12 @@ Medium.
 Give each organization an action-oriented operational dashboard.
 
 **User stories**
+
 - As Staff, I can see open places and urgent issues.
 - As Admin, I can see missing attendance, missing family links, duplicates, and payouts.
 
 **Acceptance criteria**
+
 - Dashboard data is derived inside one organization.
 - Sensitive data follows role permissions.
 - Items link to the relevant management screen.
@@ -434,12 +493,15 @@ F005, F008, F009, F010, F011.
 Medium.
 
 **Database impact**
+
 - No required new tables initially.
 
 **API impact**
+
 - Dashboard summary endpoint.
 
 **UI impact**
+
 - Organization dashboard.
 - Action item lists.
 
@@ -449,10 +511,12 @@ Medium.
 Provide organization-local reporting and exports.
 
 **User stories**
+
 - As Admin, I can export work, family, and payment data.
 - As read-only leadership, I can see summaries without unnecessary personal data.
 
 **Acceptance criteria**
+
 - Reports are organization-scoped.
 - Contact-data exports require explicit permission.
 - Stored payment amounts are not recalculated during reporting.
@@ -465,13 +529,16 @@ F010 Work Records, F011 Payments, F007 Families.
 Medium to High.
 
 **Database impact**
+
 - Audit events for exports.
 - Optional read models later.
 
 **API impact**
+
 - Statistics and export endpoints.
 
 **UI impact**
+
 - Statistics pages.
 - Export controls.
 
@@ -481,11 +548,13 @@ Medium to High.
 Import existing customer data into a specific organization without customer-specific code paths.
 
 **User stories**
+
 - As Platform Operator, I can import source files for one organization.
 - As Admin, I can review duplicates and mappings.
 - As Admin, I can see an import protocol.
 
 **Acceptance criteria**
+
 - Import batches are organization-scoped.
 - Import logic treats customer files as data inputs, not hardcoded assumptions.
 - Preview and validation run before commit.
@@ -498,12 +567,15 @@ F001, F006, F007.
 High.
 
 **Database impact**
+
 - ImportBatch and staging records.
 
 **API impact**
+
 - Upload, preview, validate, commit, and report endpoints.
 
 **UI impact**
+
 - Import wizard.
 - Duplicate review.
 - Import result screen.

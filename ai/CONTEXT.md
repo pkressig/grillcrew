@@ -3,14 +3,15 @@
 ## Read First
 
 1. `CLAUDE.md`
-2. `ai/AGENTS.md`
-3. `ai/DIRECT_HANDOFF.md`
-4. `ai/GIT_AUTOMATION.md`
-5. `ai/MEMORY.md`
-6. `ai/STATUS.md`
-7. `ai/SESSION.md`
-8. `ai/CONTEXT.md`
-9. `ai/REVIEW.md`
+2. `ai/OPERATING_MODEL.md`
+3. `ai/AGENTS.md`
+4. `ai/DIRECT_HANDOFF.md`
+5. `ai/GIT_AUTOMATION.md`
+6. `ai/MEMORY.md`
+7. `ai/STATUS.md`
+8. `ai/SESSION.md`
+9. `ai/CONTEXT.md`
+10. `ai/REVIEW.md`
 
 ## Authoritative Requirements
 
@@ -28,8 +29,9 @@
 
 ## Feature Plans
 
-- Current authentication plan: `docs/F002_PLAN.md`
-- Supporting F002 decisions: `docs/F002_DECISIONS.md`
+- Current feature plan: `docs/F009_PLAN.md`
+- Read `docs/F002_PLAN.md` and `docs/F002_DECISIONS.md` when authentication or organization
+  permissions are affected.
 - Roadmap order: `docs/ROADMAP.md`
 
 ## Current Status

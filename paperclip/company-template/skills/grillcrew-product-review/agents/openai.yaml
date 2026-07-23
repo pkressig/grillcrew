@@ -1,0 +1,4 @@
+interface:
+  display_name: "GrillCrew Product Review"
+  short_description: "Review GrillCrew UX, product, and accessibility"
+  default_prompt: "Use -product-review to review this GrillCrew change for product behavior, UX, accessibility, privacy, and German copy."

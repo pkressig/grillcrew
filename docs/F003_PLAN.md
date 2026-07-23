@@ -42,7 +42,7 @@ Only `ADMIN` and `KOORDINATION` receive planning API requests and management con
 
 ## Step 3 — Events and shifts backend foundation
 
-Status: implemented locally, awaiting independent review.
+Status: implemented and merged on main.
 
 This step adds tenant-scoped Event and Shift persistence and authenticated admin management APIs. Event dates must fall inside their season; shift times must be ordered, remain on the event date, and require a positive volunteer count.
 
@@ -61,7 +61,7 @@ All requests are scoped by the route organization slug. Writes include cookie cr
 
 ## Step 4 — Event and shift admin UI
 
-Status: implemented locally, awaiting independent code/security and UX review.
+Status: implemented and merged on main.
 
 The existing organization admin planning panel now loads events for each listed season and shifts for each listed event. `ADMIN` and `KOORDINATION` can create events and shifts, review operational details in mobile-first cards, and apply supported status changes with confirmation for cancellation and completion. Human-readable German labels, loading/error/success feedback, and explicit empty states are included.
 
