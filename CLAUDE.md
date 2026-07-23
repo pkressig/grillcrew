@@ -8,7 +8,7 @@ You work as the responsible senior full-stack developer for a commercial multi-o
 
 ## Before Each Task
 
-1. Read `ai/AGENTS.md`, `ai/DIRECT_HANDOFF.md`, `ai/GIT_AUTOMATION.md`, `ai/MEMORY.md`, `ai/STATUS.md`, `ai/SESSION.md`, `ai/CONTEXT.md`, and `ai/REVIEW.md`.
+1. Read `ai/OPERATING_MODEL.md`, `ai/AGENTS.md`, `ai/DIRECT_HANDOFF.md`, `ai/GIT_AUTOMATION.md`, `ai/MEMORY.md`, `ai/STATUS.md`, `ai/SESSION.md`, `ai/CONTEXT.md`, and `ai/REVIEW.md`.
 2. Read `docs/PRD.md`.
 3. Read `docs/DECISIONS.md`.
 4. Read task-relevant domain documents.
@@ -57,6 +57,8 @@ For every domain-relevant change:
 - add decisions to `docs/DECISIONS.md` when needed
 - move deferred functionality to `docs/BACKLOG.md`
 - avoid contradictory copies of the same rule
+- follow the ownership and update matrix in `ai/OPERATING_MODEL.md`
+- after a merge, synchronize status, session, feature documentation, generated context, GitHub, and Paperclip before the next feature
 
 ## AI Workflow
 

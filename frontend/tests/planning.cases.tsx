@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminShell } from "@/app/[org]/admin/admin-shell";
 import { AuthProvider } from "@/components/auth-provider";
@@ -253,17 +253,51 @@ describe("planning admin", () => {
     ).toHaveLength(2);
   });
 
+  it.each([
+    ["LATE_CANCELLED", "Kurzfristig abgesagt"],
+    ["SUBSTITUTE_ORGANIZED", "Ersatz organisiert"],
+  ] as const)(
+    "shows stored %s with its German label without offering it as a new workflow",
+    async (outcome, label) => {
+      const shiftWithDeferredOutcome = {
+        ...shift,
+        signups: [{ ...shift.signups[0], outcome }],
+      };
+      const baseFetch = planningFetch("ADMIN", false, [season], true);
+      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+          return Response.json([shiftWithDeferredOutcome]);
+        return baseFetch(input, init);
+      });
+      renderAdmin("ADMIN", fetchMock);
+
+      const attendance = await screen.findByRole("combobox", {
+        name: /Anwesenheit von Mia Muster/,
+      });
+      expect(attendance).toHaveValue(outcome);
+      expect(within(attendance).getByRole("option", { name: label })).toBeDisabled();
+      expect(
+        within(attendance)
+          .getAllByRole("option")
+          .map((option) => (option as HTMLOptionElement).value),
+      ).toEqual([outcome, "OPEN", "ATTENDED", "EXCUSED_CANCELLED", "NO_SHOW"]);
+    },
+  );
+
   it("requires confirmation before marking a no-show", async () => {
     const confirmMock = vi.fn(() => false);
     vi.stubGlobal("confirm", confirmMock);
     const fetchMock = renderAdmin("ADMIN", planningFetch("ADMIN", false, [season], true));
 
-    fireEvent.change(await screen.findByRole("combobox", { name: /Anwesenheit von Mia Muster/ }), {
+    const attendance = await screen.findByRole("combobox", { name: /Anwesenheit von Mia Muster/ });
+    expect(attendance).toHaveValue("OPEN");
+    fireEvent.change(attendance, {
       target: { value: "NO_SHOW" },
     });
 
     expect(confirmMock).toHaveBeenCalled();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/attendance"))).toBe(false);
+    await waitFor(() => expect(attendance).toHaveValue("OPEN"));
   });
 
   it("renders clear event and shift empty states", async () => {

@@ -12,7 +12,7 @@ Public responses do not contain internal notes, source-import/publication metada
 
 ## Step 2 — Public signup with immediate reservation
 
-Status: implemented locally, awaiting independent architecture/security and UX review.
+Status: implemented and merged on main.
 
 Visitors submit the required name and contact fields plus explicit public-name consent at
 `POST /api/public/{organization_slug}/shifts/{shift_id}/signups`. A successful request immediately
@@ -30,7 +30,7 @@ confirmation/reminder emails and admin volunteer/signup management remain deferr
 
 ## Step 2.1 — Admin signup visibility
 
-Status: implemented locally, awaiting independent architecture/security and UX review.
+Status: implemented and merged on main.
 
 The authenticated admin planning shift response for `ADMIN` and `KOORDINATION` includes active
 occupancy, remaining places, and a compact signup summary with volunteer name, phone number, email
@@ -50,7 +50,7 @@ deferred.
 
 ## Step 3 — Personal management link and volunteer self-cancellation
 
-Status: implemented locally, awaiting independent architecture/security and UX review.
+Status: implemented and merged on main.
 
 Each new public signup receives a cryptographically random management token. Only its SHA-256 hash
 is stored; the raw token is returned once in the signup response as the organization-aware frontend
@@ -80,7 +80,7 @@ family/Sollstunden assignment, compensation, attendance, and work records remain
 
 ## Step 3.1 — Admin manual signup cancellation
 
-Status: implemented locally, awaiting independent architecture/security and UX review.
+Status: implemented and merged on main.
 
 `ADMIN` and `KOORDINATION` can cancel an active signup from its row in the authenticated planning
 card. The guarded `POST /api/admin/{organization_slug}/signups/{signup_id}/cancel` write uses the
@@ -100,7 +100,7 @@ work records, and KIOSK-specific actions remain deferred.
 
 ## Step 4 — Signup confirmation email
 
-Status: implemented locally, awaiting independent architecture/security and UX review.
+Status: implemented and merged on main.
 
 After a public signup has reserved its place and committed successfully, the API schedules exactly
 one informational confirmation email with FastAPI background tasks. The existing provider-neutral

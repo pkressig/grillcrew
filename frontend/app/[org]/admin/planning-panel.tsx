@@ -68,6 +68,12 @@ const attendanceLabels: Record<SignupOutcome, string> = {
   NO_SHOW: "Nicht erschienen",
   SUBSTITUTE_ORGANIZED: "Ersatz organisiert",
 };
+const stepOneAttendanceOutcomes: readonly SignupOutcome[] = [
+  "OPEN",
+  "ATTENDED",
+  "EXCUSED_CANCELLED",
+  "NO_SHOW",
+];
 const eventActions: Record<EventStatus, EventStatus[]> = {
   DRAFT: ["PUBLISHED", "CANCELLED"],
   PUBLISHED: ["POSTPONED", "COMPLETED", "CANCELLED"],
@@ -347,6 +353,15 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
       `Anwesenheit von ${signup.public_name} wurde auf „${attendanceLabels[outcome]}“ gesetzt.`,
     );
     return true;
+  }
+
+  function keepPersistedAttendance(signup: AdminSignup) {
+    setShifts((current) =>
+      current.map((shift) => ({
+        ...shift,
+        signups: shift.signups.map((item) => (item.id === signup.id ? { ...signup } : item)),
+      })),
+    );
   }
 
   if (loading)
@@ -727,17 +742,17 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                           event.target.value as SignupOutcome,
                                                         )
                                                       )
-                                                        event.currentTarget.value = signup.outcome;
+                                                        keepPersistedAttendance(signup);
                                                     }}
                                                   >
-                                                    {(
-                                                      [
-                                                        "OPEN",
-                                                        "ATTENDED",
-                                                        "EXCUSED_CANCELLED",
-                                                        "NO_SHOW",
-                                                      ] as const
-                                                    ).map((outcome) => (
+                                                    {!stepOneAttendanceOutcomes.includes(
+                                                      signup.outcome,
+                                                    ) ? (
+                                                      <option value={signup.outcome} disabled>
+                                                        {attendanceLabels[signup.outcome]}
+                                                      </option>
+                                                    ) : null}
+                                                    {stepOneAttendanceOutcomes.map((outcome) => (
                                                       <option key={outcome} value={outcome}>
                                                         {attendanceLabels[outcome]}
                                                       </option>

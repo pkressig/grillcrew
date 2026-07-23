@@ -1,0 +1,4 @@
+interface:
+  display_name: "GrillCrew Task Contract"
+  short_description: "Create complete governed work contracts"
+  default_prompt: "Use -task-contract to turn this approved GrillCrew request into a bounded Paperclip task contract."

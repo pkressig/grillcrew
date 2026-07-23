@@ -1,0 +1,4 @@
+interface:
+  display_name: "GrillCrew Release"
+  short_description: "Run governed GrillCrew GitHub releases"
+  default_prompt: "Use -release to verify the release gate and execute only the authorized GrillCrew GitHub actions."

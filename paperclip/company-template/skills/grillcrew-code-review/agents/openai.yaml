@@ -1,0 +1,4 @@
+interface:
+  display_name: "GrillCrew Code Review"
+  short_description: "Review GrillCrew code, security, and tenancy"
+  default_prompt: "Use -code-review to independently review this GrillCrew changeset and issue contract."

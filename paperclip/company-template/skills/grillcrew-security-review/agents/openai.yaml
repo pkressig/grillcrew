@@ -1,0 +1,4 @@
+interface:
+  display_name: "GrillCrew Security Review"
+  short_description: "Threat-model GrillCrew trust boundaries"
+  default_prompt: "Use $grillcrew-security-review to assess this GrillCrew change for tenant isolation, permissions, privacy, and abuse risks."

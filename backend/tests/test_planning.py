@@ -143,6 +143,63 @@ def test_attendance_payload_rejects_extra_fields() -> None:
 
 
 @pytest.mark.parametrize(
+    "outcome",
+    [
+        SignupOutcome.OPEN,
+        SignupOutcome.ATTENDED,
+        SignupOutcome.EXCUSED_CANCELLED,
+        SignupOutcome.NO_SHOW,
+    ],
+)
+def test_attendance_payload_accepts_step_1_outcomes(outcome: SignupOutcome) -> None:
+    payload = SignupAttendanceUpdate.model_validate({"outcome": outcome.value})
+
+    assert payload.outcome == outcome
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [SignupOutcome.LATE_CANCELLED, SignupOutcome.SUBSTITUTE_ORGANIZED],
+)
+def test_attendance_payload_rejects_deferred_outcomes(outcome: SignupOutcome) -> None:
+    with pytest.raises(ValidationError):
+        SignupAttendanceUpdate.model_validate({"outcome": outcome.value})
+
+
+def test_attendance_api_rejects_deferred_outcome_before_service_mutation(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
+    current = cast(CurrentStaffMembership, SimpleNamespace(organization=organization))
+    calls = 0
+
+    class RejectIfCalledPlanningService:
+        def __init__(self, _db: object, _organization_id: object) -> None:
+            pass
+
+        def update_signup_attendance(self, _signup_id: object, _outcome: SignupOutcome) -> object:
+            nonlocal calls
+            calls += 1
+            raise AssertionError("invalid attendance outcome must not reach the service")
+
+    app.dependency_overrides[planning.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: _ListDb()
+    monkeypatch.setattr(planning, "PlanningService", RejectIfCalledPlanningService)
+    try:
+        response = client.patch(
+            f"/api/admin/tenant-a/signups/{uuid4()}/attendance",
+            json={"outcome": SignupOutcome.LATE_CANCELLED.value},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert calls == 0
+
+
+@pytest.mark.parametrize(
     ("schema", "parent_field"), [(EventCreate, "season_id"), (ShiftCreate, "event_id")]
 )
 def test_child_create_payloads_reject_parent_overrides(schema: object, parent_field: str) -> None:

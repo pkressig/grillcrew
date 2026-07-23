@@ -1,0 +1,4 @@
+interface:
+  display_name: "GrillCrew Implement"
+  short_description: "Implement approved GrillCrew scope safely"
+  default_prompt: "Use -implement to implement this approved GrillCrew issue with complete validation and documentation."

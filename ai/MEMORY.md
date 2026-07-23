@@ -44,7 +44,9 @@ Stable long-term memory only. Do not copy full business rules or implementation 
 - Feature roadmap: `docs/FEATURES.md`
 - Delivery roadmap: `docs/ROADMAP.md`
 - Architecture: `docs/ARCHITECTURE.md`
-- Current F002 plan: `docs/F002_PLAN.md`
+- Context ownership and update rules: `ai/OPERATING_MODEL.md`
+- Current feature plan: `docs/F009_PLAN.md`
 - Contribution workflow: `CONTRIBUTING.md`
 - Agent operating rules: `CLAUDE.md`
 - Git automation policy: `ai/GIT_AUTOMATION.md`
+- Canonical Paperclip configuration: `paperclip/company-template/`

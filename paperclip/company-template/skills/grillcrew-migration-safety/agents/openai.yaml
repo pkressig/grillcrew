@@ -1,0 +1,4 @@
+interface:
+  display_name: "GrillCrew Migration Safety"
+  short_description: "Validate safe tenant-aware data migrations"
+  default_prompt: "Use $grillcrew-migration-safety to review this GrillCrew schema or data migration for safe rollout and rollback."
