@@ -105,8 +105,10 @@ not-found response.
 Authenticated attendance updates use
 `PATCH /api/admin/{organization_slug}/signups/{signup_id}/attendance`. The endpoint requires ADMIN or
 KOORDINATION membership, Origin/Host and CSRF validation, and resolves the signup through Shift →
-Event → Season → ClubYear → Organization. Attendance outcomes appear in admin planning projections
-only and never in public plan or signup responses.
+Event → Season → ClubYear → Organization. It accepts the six stored `Signup.outcome` values for
+active signups. Real changes write one same-transaction tenant-scoped `AuditEvent` with the actor user
+id, signup id, previous outcome, and new outcome; idempotent repeats do not audit. Attendance outcomes
+appear in admin planning projections only and never in public plan or signup responses.
 
 ## Permissions
 

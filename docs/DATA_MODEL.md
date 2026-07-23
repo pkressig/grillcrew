@@ -235,8 +235,9 @@ deferred.
 - publicNameSnapshot
 - status: ACTIVE | CANCELLED_BY_VOLUNTEER | CANCELLED_BY_ADMIN
 - outcome: OPEN | ATTENDED | EXCUSED_CANCELLED | LATE_CANCELLED | NO_SHOW | SUBSTITUTE_ORGANIZED;
-  defaults to OPEN. F009 Step 1 permits staff updates only while `status = ACTIVE` and exposes the
-  value only through authenticated admin planning responses.
+  defaults to OPEN. F009 permits staff updates only while `status = ACTIVE`, exposes the value only
+  through authenticated admin planning responses, and audits real outcome changes through
+  `AuditEvent`.
 - managementTokenHash nullable (SHA-256 hex digest only; raw token is never persisted)
 - confirmedAt
 - cancelledAt nullable
@@ -317,6 +318,10 @@ deferred.
 - entityId
 - metadata
 - createdAt
+
+Attendance outcome changes use `action = ATTENDANCE_OUTCOME_CHANGED`, `entityType = signup`,
+`entityId = Signup.id`, tenant `organizationId`, the authenticated actor user id, and metadata with
+only `previous_outcome` and `new_outcome`.
 
 ### ImportBatch
 

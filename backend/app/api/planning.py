@@ -350,7 +350,7 @@ def update_signup_attendance(
 ) -> AdminSignupResponse:
     try:
         signup = _write_service(organization_slug, current, db, request).update_signup_attendance(
-            signup_id, payload.outcome
+            signup_id, payload.outcome, current.user.id
         )
         return _admin_signup_response(signup)
     except (PlanningNotFoundError, PlanningConflictError) as error:

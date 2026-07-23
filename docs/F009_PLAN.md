@@ -3,13 +3,10 @@
 ## Status
 
 Step 1 was merged to `main` in PR #29. The independent Claude architecture/security review and AGY
-product/UX review are complete. The two AGY findings on stored `LATE_CANCELLED` or
-`SUBSTITUTE_ORGANIZED` representation and cancelled-confirmation selector synchronization were triaged
-as objective Step 1 defects. PKA-12 implements the bounded local correction and has passed repeated
-Claude, AGY, and Product Owner review; it does not add deferred attendance workflows. Git release
-actions remain separately gated. PKA-14 additionally enforces the same four-outcome Step 1 write
-boundary in server-side request validation while preserving read/display support for all six stored
-enum values; Codex, Claude, AGY, and the Product Owner approved the correction.
+product/UX review are complete. Step 2 is implemented locally for PKA-15: ADMIN and KOORDINATION can
+set any of the six approved `Signup.outcome` values on active signups, and real outcome changes create
+a same-transaction `AuditEvent`. Codex, Claude, AGY, the Product Owner, and ChatGPT approved PKA-15;
+Git release actions remain separately gated.
 
 ## Step 1 — Attendance outcome foundation
 
@@ -27,3 +24,19 @@ unchanged. This step creates no work record and has no effect on worked time, fa
 compensation, payments, exports, reminders, or email notifications. Detailed audit history,
 unresolved-attendance lists, and the remaining approved outcome workflows are deferred to later F009
 steps.
+
+## Step 2 - Full attendance outcomes and audit trail
+
+Step 2 completes the approved D-019 outcome set for active signups. The same authenticated attendance
+endpoint now accepts exactly `OPEN`, `ATTENDED`, `EXCUSED_CANCELLED`, `LATE_CANCELLED`, `NO_SHOW`, and
+`SUBSTITUTE_ORGANIZED`; request payloads still reject unknown or extra fields before service mutation.
+ADMIN and KOORDINATION can choose all six German-labelled values from the existing planning card.
+
+Each real outcome change writes one `AuditEvent` in the same database transaction as the signup update:
+`action = ATTENDANCE_OUTCOME_CHANGED`, `entity_type = signup`, `entity_id = signup.id`, the resolved
+`organization_id`, the authenticated actor user id, and metadata containing only `previous_outcome` and
+`new_outcome`. Repeating the current value remains idempotent and creates no audit event.
+
+`SUBSTITUTE_ORGANIZED` records only the original signup outcome. Step 2 does not create or link a
+replacement person, does not assign a replacement signup, does not create WorkRecords, and does not
+change public signup or public plan projections.
