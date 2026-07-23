@@ -3,10 +3,10 @@
 ## Status
 
 Step 1 was merged to `main` in PR #29. The independent Claude architecture/security review and AGY
-product/UX review are complete. Step 2 is implemented locally for PKA-15: ADMIN and KOORDINATION can
+product/UX review are complete. Step 2 was merged in PR #31 through PKA-15: ADMIN and KOORDINATION can
 set any of the six approved `Signup.outcome` values on active signups, and real outcome changes create
-a same-transaction `AuditEvent`. Codex, Claude, AGY, the Product Owner, and ChatGPT approved PKA-15;
-Git release actions remain separately gated.
+a same-transaction `AuditEvent`. Codex, Claude, AGY, the Product Owner, and ChatGPT approved PKA-15,
+and GitHub CI passed before merge.
 
 ## Step 1 — Attendance outcome foundation
 
