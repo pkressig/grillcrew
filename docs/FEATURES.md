@@ -355,14 +355,14 @@ High.
 
 **Status**
 
-Step 1 is merged on `main` through PR #29. Step 2 is implemented and approved locally for PKA-15: ADMIN and
+Steps 1 and 2 are merged on `main` through PRs #29 and #31. ADMIN and
 KOORDINATION can update an active signup to any of the six approved attendance outcomes from the
 existing planning shift card, and real changes create a tenant-scoped audit event with previous and new
 outcome. The authenticated admin projection includes the outcome; public plan and signup projections
 do not. Cancelled signups remain historical and cannot be marked through the attendance endpoint. Work
 records, compensation, credits, exports, reminders, replacement assignment, and public-flow changes
 remain outside this step. Codex, Claude, AGY, the Product Owner, and ChatGPT approved the bounded
-implementation; its Git release remains separately gated.
+implementation before merge.
 
 **Goal**  
 Track the outcome of organization-local signups.
