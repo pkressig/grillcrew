@@ -355,13 +355,14 @@ High.
 
 **Status**
 
-Step 1 is merged on `main` through PR #29. The two post-merge AGY findings were corrected in PKA-12,
-and PKA-14 adds the matching server-side four-outcome write restriction. Both corrections are approved
-by Claude, AGY, and the Product Owner. ADMIN and KOORDINATION can update the outcome of an active signup
-from the existing planning shift card. The authenticated admin projection includes the outcome; public
-plan and signup projections do not. Cancelled signups remain historical and cannot be marked through
-the attendance endpoint. Work records, compensation, credits, exports, reminders, and detailed
-attendance audit remain outside this step.
+Step 1 is merged on `main` through PR #29. Step 2 is implemented and approved locally for PKA-15: ADMIN and
+KOORDINATION can update an active signup to any of the six approved attendance outcomes from the
+existing planning shift card, and real changes create a tenant-scoped audit event with previous and new
+outcome. The authenticated admin projection includes the outcome; public plan and signup projections
+do not. Cancelled signups remain historical and cannot be marked through the attendance endpoint. Work
+records, compensation, credits, exports, reminders, replacement assignment, and public-flow changes
+remain outside this step. Codex, Claude, AGY, the Product Owner, and ChatGPT approved the bounded
+implementation; its Git release remains separately gated.
 
 **Goal**  
 Track the outcome of organization-local signups.

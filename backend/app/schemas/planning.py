@@ -5,7 +5,6 @@ from __future__ import annotations
 import uuid
 from datetime import date as date_type
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -17,13 +16,6 @@ from app.models.planning import (
     SignupOutcome,
     SignupStatus,
 )
-
-SignupAttendanceOutcome = Literal[
-    SignupOutcome.OPEN,
-    SignupOutcome.ATTENDED,
-    SignupOutcome.EXCUSED_CANCELLED,
-    SignupOutcome.NO_SHOW,
-]
 
 
 class DateRangeModel(BaseModel):  # type: ignore[explicit-any]
@@ -203,7 +195,7 @@ class AdminSignupResponse(BaseModel):  # type: ignore[explicit-any]
 
 class SignupAttendanceUpdate(BaseModel):  # type: ignore[explicit-any]
     model_config = ConfigDict(extra="forbid")
-    outcome: SignupAttendanceOutcome
+    outcome: SignupOutcome
 
 
 class AdminShiftResponse(ShiftResponse):  # type: ignore[explicit-any]

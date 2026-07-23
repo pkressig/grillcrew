@@ -256,33 +256,52 @@ describe("planning admin", () => {
   it.each([
     ["LATE_CANCELLED", "Kurzfristig abgesagt"],
     ["SUBSTITUTE_ORGANIZED", "Ersatz organisiert"],
-  ] as const)(
-    "shows stored %s with its German label without offering it as a new workflow",
-    async (outcome, label) => {
-      const shiftWithDeferredOutcome = {
-        ...shift,
-        signups: [{ ...shift.signups[0], outcome }],
-      };
-      const baseFetch = planningFetch("ADMIN", false, [season], true);
-      const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
-          return Response.json([shiftWithDeferredOutcome]);
-        return baseFetch(input, init);
-      });
-      renderAdmin("ADMIN", fetchMock);
+  ] as const)("offers %s with its approved German label", async (outcome, label) => {
+    const shiftWithNewOutcome = {
+      ...shift,
+      signups: [{ ...shift.signups[0], outcome: "OPEN" }],
+    };
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/signups/signup-1/attendance") && init?.method === "PATCH")
+        return Response.json({ ...shift.signups[0], outcome });
+      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([shiftWithNewOutcome]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
 
-      const attendance = await screen.findByRole("combobox", {
-        name: /Anwesenheit von Mia Muster/,
-      });
-      expect(attendance).toHaveValue(outcome);
-      expect(within(attendance).getByRole("option", { name: label })).toBeDisabled();
-      expect(
-        within(attendance)
-          .getAllByRole("option")
-          .map((option) => (option as HTMLOptionElement).value),
-      ).toEqual([outcome, "OPEN", "ATTENDED", "EXCUSED_CANCELLED", "NO_SHOW"]);
-    },
-  );
+    const attendance = await screen.findByRole("combobox", {
+      name: /Anwesenheit von Mia Muster/,
+    });
+    expect(attendance).toHaveValue("OPEN");
+    expect(within(attendance).getByRole("option", { name: label })).toHaveValue(outcome);
+    expect(
+      within(attendance)
+        .getAllByRole("option")
+        .map((option) => (option as HTMLOptionElement).value),
+    ).toEqual([
+      "OPEN",
+      "ATTENDED",
+      "EXCUSED_CANCELLED",
+      "LATE_CANCELLED",
+      "NO_SHOW",
+      "SUBSTITUTE_ORGANIZED",
+    ]);
+
+    fireEvent.change(attendance, { target: { value: outcome } });
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/admin\/example\/signups\/signup-1\/attendance$/),
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ outcome }),
+        }),
+      ),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(label);
+  });
 
   it("requires confirmation before marking a no-show", async () => {
     const confirmMock = vi.fn(() => false);

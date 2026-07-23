@@ -68,11 +68,13 @@ const attendanceLabels: Record<SignupOutcome, string> = {
   NO_SHOW: "Nicht erschienen",
   SUBSTITUTE_ORGANIZED: "Ersatz organisiert",
 };
-const stepOneAttendanceOutcomes: readonly SignupOutcome[] = [
+const attendanceOutcomes: readonly SignupOutcome[] = [
   "OPEN",
   "ATTENDED",
   "EXCUSED_CANCELLED",
+  "LATE_CANCELLED",
   "NO_SHOW",
+  "SUBSTITUTE_ORGANIZED",
 ];
 const eventActions: Record<EventStatus, EventStatus[]> = {
   DRAFT: ["PUBLISHED", "CANCELLED"],
@@ -745,14 +747,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                         keepPersistedAttendance(signup);
                                                     }}
                                                   >
-                                                    {!stepOneAttendanceOutcomes.includes(
-                                                      signup.outcome,
-                                                    ) ? (
-                                                      <option value={signup.outcome} disabled>
-                                                        {attendanceLabels[signup.outcome]}
-                                                      </option>
-                                                    ) : null}
-                                                    {stepOneAttendanceOutcomes.map((outcome) => (
+                                                    {attendanceOutcomes.map((outcome) => (
                                                       <option key={outcome} value={outcome}>
                                                         {attendanceLabels[outcome]}
                                                       </option>

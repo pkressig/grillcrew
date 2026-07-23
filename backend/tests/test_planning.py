@@ -15,6 +15,7 @@ from app.core.config import get_settings
 from app.core.security.csrf import CSRF_HEADER_NAME, derive_csrf_secret, generate_csrf_token
 from app.db.session import get_db
 from app.main import app
+from app.models.identity import AuditEvent
 from app.models.organization import Organization
 from app.models.planning import (
     ClubYear,
@@ -148,55 +149,64 @@ def test_attendance_payload_rejects_extra_fields() -> None:
         SignupOutcome.OPEN,
         SignupOutcome.ATTENDED,
         SignupOutcome.EXCUSED_CANCELLED,
+        SignupOutcome.LATE_CANCELLED,
         SignupOutcome.NO_SHOW,
+        SignupOutcome.SUBSTITUTE_ORGANIZED,
     ],
 )
-def test_attendance_payload_accepts_step_1_outcomes(outcome: SignupOutcome) -> None:
+def test_attendance_payload_accepts_all_outcomes(outcome: SignupOutcome) -> None:
     payload = SignupAttendanceUpdate.model_validate({"outcome": outcome.value})
 
     assert payload.outcome == outcome
 
 
-@pytest.mark.parametrize(
-    "outcome",
-    [SignupOutcome.LATE_CANCELLED, SignupOutcome.SUBSTITUTE_ORGANIZED],
-)
-def test_attendance_payload_rejects_deferred_outcomes(outcome: SignupOutcome) -> None:
-    with pytest.raises(ValidationError):
-        SignupAttendanceUpdate.model_validate({"outcome": outcome.value})
-
-
-def test_attendance_api_rejects_deferred_outcome_before_service_mutation(
+def test_attendance_api_accepts_new_outcome_and_passes_actor(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
-    current = cast(CurrentStaffMembership, SimpleNamespace(organization=organization))
-    calls = 0
+    user = SimpleNamespace(id=uuid4())
+    current = cast(CurrentStaffMembership, SimpleNamespace(organization=organization, user=user))
+    changed = SimpleNamespace(
+        id=uuid4(),
+        public_name_snapshot="Mia Muster",
+        volunteer=SimpleNamespace(
+            first_name="Mia",
+            last_name="Muster",
+            phone_display="+41 79 123 45 67",
+            email_display="mia@example.test",
+        ),
+        outcome=SignupOutcome.LATE_CANCELLED,
+        created_at=datetime.now(UTC),
+    )
+    calls: list[tuple[object, SignupOutcome, object]] = []
 
-    class RejectIfCalledPlanningService:
+    class FakePlanningService:
         def __init__(self, _db: object, _organization_id: object) -> None:
             pass
 
-        def update_signup_attendance(self, _signup_id: object, _outcome: SignupOutcome) -> object:
-            nonlocal calls
-            calls += 1
-            raise AssertionError("invalid attendance outcome must not reach the service")
+        def update_signup_attendance(
+            self, signup_id: object, outcome: SignupOutcome, actor_user_id: object
+        ) -> object:
+            calls.append((signup_id, outcome, actor_user_id))
+            return changed
 
     app.dependency_overrides[planning.manage] = lambda: current
     app.dependency_overrides[dependencies.validate_csrf] = lambda: None
     app.dependency_overrides[get_db] = lambda: _ListDb()
-    monkeypatch.setattr(planning, "PlanningService", RejectIfCalledPlanningService)
+    monkeypatch.setattr(planning, "PlanningService", FakePlanningService)
+    monkeypatch.setattr(planning, "_ensure_origin_and_host", lambda *_args: None)
+    signup_id = uuid4()
     try:
         response = client.patch(
-            f"/api/admin/tenant-a/signups/{uuid4()}/attendance",
+            f"/api/admin/tenant-a/signups/{signup_id}/attendance",
             json={"outcome": SignupOutcome.LATE_CANCELLED.value},
         )
     finally:
         app.dependency_overrides.clear()
 
-    assert response.status_code == 422
-    assert calls == 0
+    assert response.status_code == 200
+    assert calls == [(signup_id, SignupOutcome.LATE_CANCELLED, user.id)]
 
 
 @pytest.mark.parametrize(
@@ -362,7 +372,7 @@ def test_admin_cancel_does_not_overwrite_volunteer_cancellation() -> None:
     assert db.commits == 0
 
 
-def test_attendance_update_is_idempotent_and_active_only() -> None:
+def test_attendance_update_audits_real_change_and_is_idempotent() -> None:
     signup = SimpleNamespace(
         id=uuid4(),
         status=SignupStatus.ACTIVE,
@@ -370,16 +380,33 @@ def test_attendance_update_is_idempotent_and_active_only() -> None:
         volunteer=SimpleNamespace(),
     )
     db = _SignupDb(signup)
-    service = PlanningService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    actor_user_id = uuid4()
+    organization_id = uuid4()
+    service = PlanningService(cast(object, db), organization_id)  # type: ignore[arg-type]
 
-    result = service.update_signup_attendance(signup.id, SignupOutcome.ATTENDED)
-    assert result.outcome == SignupOutcome.ATTENDED
+    result = service.update_signup_attendance(
+        signup.id, SignupOutcome.SUBSTITUTE_ORGANIZED, actor_user_id
+    )
+    assert result.outcome == SignupOutcome.SUBSTITUTE_ORGANIZED
     assert db.commits == 1
     assert db.refreshes == 1
+    assert len(db.added) == 1
+    audit = db.added[0]
+    assert isinstance(audit, AuditEvent)
+    assert audit.organization_id == organization_id
+    assert audit.actor_user_id == actor_user_id
+    assert audit.action == "ATTENDANCE_OUTCOME_CHANGED"
+    assert audit.entity_type == "signup"
+    assert audit.entity_id == signup.id
+    assert audit.event_metadata == {
+        "previous_outcome": "OPEN",
+        "new_outcome": "SUBSTITUTE_ORGANIZED",
+    }
 
-    service.update_signup_attendance(signup.id, SignupOutcome.ATTENDED)
+    service.update_signup_attendance(signup.id, SignupOutcome.SUBSTITUTE_ORGANIZED, actor_user_id)
     assert db.commits == 1
     assert db.refreshes == 1
+    assert len(db.added) == 1
 
 
 @pytest.mark.parametrize(
@@ -392,7 +419,7 @@ def test_cancelled_signup_rejects_attendance_update(signup_status: SignupStatus)
 
     with pytest.raises(PlanningConflictError, match="active signup"):
         PlanningService(cast(object, db), uuid4()).update_signup_attendance(  # type: ignore[arg-type]
-            signup.id, SignupOutcome.NO_SHOW
+            signup.id, SignupOutcome.NO_SHOW, uuid4()
         )
 
     assert db.commits == 0
@@ -401,7 +428,7 @@ def test_cancelled_signup_rejects_attendance_update(signup_status: SignupStatus)
 def test_wrong_tenant_or_missing_signup_attendance_returns_not_found() -> None:
     with pytest.raises(PlanningNotFoundError):
         PlanningService(cast(object, _SignupDb(None)), uuid4()).update_signup_attendance(  # type: ignore[arg-type]
-            uuid4(), SignupOutcome.ATTENDED
+            uuid4(), SignupOutcome.ATTENDED, uuid4()
         )
 
 
@@ -560,11 +587,15 @@ class _MissingDb:
 class _SignupDb:
     def __init__(self, signup: object | None) -> None:
         self.signup = signup
+        self.added: list[object] = []
         self.commits = 0
         self.refreshes = 0
 
     def scalar(self, _statement: object) -> object | None:
         return self.signup
+
+    def add(self, item: object) -> None:
+        self.added.append(item)
 
     def commit(self) -> None:
         self.commits += 1

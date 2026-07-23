@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.identity import AuditEvent
 from app.models.planning import (
     ClubYear,
     Event,
@@ -273,7 +274,9 @@ class PlanningService:
         self.db.commit()
         return signup.shift
 
-    def update_signup_attendance(self, signup_id: uuid.UUID, outcome: SignupOutcome) -> Signup:
+    def update_signup_attendance(
+        self, signup_id: uuid.UUID, outcome: SignupOutcome, actor_user_id: uuid.UUID
+    ) -> Signup:
         signup = self.db.scalar(
             select(Signup)
             .join(Shift)
@@ -294,7 +297,21 @@ class PlanningService:
         if signup.outcome == outcome:
             return signup
 
+        previous_outcome = signup.outcome
         signup.outcome = outcome
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="ATTENDANCE_OUTCOME_CHANGED",
+                entity_type="signup",
+                entity_id=signup.id,
+                event_metadata={
+                    "previous_outcome": previous_outcome.value,
+                    "new_outcome": outcome.value,
+                },
+            )
+        )
         self.db.commit()
         self.db.refresh(signup)
         return signup
