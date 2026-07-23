@@ -8,12 +8,14 @@ agents:
       canCreateAgents: false
       canCreateSkills: false
     adapter:
-      type: "codex_local"
+      type: "claude_local"
       config:
-        command: "codex"
-        search: true
+        command: "claude"
+        model: "claude-sonnet-4-6"
+        effort: "low"
         timeoutSec: 1800
-        dangerouslyBypassApprovalsAndSandbox: false
+        maxTurnsPerRun: 25
+        dangerouslySkipPermissions: false
     runtime:
       heartbeat:
         enabled: false
@@ -48,6 +50,32 @@ agents:
         maxConcurrentRuns: 1
         cooldownSec: 10
         skipTimerWhenNoActionableWork: true
+  grillcrew-claude-engineer:
+    role: "engineer"
+    capabilities: "Approved-scope full-stack implementation, migrations, tests, documentation, and gated GitHub release execution during Codex token-conservation mode."
+    budgetMonthlyCents: 2000
+    permissions:
+      canCreateAgents: false
+      canCreateSkills: false
+    adapter:
+      type: "claude_local"
+      config:
+        command: "claude"
+        model: "claude-sonnet-4-6"
+        effort: "low"
+        timeoutSec: 3600
+        maxTurnsPerRun: 35
+        dangerouslySkipPermissions: false
+    runtime:
+      heartbeat:
+        enabled: false
+        intervalSec: 0
+        wakeOnAssignment: true
+        wakeOnDemand: true
+        wakeOnAutomation: false
+        maxConcurrentRuns: 1
+        cooldownSec: 10
+        skipTimerWhenNoActionableWork: true
   grillcrew-claude-review:
     role: "qa"
     capabilities: "Independent architecture, security, tenant-isolation, migration, code, test, and documentation review."
@@ -59,8 +87,10 @@ agents:
       type: "claude_local"
       config:
         command: "claude"
+        model: "claude-sonnet-4-6"
+        effort: "low"
         timeoutSec: 2400
-        maxTurnsPerRun: 120
+        maxTurnsPerRun: 35
         dangerouslySkipPermissions: false
     runtime:
       heartbeat:

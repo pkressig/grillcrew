@@ -8,10 +8,10 @@ ChatGPT and the Product Owner decide product direction in this conversation. Pap
 
 1. ChatGPT converts the approved decision into one Paperclip issue using `grillcrew-task-contract`.
 2. The Product Orchestrator verifies scope, authority, dependencies, source documents, acceptance criteria, and the correct goal.
-3. Codex implements in an isolated worktree on `codex/{{issue.identifier}}-{{slug}}` and records changed files and verification evidence.
+3. The active implementation engineer implements in an isolated worktree and records changed files and verification evidence. Codex is the normal engineer; during the documented token-conservation mode, GrillCrew Claude Engineer is used instead.
 4. Claude independently reviews correctness, architecture, security, tenant isolation, permissions, migrations, tests, and documentation.
 5. AGY independently reviews behavior, mobile UX, accessibility, workflow clarity, privacy, German copy, and product fit through `paperclip/scripts/agy-review-bridge.mjs`.
-6. Objective findings return the issue to Codex. Product recommendations are presented to the Product Owner and never silently become scope.
+6. Objective findings return the issue to the active implementation engineer. Product recommendations are presented to the Product Owner and never silently become scope.
 7. The Product Owner is the final approval participant. Commit, push, pull request, merge, deployment, and branch deletion still require the release gate in `ai/GIT_AUTOMATION.md`.
 
 ## Required issue contract
@@ -28,7 +28,17 @@ Every implementation issue states:
 - **Sources:** exact repository documents to read.
 - **Update duty:** which durable files must change when implementation changes their truth.
 
-The issue links the GrillCrew project, one active goal, the primary workspace, and Codex. Normal implementation uses `isolated_workspace`; a shared workspace is reserved for explicitly read-only diagnostics or coordinated recovery.
+The issue links the GrillCrew project, one active goal, the primary workspace, and the active implementation engineer. Normal implementation uses `isolated_workspace`; a shared workspace is reserved for explicitly read-only diagnostics or coordinated recovery.
+
+## Token-conservation mode
+
+When Codex subscription capacity is constrained, pause GrillCrew Codex, switch the existing Product
+Orchestrator to Claude, and assign implementation to GrillCrew Claude Engineer. The Orchestrator uses Claude
+Sonnet with low effort and 25 maximum turns; implementation and technical review use Claude Sonnet with low
+effort and 35 maximum turns. All roles use targeted source reading and diff-focused review. GrillCrew Claude
+Review remains a separate, independent reviewer and must not implement the same issue. AGY remains product/UX
+review-only. ChatGPT and the Product Owner continue to make decisions and provide the final release authority.
+Re-enabling Codex or returning the Orchestrator to Codex requires an explicit Product Owner decision.
 
 ## Execution policy
 
