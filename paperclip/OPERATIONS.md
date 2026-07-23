@@ -15,9 +15,21 @@ Generated `paperclip/company-export*` directories are snapshots only. Never edit
 
 ## Live topology
 
-The company is **GrillCrew Product Development**. The four accountable roles are Product Orchestrator, Codex implementation engineer, Claude architecture/security reviewer, and AGY product/UX reviewer. Timed heartbeats are disabled; assignment and explicit on-demand wakeups start work. Every agent has one concurrent run and a monthly budget. New agents require board approval.
+The company is **GrillCrew Product Development**. The durable accountable roles are Product Orchestrator,
+implementation engineer, Claude architecture/security reviewer, and AGY product/UX reviewer. Codex is the
+normal implementation engineer. GrillCrew Claude Engineer is the approved temporary implementation role
+during token-conservation mode; it never replaces the independent Claude reviewer. Timed heartbeats are
+disabled; assignment and explicit on-demand wakeups start work. Every agent has one concurrent run and a
+monthly budget. New agents require board approval.
 
 The GrillCrew project uses the local Git repository as its primary workspace and isolated Git worktrees by default. Paperclip's instance-level experimental setting `enableIsolatedWorkspaces` must also be enabled; the project policy is stored but silently falls back to the shared primary workspace while that instance gate is disabled. The local Paperclip database is outside the repository under the default Paperclip instance data directory. Back it up before schema upgrades or major configuration changes.
+
+During token-conservation mode, GrillCrew Codex is paused and the existing Product Orchestrator runs on Claude
+Sonnet 4.6 with low effort and 25 maximum turns. Claude implementation and independent Claude review use
+Sonnet 4.6 with low effort and 35 maximum turns. Routine tasks must use targeted source lists and reviewers
+must start from the changed diff. Monthly currency budgets do not protect subscription token quotas, so the
+Codex agent's pause state, bounded Claude configurations, and explicit assignments are the controlling
+safeguards.
 
 ## Scheduled governance
 
