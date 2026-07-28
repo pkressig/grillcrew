@@ -168,7 +168,11 @@ describe("AdminShell", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
     render(
       <AuthProvider>
-        <AdminShell org="example" organization={platformFallbackOrganization} />
+        <AdminShell
+          activeView="planning"
+          org="example"
+          organization={platformFallbackOrganization}
+        />
       </AuthProvider>,
     );
     expect(
@@ -186,7 +190,7 @@ describe("AdminShell", () => {
     );
     render(
       <AuthProvider>
-        <AdminShell org="other" organization={platformFallbackOrganization} />
+        <AdminShell activeView="planning" org="other" organization={platformFallbackOrganization} />
       </AuthProvider>,
     );
     expect(await screen.findByRole("heading", { name: "Kein Zugriff" })).toBeInTheDocument();

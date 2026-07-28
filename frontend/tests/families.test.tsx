@@ -64,6 +64,7 @@ function adminFetch(
       return memberResponses[Math.min(memberIndex++, memberResponses.length - 1)]!;
     if (url.endsWith("/families/family-1/members") && method === "POST")
       return Response.json(member, { status: 201 });
+    if (url.endsWith("/families/family-2/members") && method === "GET") return Response.json([]);
     if (url.endsWith("/club-years") || url.endsWith("/seasons")) return Response.json([]);
     if (url.endsWith("/seasons/current")) return new Response(null, { status: 404 });
     return new Response(null, { status: 404 });
@@ -74,7 +75,7 @@ function renderAdmin(role: StaffRole, fetchMock = adminFetch(role)) {
   vi.stubGlobal("fetch", fetchMock);
   render(
     <AuthProvider>
-      <AdminShell org="example" organization={platformFallbackOrganization} />
+      <AdminShell activeView="families" org="example" organization={platformFallbackOrganization} />
     </AuthProvider>,
   );
   return fetchMock;
@@ -86,12 +87,92 @@ afterEach(() => {
   vi.clearAllMocks();
   document.cookie = "gc_csrf=; Max-Age=0";
   clearCsrfToken();
+  window.history.replaceState({}, "", "/");
 });
 
 describe("family admin", () => {
+  it("provides responsive navigation, active state, skip link, and separated requests", async () => {
+    const fetchMock = renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family])]));
+    await screen.findByRole("heading", { name: "Familien" });
+    expect(screen.getByText("Zum Inhalt")).toHaveAttribute("href", "#admin-content");
+    expect(screen.getAllByRole("link", { name: "Familien" })[0]).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getAllByRole("link", { name: "Anwesenheit" })[0]).toHaveAttribute(
+      "href",
+      "/example/admin/planning#attendance",
+    );
+    expect(document.querySelector("aside")).toHaveClass("lg:sticky");
+    expect(document.querySelector("header nav ul")).toHaveClass("flex", "flex-wrap");
+    expect(
+      fetchMock.mock.calls.some(([url]) => /club-years|seasons|events|shifts/.test(String(url))),
+    ).toBe(false);
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/members"))).toBe(false);
+  });
+
+  it("searches case-insensitively, clears, and distinguishes no results", async () => {
+    renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", [
+        Response.json([family, { ...family, id: "family-2", display_name: "Familie Keller" }]),
+      ]),
+    );
+    await screen.findByRole("button", { name: "Familie Muster" });
+    fireEvent.change(screen.getByLabelText("Familien suchen"), { target: { value: "kELLER" } });
+    expect(screen.queryByRole("button", { name: "Familie Muster" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Familie Keller" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Familien suchen"), { target: { value: "Niemand" } });
+    expect(screen.getByText("Keine Familien für diese Suche gefunden.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Suche löschen" }));
+    expect(screen.getByRole("button", { name: "Familie Muster" })).toBeInTheDocument();
+  });
+
+  it("supports query selection, mobile back, browser back, and cached selected-only loading", async () => {
+    window.history.replaceState({}, "", "/example/admin/families?family=family-1");
+    const fetchMock = renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family])]));
+    expect(await screen.findByRole("heading", { name: "Familie Muster" })).toBeInTheDocument();
+    await screen.findByText("Noch keine Familienmitglieder vorhanden.");
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/members"))).toHaveLength(
+      1,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Zurück zu Familien" }));
+    expect(window.location.search).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "Familie Muster" }));
+    expect(window.location.search).toBe("?family=family-1");
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/members"))).toHaveLength(
+        1,
+      ),
+    );
+    window.history.back();
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    expect(await screen.findByLabelText("Familienliste")).toBeInTheDocument();
+  });
+
+  it("clears transient detail feedback when directly switching families", async () => {
+    const secondFamily = { ...family, id: "family-2", display_name: "Familie Keller" };
+    renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family, secondFamily])]));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    await screen.findByText("Noch keine Familienmitglieder vorhanden.");
+    const form = screen.getByRole("button", { name: "Mitglied erstellen" }).closest("form")!;
+    fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: " " } });
+    fireEvent.change(screen.getByLabelText("Nachname"), { target: { value: "Muster" } });
+    fireEvent.submit(form);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Vorname und Nachname sind erforderlich.",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Familie Keller" }));
+    expect(await screen.findByRole("heading", { name: "Familie Keller" })).toBeInTheDocument();
+    expect(screen.queryByText("Vorname und Nachname sind erforderlich.")).not.toBeInTheDocument();
+  });
+
   it.each(["ADMIN", "KOORDINATION"] as const)("is visible and accessible for %s", async (role) => {
     renderAdmin(role);
     expect(await screen.findByRole("heading", { name: "Familien" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Neue Familie" }));
     expect(screen.getByLabelText("Familienname")).toHaveAttribute("required");
     expect(screen.getByLabelText("Familienname")).toHaveAttribute("maxlength", "160");
     expect(screen.getByLabelText("Interne Notiz (optional)")).toBeInTheDocument();
@@ -126,6 +207,7 @@ describe("family admin", () => {
       adminFetch("KOORDINATION", [Response.json([]), Response.json([family])]),
     );
     await screen.findByText("Noch keine Familien vorhanden.");
+    fireEvent.click(screen.getByRole("button", { name: "Neue Familie" }));
     fireEvent.change(screen.getByLabelText("Familienname"), {
       target: { value: "  Familie Muster  " },
     });
@@ -152,9 +234,28 @@ describe("family admin", () => {
     expect(screen.getByText("Nur intern")).toBeInTheDocument();
   });
 
+  it("clears family-creation success when selecting a different family", async () => {
+    const secondFamily = { ...family, id: "family-2", display_name: "Familie Keller" };
+    renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([secondFamily])]));
+
+    await screen.findByRole("button", { name: "Familie Keller" });
+    fireEvent.click(screen.getByRole("button", { name: "Neue Familie" }));
+    fireEvent.change(screen.getByLabelText("Familienname"), {
+      target: { value: "Familie Muster" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Familie erstellen" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Familie wurde erstellt.");
+    expect(await screen.findByRole("heading", { name: "Familie Muster" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Familie Keller" }));
+    expect(await screen.findByRole("heading", { name: "Familie Keller" })).toBeInTheDocument();
+    expect(screen.queryByText("Familie wurde erstellt.")).not.toBeInTheDocument();
+  });
+
   it("rejects whitespace-only names before calling the API", async () => {
     const fetchMock = renderAdmin("ADMIN");
     await screen.findByText("Noch keine Familien vorhanden.");
+    fireEvent.click(screen.getByRole("button", { name: "Neue Familie" }));
     const form = screen.getByRole("button", { name: "Familie erstellen" }).closest("form")!;
     fireEvent.change(screen.getByLabelText("Familienname"), { target: { value: "   " } });
     fireEvent.submit(form);
@@ -186,6 +287,7 @@ describe("family admin", () => {
     });
     renderAdmin("ADMIN", createError);
     await screen.findByText("Noch keine Familien vorhanden.");
+    fireEvent.click(screen.getByRole("button", { name: "Neue Familie" }));
     fireEvent.change(screen.getByLabelText("Familienname"), { target: { value: "Muster" } });
     fireEvent.click(screen.getByRole("button", { name: "Familie erstellen" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -196,6 +298,7 @@ describe("family admin", () => {
 
   it("shows member type labels, accessible fields, and an empty state", async () => {
     renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family])]));
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
     expect(await screen.findByText("Noch keine Familienmitglieder vorhanden.")).toBeInTheDocument();
     expect(screen.getByLabelText("Mitgliedstyp")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Kind" })).toHaveValue("CHILD");
@@ -215,6 +318,7 @@ describe("family admin", () => {
       String(input).endsWith("/families/family-1/members") ? pending : base(input, init),
     );
     renderAdmin("ADMIN", fetchMock);
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
     expect(await screen.findByText("Familienmitglieder werden geladen …")).toBeInTheDocument();
     resolveMembers(Response.json([]));
     expect(await screen.findByText("Noch keine Familienmitglieder vorhanden.")).toBeInTheDocument();
@@ -230,6 +334,7 @@ describe("family admin", () => {
         [Response.json([]), Response.json([member])],
       ),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
     await screen.findByText("Noch keine Familienmitglieder vorhanden.");
     fireEvent.change(screen.getByLabelText("Mitgliedstyp"), { target: { value: "HELPER" } });
     fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: " Mia " } });
@@ -257,6 +362,7 @@ describe("family admin", () => {
 
   it("rejects whitespace-only member names before calling the API", async () => {
     const fetchMock = renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family])]));
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
     await screen.findByText("Noch keine Familienmitglieder vorhanden.");
     const form = screen.getByRole("button", { name: "Mitglied erstellen" }).closest("form")!;
     fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: " " } });
@@ -277,6 +383,7 @@ describe("family admin", () => {
       "ADMIN",
       adminFetch("ADMIN", [Response.json([family])], [new Response(null, { status: 500 })]),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Die Familienmitglieder konnten nicht geladen werden.",
     );
@@ -289,6 +396,7 @@ describe("family admin", () => {
       return base(input, init);
     });
     renderAdmin("ADMIN", createError);
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
     await screen.findByText("Noch keine Familienmitglieder vorhanden.");
     fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Mia" } });
     fireEvent.change(screen.getByLabelText("Nachname"), { target: { value: "Muster" } });

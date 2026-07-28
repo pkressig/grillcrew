@@ -129,7 +129,7 @@ function renderAdmin(role: Parameters<typeof session>[0], fetchMock = planningFe
   vi.stubGlobal("fetch", fetchMock);
   render(
     <AuthProvider>
-      <AdminShell org="example" organization={platformFallbackOrganization} />
+      <AdminShell activeView="planning" org="example" organization={platformFallbackOrganization} />
     </AuthProvider>,
   );
   return fetchMock;
@@ -158,8 +158,10 @@ afterEach(() => {
 
 describe("planning admin", () => {
   it.each(["ADMIN", "KOORDINATION"] as const)("shows management controls for %s", async (role) => {
-    renderAdmin(role);
+    const fetchMock = renderAdmin(role);
     expect(await screen.findByRole("heading", { name: "Planung" })).toBeInTheDocument();
+    expect(document.querySelector("#attendance")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/families"))).toBe(false);
     expect(screen.getByRole("button", { name: "Vereinsjahr erstellen" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Saison erstellen" })).toBeInTheDocument();
     expect(screen.getByText("Anlass erstellen", { selector: "summary" })).toBeInTheDocument();

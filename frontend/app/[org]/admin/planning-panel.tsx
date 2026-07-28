@@ -389,12 +389,16 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   return (
     <section className="grid gap-6" aria-labelledby="planning-title">
       <div>
-        <h2 id="planning-title" className="text-xl font-semibold">
+        <h1 id="planning-title" className="text-2xl font-bold">
           Planung
-        </h2>
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">Vereinsjahre und Saisons verwalten.</p>
       </div>
-      <section className="rounded-lg border p-4" aria-labelledby="handlungsbedarf-title">
+      <section
+        className="scroll-mt-4 rounded-lg border p-4"
+        id="attendance"
+        aria-labelledby="handlungsbedarf-title"
+      >
         <h3 id="handlungsbedarf-title" className="font-semibold">
           Handlungsbedarf Anwesenheit
           {unresolvedItems.length > 0 ? (
