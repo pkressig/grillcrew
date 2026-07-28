@@ -140,11 +140,16 @@ function openEventForm() {
 }
 
 function openShiftForm(eventTitle: string) {
-  const eventHeading = screen.getByRole("heading", { name: eventTitle });
-  const eventItem = eventHeading.closest("li");
-  const summary = eventItem?.querySelector("summary");
-  expect(summary).not.toBeNull();
-  fireEvent.click(summary!);
+  const eventSummary = screen.getByLabelText(new RegExp(`Anlass ${eventTitle} am .* anzeigen`));
+  fireEvent.click(eventSummary);
+  const eventDetails = eventSummary.closest("details");
+  const summaries = eventDetails?.querySelectorAll("summary");
+  expect(summaries?.length).toBeGreaterThan(1);
+  fireEvent.click(summaries![1]!);
+}
+
+function openCreateForm(name: "Vereinsjahr erstellen" | "Saison erstellen") {
+  fireEvent.click(screen.getByText(name, { selector: "summary" }));
 }
 
 afterEach(() => {
@@ -157,6 +162,79 @@ afterEach(() => {
 });
 
 describe("planning admin", () => {
+  it("renders the ordered accessible Phase 2 workspace and responsive desktop grid", async () => {
+    renderAdmin("ADMIN");
+    await screen.findByRole("heading", { level: 1, name: "Planung" });
+    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+    const attendance = screen.getByRole("heading", { name: /Handlungsbedarf Anwesenheit/ });
+    const agenda = screen.getByRole("heading", { name: "Agenda" });
+    const periods = screen.getByRole("heading", { name: "Planungsperioden" });
+    expect(document.querySelector("#attendance")).toContainElement(attendance);
+    expect(
+      attendance.compareDocumentPosition(agenda) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(agenda.compareDocumentPosition(periods) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(agenda.closest("section")?.parentElement).toHaveClass(
+      "lg:grid-cols-[minmax(0,1fr)_21rem]",
+    );
+  });
+
+  it("orders agenda events chronologically with stable equal-date ordering", async () => {
+    const earlyEvent = {
+      ...planningEvent,
+      id: "event-early",
+      title: "Früher Anlass",
+      date: "2026-08-01",
+    };
+    const equalEvent = { ...planningEvent, id: "event-equal", title: "Gleicher Tag" };
+    const base = planningFetch("ADMIN", false, [season], true, false, [
+      planningEvent,
+      equalEvent,
+      earlyEvent,
+    ]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (
+        String(input).includes("event-early/shifts") ||
+        String(input).includes("event-equal/shifts")
+      )
+        return Response.json([]);
+      return base(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+    await screen.findByText("Früher Anlass");
+    expect(
+      screen.getAllByLabelText(/Anlass .* anzeigen/).map((summary) => summary.textContent),
+    ).toEqual([
+      expect.stringContaining("Früher Anlass"),
+      expect.stringContaining("Sommerfest"),
+      expect.stringContaining("Gleicher Tag"),
+    ]);
+  });
+
+  it("keeps event details native and opening them does not request data", async () => {
+    const fetchMock = renderAdmin("ADMIN", planningFetch("ADMIN", false, [season], true));
+    const summary = await screen.findByLabelText(/Anlass Sommerfest am .* anzeigen/);
+    const details = summary.closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    const calls = fetchMock.mock.calls.length;
+    fireEvent.click(summary);
+    expect(details).toHaveAttribute("open");
+    expect(screen.getByText("Fest für alle")).toBeInTheDocument();
+    expect(screen.getByText(/12\.09\.2026, 18:00/)).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(calls);
+  });
+
+  it("keeps creation form values when its native disclosure is closed and reopened", async () => {
+    renderAdmin("ADMIN");
+    await screen.findAllByText("2026/27");
+    const summary = screen.getByText("Vereinsjahr erstellen", { selector: "summary" });
+    fireEvent.click(summary);
+    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "2027/28" } });
+    fireEvent.click(summary);
+    fireEvent.click(summary);
+    expect(screen.getByLabelText("Label")).toHaveValue("2027/28");
+  });
+
   it.each(["ADMIN", "KOORDINATION"] as const)("shows management controls for %s", async (role) => {
     const fetchMock = renderAdmin(role);
     expect(await screen.findByRole("heading", { name: "Planung" })).toBeInTheDocument();
@@ -438,11 +516,14 @@ describe("planning admin", () => {
     document.cookie = "gc_csrf=test-token";
     const fetchMock = renderAdmin("ADMIN");
     await screen.findAllByText("2026/27");
-    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "2027/28" } });
-    const dates = screen.getAllByLabelText(/datum/);
-    fireEvent.change(dates[0]!, { target: { value: "2027-07-01" } });
-    fireEvent.change(dates[1]!, { target: { value: "2028-06-30" } });
-    fireEvent.click(screen.getByRole("button", { name: "Vereinsjahr erstellen" }));
+    openCreateForm("Vereinsjahr erstellen");
+    const form = screen.getByLabelText("Label").closest("form")!;
+    fireEvent.change(within(form).getByLabelText("Label"), { target: { value: "2027/28" } });
+    fireEvent.change(within(form).getByLabelText("Startdatum"), {
+      target: { value: "2027-07-01" },
+    });
+    fireEvent.change(within(form).getByLabelText("Enddatum"), { target: { value: "2028-06-30" } });
+    fireEvent.submit(form);
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringMatching(/\/api\/admin\/example\/club-years$/),
@@ -464,11 +545,14 @@ describe("planning admin", () => {
   it("uses the hydrated CSRF token when the API cookie is not readable", async () => {
     const fetchMock = renderAdmin("ADMIN");
     await screen.findAllByText("2026/27");
-    fireEvent.change(screen.getByLabelText("Label"), { target: { value: "2027/28" } });
-    const dates = screen.getAllByLabelText(/datum/);
-    fireEvent.change(dates[0]!, { target: { value: "2027-07-01" } });
-    fireEvent.change(dates[1]!, { target: { value: "2028-06-30" } });
-    fireEvent.click(screen.getByRole("button", { name: "Vereinsjahr erstellen" }));
+    openCreateForm("Vereinsjahr erstellen");
+    const form = screen.getByLabelText("Label").closest("form")!;
+    fireEvent.change(within(form).getByLabelText("Label"), { target: { value: "2027/28" } });
+    fireEvent.change(within(form).getByLabelText("Startdatum"), {
+      target: { value: "2027-07-01" },
+    });
+    fireEvent.change(within(form).getByLabelText("Enddatum"), { target: { value: "2028-06-30" } });
+    fireEvent.submit(form);
 
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -484,12 +568,15 @@ describe("planning admin", () => {
   it("creates a season in the selected club year", async () => {
     const fetchMock = renderAdmin("KOORDINATION");
     await screen.findAllByText("2026/27");
-    fireEvent.change(screen.getByLabelText("Vereinsjahr"), { target: { value: "year-1" } });
+    openCreateForm("Saison erstellen");
+    const form = screen.getByLabelText("Name").closest("form")!;
+    fireEvent.change(within(form).getByLabelText("Vereinsjahr"), { target: { value: "year-1" } });
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "FrÃ¼hlingsrunde" } });
-    const dates = screen.getAllByLabelText(/datum/);
-    fireEvent.change(dates[2]!, { target: { value: "2027-02-01" } });
-    fireEvent.change(dates[3]!, { target: { value: "2027-06-15" } });
-    fireEvent.click(screen.getByRole("button", { name: "Saison erstellen" }));
+    fireEvent.change(within(form).getByLabelText("Startdatum"), {
+      target: { value: "2027-02-01" },
+    });
+    fireEvent.change(within(form).getByLabelText("Enddatum"), { target: { value: "2027-06-15" } });
+    fireEvent.submit(form);
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringMatching(/\/club-years\/year-1\/seasons$/),
