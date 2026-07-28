@@ -13,6 +13,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.family import Family
     from app.models.identity import AuditEvent, Invitation, StaffMembership
     from app.models.planning import ClubYear, Volunteer
 
@@ -79,6 +80,7 @@ class Organization(Base):
     invitations: Mapped[list[Invitation]] = relationship(back_populates="organization")
     club_years: Mapped[list[ClubYear]] = relationship(back_populates="organization")
     volunteers: Mapped[list[Volunteer]] = relationship()
+    families: Mapped[list[Family]] = relationship(back_populates="organization")
 
 
 class OrganizationSettings(Base):

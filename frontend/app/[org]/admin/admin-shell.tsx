@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth-provider";
 import { LogoutButton } from "@/components/logout-button";
 import { OrganizationSwitcher } from "@/components/organization-switcher";
 import type { PublicOrganization } from "@/lib/organization";
+import { FamiliesPanel } from "./families-panel";
 import { PlanningPanel } from "./planning-panel";
 
 const roleLabels = {
@@ -48,7 +49,10 @@ export function AdminShell({
       </header>
       <OrganizationSwitcher memberships={auth.memberships} currentSlug={org} />
       {canManagePlanning ? (
-        <PlanningPanel org={org} timezone={organization.timezone} />
+        <>
+          <PlanningPanel org={org} timezone={organization.timezone} />
+          <FamiliesPanel org={org} />
+        </>
       ) : (
         <section className="rounded-lg border p-5">
           <h2 className="text-lg font-semibold">Planung</h2>
@@ -58,9 +62,7 @@ export function AdminShell({
       <section className="rounded-lg border p-5">
         <h2 className="text-lg font-semibold">Bereiche</h2>
         <ul className="mt-3 grid gap-3 sm:grid-cols-2">
-          {canManagePlanning ? (
-            <li className="rounded border p-4">Helfer und Familien (folgt)</li>
-          ) : null}
+          {canManagePlanning ? <li className="rounded border p-4">Helfer (folgt)</li> : null}
           {membership.role === "ADMIN" ? (
             <li className="rounded border p-4">Organisation und Rollen (folgt)</li>
           ) : null}

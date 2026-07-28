@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
+from app.api.families import router as families_router
 from app.api.health import router as health_router
 from app.api.internal import router as internal_router
 from app.api.invitations import router as invitations_router
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
     application.include_router(auth_router)
     application.include_router(invitations_router)
     application.include_router(admin_router)
+    application.include_router(families_router)
     application.include_router(planning_router)
     if settings.app_env != AppEnv.PRODUCTION:
         application.include_router(internal_router)
