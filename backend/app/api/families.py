@@ -2,6 +2,8 @@
 
 # ruff: noqa: B008
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
@@ -10,8 +12,13 @@ from app.api.dependencies import CurrentStaffMembership, require_staff_role, val
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.identity import StaffRole
-from app.schemas.family import FamilyCreate, FamilyResponse
-from app.services.family import FamilyService
+from app.schemas.family import (
+    FamilyCreate,
+    FamilyMemberCreate,
+    FamilyMemberResponse,
+    FamilyResponse,
+)
+from app.services.family import FamilyNotFoundError, FamilyService
 
 router = APIRouter(prefix="/api/admin/{organization_slug}/families", tags=["families"])
 manage = require_staff_role(StaffRole.KOORDINATION)
@@ -46,3 +53,37 @@ def create_family(
 ) -> FamilyResponse:
     _ensure_origin_and_host(request, db, get_settings())
     return FamilyResponse.model_validate(_service(organization_slug, current, db).create(payload))
+
+
+@router.get("/{family_id}/members", response_model=list[FamilyMemberResponse])
+def list_family_members(
+    organization_slug: str,
+    family_id: uuid.UUID,
+    current: CurrentStaffMembership = Depends(manage),
+    db: Session = Depends(get_db),
+) -> list[FamilyMemberResponse]:
+    try:
+        return [
+            FamilyMemberResponse.model_validate(item)
+            for item in _service(organization_slug, current, db).list_members(family_id)
+        ]
+    except FamilyNotFoundError:
+        raise HTTPException(status_code=404, detail="family not found") from None
+
+
+@router.post("/{family_id}/members", response_model=FamilyMemberResponse, status_code=201)
+def create_family_member(
+    organization_slug: str,
+    family_id: uuid.UUID,
+    payload: FamilyMemberCreate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> FamilyMemberResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        member = _service(organization_slug, current, db).create_member(family_id, payload)
+        return FamilyMemberResponse.model_validate(member)
+    except FamilyNotFoundError:
+        raise HTTPException(status_code=404, detail="family not found") from None

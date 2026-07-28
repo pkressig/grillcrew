@@ -15,6 +15,16 @@ export type FamilyInput = {
   internal_note: string | null;
 };
 
+export type FamilyMemberType = "CHILD" | "HELPER";
+export type FamilyMember = {
+  id: string;
+  family_id: string;
+  member_type: FamilyMemberType;
+  first_name: string;
+  last_name: string;
+};
+export type FamilyMemberInput = Omit<FamilyMember, "id" | "family_id">;
+
 async function request<T>(path: string, init?: RequestInit, errorMessage?: string): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, { credentials: "include", ...init });
   if (!response.ok) throw new Error(errorMessage ?? "Die Familien konnten nicht geladen werden.");
@@ -33,4 +43,25 @@ export const createFamily = (org: string, payload: FamilyInput) =>
       body: JSON.stringify(payload),
     },
     "Die Familie konnte nicht erstellt werden.",
+  );
+
+const memberPath = (org: string, familyId: string) =>
+  `/api/admin/${encodeURIComponent(org)}/families/${encodeURIComponent(familyId)}/members`;
+
+export const loadFamilyMembers = (org: string, familyId: string) =>
+  request<FamilyMember[]>(
+    memberPath(org, familyId),
+    undefined,
+    "Die Familienmitglieder konnten nicht geladen werden.",
+  );
+
+export const createFamilyMember = (org: string, familyId: string, payload: FamilyMemberInput) =>
+  request<FamilyMember>(
+    memberPath(org, familyId),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+      body: JSON.stringify(payload),
+    },
+    "Das Familienmitglied konnte nicht erstellt werden.",
   );

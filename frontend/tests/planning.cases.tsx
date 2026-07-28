@@ -107,6 +107,7 @@ function planningFetch(
     if (url.endsWith("/api/auth/me")) return Response.json(session(role));
     if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "memory-token" });
     if (url.endsWith("/families") && method === "GET") return Response.json([]);
+    if (url.endsWith("/members") && method === "GET") return Response.json([]);
     if (url.endsWith("/club-years") && method === "GET") return Response.json(empty ? [] : [year]);
     if (url.endsWith("/seasons") && method === "GET")
       return Response.json(empty ? [] : returnedSeasons);

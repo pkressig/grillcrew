@@ -5,7 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.family import FamilyStatus
+from app.models.family import FamilyMemberType, FamilyStatus
 
 
 class FamilyCreate(BaseModel):  # type: ignore[explicit-any]
@@ -30,3 +30,26 @@ class FamilyResponse(BaseModel):  # type: ignore[explicit-any]
     internal_note: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class FamilyMemberCreate(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+
+    member_type: FamilyMemberType
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def trim_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class FamilyMemberResponse(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    family_id: uuid.UUID
+    member_type: FamilyMemberType
+    first_name: str
+    last_name: str

@@ -21,6 +21,11 @@ class FamilyStatus(StrEnum):
     ACTIVE = "ACTIVE"
 
 
+class FamilyMemberType(StrEnum):
+    CHILD = "CHILD"
+    HELPER = "HELPER"
+
+
 class Family(Base):
     __tablename__ = "family"
     __table_args__ = (Index("ix_family_organization_status", "organization_id", "status"),)
@@ -46,3 +51,31 @@ class Family(Base):
     )
 
     organization: Mapped[Organization] = relationship(back_populates="families")
+    members: Mapped[list[FamilyMember]] = relationship(back_populates="family")
+
+
+class FamilyMember(Base):
+    __tablename__ = "family_member"
+    __table_args__ = (
+        Index(
+            "ix_family_member_family_name",
+            "family_id",
+            "last_name",
+            "first_name",
+            "member_type",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    family_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("family.id", ondelete="RESTRICT"), nullable=False
+    )
+    member_type: Mapped[FamilyMemberType] = mapped_column(
+        Enum(FamilyMemberType, name="family_member_type"), nullable=False
+    )
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    family: Mapped[Family] = relationship(back_populates="members")
