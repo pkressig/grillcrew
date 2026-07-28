@@ -359,10 +359,17 @@ Steps 1 and 2 are merged on `main` through PRs #29 and #31. ADMIN and
 KOORDINATION can update an active signup to any of the six approved attendance outcomes from the
 existing planning shift card, and real changes create a tenant-scoped audit event with previous and new
 outcome. The authenticated admin projection includes the outcome; public plan and signup projections
-do not. Cancelled signups remain historical and cannot be marked through the attendance endpoint. Work
-records, compensation, credits, exports, reminders, replacement assignment, and public-flow changes
-remain outside this step. Codex, Claude, AGY, the Product Owner, and ChatGPT approved the bounded
-implementation before merge.
+do not. Cancelled signups remain historical and cannot be marked through the attendance endpoint.
+
+Step 3 (PKA-20, awaiting review) adds a "Handlungsbedarf Anwesenheit" section to the authenticated
+planning panel. It surfaces active signups with `outcome = OPEN` whose `shift.ends_at <= now` (derived
+on the frontend from the existing `AdminShiftResponse`). Staff can resolve items inline through the
+existing attendance selector; a successful non-OPEN outcome immediately removes the entry from the
+Handlungsbedarf list. An empty state confirms when no unresolved items remain. No schema migration,
+no new backend endpoint, and no public-data changes were required.
+
+Work records, compensation, credits, exports, reminders, replacement assignment, and public-flow
+changes remain outside this feature.
 
 **Goal**  
 Track the outcome of organization-local signups.

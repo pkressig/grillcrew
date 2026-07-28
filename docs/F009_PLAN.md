@@ -40,3 +40,26 @@ Each real outcome change writes one `AuditEvent` in the same database transactio
 `SUBSTITUTE_ORGANIZED` records only the original signup outcome. Step 2 does not create or link a
 replacement person, does not assign a replacement signup, does not create WorkRecords, and does not
 change public signup or public plan projections.
+
+## Step 3 — Unresolved attendance Handlungsbedarf
+
+Step 3 surfaces active signups with `outcome = OPEN` whose shift has already ended as operational
+Handlungsbedarf for ADMIN and KOORDINATION. The definition of unresolved: the signup is active (not
+cancelled), `outcome` is `OPEN`, and `shift.ends_at <= now` (UTC instant comparison using the
+timezone-aware timestamps already present in `AdminShiftResponse`).
+
+A dedicated "Handlungsbedarf Anwesenheit" section appears at the top of the authenticated planning
+panel, above the error and success banners. When no unresolved items exist the section shows a clear
+non-alarming German empty state. When items exist each entry displays the helper name, event title,
+and shift time range alongside an attendance selector that offers only the five non-OPEN outcomes.
+A badge on the section heading counts open items.
+
+The derivation is entirely frontend-side: the existing `AdminShiftResponse` already provides
+`ends_at`, the complete active-signup list with `outcome`, and the parent event title through the
+loaded `events` state. No backend endpoint was added or modified; the existing PATCH attendance
+endpoint and `refresh()` cycle handle resolution automatically — a successful non-OPEN outcome
+removes that signup from the Handlungsbedarf list after refresh without a full reload.
+
+Cancelled signups remain excluded from the shift response (existing backend filter unchanged).
+Public projections, public responses, and all security boundaries are unchanged. No schema
+migration was required or introduced.

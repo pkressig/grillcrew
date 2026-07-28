@@ -366,6 +366,20 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     );
   }
 
+  const now = new Date();
+  const unresolvedItems = loading
+    ? []
+    : shifts.flatMap((shift) => {
+        if (new Date(shift.ends_at) > now) return [];
+        return shift.signups
+          .filter((signup) => signup.outcome === "OPEN")
+          .map((signup) => ({
+            signup,
+            shift,
+            event: events.find((e) => e.id === shift.event_id),
+          }));
+      });
+
   if (loading)
     return (
       <section aria-live="polite">
@@ -380,6 +394,68 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
         </h2>
         <p className="mt-1 text-sm text-muted-foreground">Vereinsjahre und Saisons verwalten.</p>
       </div>
+      <section className="rounded-lg border p-4" aria-labelledby="handlungsbedarf-title">
+        <h3 id="handlungsbedarf-title" className="font-semibold">
+          Handlungsbedarf Anwesenheit
+          {unresolvedItems.length > 0 ? (
+            <span
+              className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-status-error px-1.5 py-0.5 text-xs font-bold text-white"
+              aria-label={`${unresolvedItems.length} ${unresolvedItems.length === 1 ? "offene Eintragung" : "offene Eintragungen"}`}
+            >
+              {unresolvedItems.length}
+            </span>
+          ) : null}
+        </h3>
+        {unresolvedItems.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Alle vergangenen Einsätze sind abgeschlossen. Kein Handlungsbedarf.
+          </p>
+        ) : (
+          <ul className="mt-3 grid gap-3" aria-label="Offene Anwesenheiten vergangener Einsätze">
+            {unresolvedItems.map(({ signup, shift: itemShift, event: itemEvent }) => (
+              <li
+                key={signup.id}
+                className="flex flex-col gap-2 rounded-md border border-status-error/30 bg-status-error/5 p-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <span className="font-medium">{signup.public_name}</span>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {itemEvent ? itemEvent.title : "Unbekannter Anlass"} ·{" "}
+                    {formatDateTime(itemShift.starts_at, timezone)} –{" "}
+                    {formatDateTime(itemShift.ends_at, timezone)}
+                  </p>
+                </div>
+                <label className="grid gap-1 text-xs font-medium">
+                  <span>Anwesenheit erfassen</span>
+                  <select
+                    className="min-h-11 rounded-md border bg-background px-3 py-1"
+                    value=""
+                    disabled={busy}
+                    aria-label={`Anwesenheit von ${signup.public_name} im Einsatz ${formatDateTime(itemShift.starts_at, timezone)} für ${itemEvent ? itemEvent.title : "Unbekannter Anlass"} erfassen`}
+                    onChange={(changeEvent) => {
+                      const outcome = changeEvent.target.value;
+                      if (!outcome) return;
+                      if (!changeAttendance(signup, outcome as SignupOutcome))
+                        keepPersistedAttendance(signup);
+                    }}
+                  >
+                    <option value="" disabled hidden>
+                      Bitte wählen
+                    </option>
+                    {attendanceOutcomes
+                      .filter((outcome) => outcome !== "OPEN")
+                      .map((outcome) => (
+                        <option key={outcome} value={outcome}>
+                          {attendanceLabels[outcome]}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       {error ? (
         <p role="alert" className="rounded-md border border-status-error p-3 text-status-error">
           {error}

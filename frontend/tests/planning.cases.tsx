@@ -147,6 +147,7 @@ function openShiftForm(eventTitle: string) {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.clearAllMocks();
   document.cookie = "gc_csrf=; Max-Age=0";
@@ -723,6 +724,205 @@ describe("planning admin", () => {
     expect(screen.getByLabelText("Anlass-Saison")).toHaveAttribute("id", "create-event-season");
     expect(screen.getByLabelText("Anlasstitel")).toHaveAttribute("id", "create-event-title");
   });
+
+  it("shows empty Handlungsbedarf state when no past open signups exist", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-07-28T12:00:00Z"));
+    renderAdmin("ADMIN", planningFetch("ADMIN", false, [season], true, true));
+    expect(
+      await screen.findByRole("heading", { name: /Handlungsbedarf Anwesenheit/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Alle vergangenen Einsätze sind abgeschlossen. Kein Handlungsbedarf."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows unresolved past signup in Handlungsbedarf when shift has ended", async () => {
+    const pastShift = {
+      ...shift,
+      starts_at: "2020-01-01T14:00:00Z",
+      ends_at: "2020-01-01T16:00:00Z",
+      signups: [{ ...shift.signups[0]!, outcome: "OPEN" }],
+    };
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([pastShift]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    expect(
+      await screen.findByRole("heading", { name: /Handlungsbedarf Anwesenheit/ }),
+    ).toBeInTheDocument();
+    const banner = screen.getByRole("list", { name: "Offene Anwesenheiten vergangener Einsätze" });
+    expect(within(banner).getByText("Mia Muster")).toBeInTheDocument();
+    expect(within(banner).getByText(/Sommerfest/)).toBeInTheDocument();
+    expect(screen.getByLabelText("1 offene Eintragung")).toBeInTheDocument();
+    expect(
+      within(banner)
+        .getAllByRole("option")
+        .map((option) => (option as HTMLOptionElement).value),
+    ).toEqual([
+      "ATTENDED",
+      "EXCUSED_CANCELLED",
+      "LATE_CANCELLED",
+      "NO_SHOW",
+      "SUBSTITUTE_ORGANIZED",
+    ]);
+  });
+
+  it("includes a signup when ends_at equals the current UTC instant", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-12T18:00:00Z"));
+    const boundaryShift = {
+      ...shift,
+      ends_at: "2026-09-12T18:00:00Z",
+      signups: [{ ...shift.signups[0]!, outcome: "OPEN" }],
+    };
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([boundaryShift]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    const banner = await screen.findByRole("list", {
+      name: "Offene Anwesenheiten vergangener Einsätze",
+    });
+    expect(within(banner).getByText("Mia Muster")).toBeInTheDocument();
+  });
+
+  it("excludes future shift signups from Handlungsbedarf", async () => {
+    const futureShift = {
+      ...shift,
+      starts_at: "2099-01-01T14:00:00Z",
+      ends_at: "2099-01-01T16:00:00Z",
+      signups: [{ ...shift.signups[0]!, outcome: "OPEN" }],
+    };
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([futureShift]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByRole("heading", { name: /Handlungsbedarf Anwesenheit/ });
+    expect(
+      screen.getByText("Alle vergangenen Einsätze sind abgeschlossen. Kein Handlungsbedarf."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Offene Anwesenheiten vergangener Einsätze" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("excludes non-OPEN outcomes from Handlungsbedarf", async () => {
+    const resolvedPastShift = {
+      ...shift,
+      starts_at: "2020-01-01T14:00:00Z",
+      ends_at: "2020-01-01T16:00:00Z",
+      signups: [{ ...shift.signups[0]!, outcome: "ATTENDED" }],
+    };
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([resolvedPastShift]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByRole("heading", { name: /Handlungsbedarf Anwesenheit/ });
+    expect(
+      screen.getByText("Alle vergangenen Einsätze sind abgeschlossen. Kein Handlungsbedarf."),
+    ).toBeInTheDocument();
+  });
+
+  it("excludes non-active signups omitted from the admin shift projection", async () => {
+    const pastShiftWithoutActiveSignups = {
+      ...shift,
+      starts_at: "2020-01-01T14:00:00Z",
+      ends_at: "2020-01-01T16:00:00Z",
+      occupied_volunteers: 0,
+      open_places: 3,
+      signups: [],
+    };
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([pastShiftWithoutActiveSignups]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByRole("heading", { name: /Handlungsbedarf Anwesenheit/ });
+    expect(
+      screen.getByText("Alle vergangenen Einsätze sind abgeschlossen. Kein Handlungsbedarf."),
+    ).toBeInTheDocument();
+  });
+
+  it("removes resolved item from Handlungsbedarf after successful attendance update", async () => {
+    const pastShift = {
+      ...shift,
+      starts_at: "2020-01-01T14:00:00Z",
+      ends_at: "2020-01-01T16:00:00Z",
+      signups: [{ ...shift.signups[0]!, outcome: "OPEN" }],
+    };
+    const resolvedPastShift = {
+      ...pastShift,
+      signups: [{ ...pastShift.signups[0]!, outcome: "ATTENDED" }],
+    };
+    const baseFetch = planningFetch("ADMIN", false, [season], true);
+    let resolved = false;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([resolved ? resolvedPastShift : pastShift]);
+      if (String(input).endsWith("/signups/signup-1/attendance") && init?.method === "PATCH") {
+        resolved = true;
+        return Response.json({ ...pastShift.signups[0]!, outcome: "ATTENDED" });
+      }
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    const banner = await screen.findByRole("list", {
+      name: "Offene Anwesenheiten vergangener Einsätze",
+    });
+    const selector = within(banner).getByRole("combobox");
+    expect(selector).toHaveValue("");
+    const placeholder = selector.querySelector('option[value=""]');
+    expect(placeholder).toBeDisabled();
+    expect(placeholder).toHaveAttribute("hidden");
+    expect(placeholder).toHaveTextContent("Bitte wählen");
+    fireEvent.change(selector, { target: { value: "ATTENDED" } });
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/admin\/example\/signups\/signup-1\/attendance$/),
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ outcome: "ATTENDED" }),
+        }),
+      ),
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Alle vergangenen Einsätze sind abgeschlossen. Kein Handlungsbedarf."),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it.each(["ADMIN", "KOORDINATION"] as const)(
+    "shows Handlungsbedarf section for role %s",
+    async (role) => {
+      renderAdmin(role, planningFetch(role, false, [season], true, true));
+      expect(
+        await screen.findByRole("heading", { name: /Handlungsbedarf Anwesenheit/ }),
+      ).toBeInTheDocument();
+    },
+  );
 
   it("gives repeated create-shift buttons unique accessible names and input IDs", async () => {
     renderAdmin(
