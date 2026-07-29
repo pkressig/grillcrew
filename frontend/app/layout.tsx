@@ -1,7 +1,10 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import type { ReactNode } from "react";
 import { AuthProvider } from "@/components/auth-provider";
 import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"], display: "swap", variable: "--font-inter" });
 
 export const metadata: Metadata = {
   title: "Volunteer Platform",
@@ -16,7 +19,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="de-CH">
-      <body className="min-h-dvh antialiased">
+      <body className={`${inter.variable} min-h-dvh antialiased`}>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

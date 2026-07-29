@@ -1,6 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   createFamily,
   createFamilyMember,
@@ -12,8 +15,6 @@ import {
 } from "@/lib/families";
 
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
-const button =
-  "inline-flex min-h-11 items-center justify-center rounded-md border px-4 font-medium disabled:opacity-50";
 const labels: Record<FamilyMemberType, string> = { CHILD: "Kind", HELPER: "Helfer" };
 
 function queryFamily() {
@@ -82,27 +83,22 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
 
   return (
     <section className="grid gap-6" aria-labelledby="families-heading">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 id="families-heading" className="text-2xl font-bold">
-            Familien
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Aktive Familien und ihre Mitglieder verwalten.
-          </p>
-        </div>
-        <button
-          className={button}
-          type="button"
-          onClick={() => {
-            setCreating(true);
-            setSelectedId(null);
-            setSuccess(null);
-          }}
-        >
-          Neue Familie
-        </button>
-      </div>
+      <PageHeader
+        headingId="families-heading"
+        title="Familien"
+        description="Aktive Familien und ihre Mitglieder verwalten."
+        action={
+          <Button
+            onClick={() => {
+              setCreating(true);
+              setSelectedId(null);
+              setSuccess(null);
+            }}
+          >
+            Neue Familie
+          </Button>
+        }
+      />
       {error ? (
         <p className="text-sm text-red-700" role="alert">
           {error}
@@ -261,12 +257,12 @@ function FamilyForm({
           />
         </label>
         <div className="flex flex-wrap gap-2">
-          <button className={button} type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy}>
             {busy ? "Wird erstellt …" : "Familie erstellen"}
-          </button>
-          <button className={button} type="button" onClick={onCancel}>
+          </Button>
+          <Button variant="secondary" onClick={onCancel}>
             Abbrechen
-          </button>
+          </Button>
         </div>
       </form>
       {error ? (
@@ -387,9 +383,9 @@ function FamilyDetail({
                 />
               </label>
             </div>
-            <button className={button} type="submit" disabled={busy}>
+            <Button type="submit" disabled={busy}>
               {busy ? "Wird erstellt …" : "Mitglied erstellen"}
-            </button>
+            </Button>
           </form>
         </details>
         {error ? (
@@ -418,7 +414,7 @@ function FamilyDetail({
                 <span>
                   {member.first_name} {member.last_name}
                 </span>
-                <span className="text-sm text-muted-foreground">{labels[member.member_type]}</span>
+                <Badge variant="neutral">{labels[member.member_type]}</Badge>
               </li>
             ))}
           </ul>

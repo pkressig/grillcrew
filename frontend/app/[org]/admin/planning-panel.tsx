@@ -1,6 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { PageHeader } from "@/components/page-header";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody } from "@/components/ui/card";
 import {
   createClubYear,
   cancelSignup,
@@ -76,6 +80,24 @@ const attendanceOutcomes: readonly SignupOutcome[] = [
   "NO_SHOW",
   "SUBSTITUTE_ORGANIZED",
 ];
+const planningStatusVariants: Record<PlanningStatus, BadgeProps["variant"]> = {
+  DRAFT: "neutral",
+  ACTIVE: "success",
+  CLOSED: "warning",
+  ARCHIVED: "neutral",
+};
+const eventStatusVariants: Record<EventStatus, BadgeProps["variant"]> = {
+  DRAFT: "neutral",
+  PUBLISHED: "success",
+  POSTPONED: "warning",
+  CANCELLED: "error",
+  COMPLETED: "success",
+};
+const shiftStatusVariants: Record<ShiftStatus, BadgeProps["variant"]> = {
+  OPEN: "success",
+  CLOSED: "neutral",
+  CANCELLED: "error",
+};
 const eventActions: Record<EventStatus, EventStatus[]> = {
   DRAFT: ["PUBLISHED", "CANCELLED"],
   PUBLISHED: ["POSTPONED", "COMPLETED", "CANCELLED"],
@@ -100,8 +122,6 @@ const shiftActionLabels: Record<ShiftStatus, string> = {
   CANCELLED: "Absagen",
 };
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
-const button =
-  "inline-flex min-h-11 items-center justify-center rounded-md border px-4 font-medium disabled:opacity-50";
 
 function dateRange(start: string, end: string) {
   const format = (value: string) =>
@@ -388,12 +408,11 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     );
   return (
     <section className="grid gap-6" aria-labelledby="planning-title">
-      <div>
-        <h1 id="planning-title" className="text-2xl font-bold">
-          Planung
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">Anlässe und Einsätze planen.</p>
-      </div>
+      <PageHeader
+        headingId="planning-title"
+        title="Planung"
+        description="Anlässe und Einsätze planen."
+      />
       {error ? (
         <p role="alert" className="rounded-md border border-status-error p-3 text-status-error">
           {error}
@@ -547,13 +566,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   name="internal_note"
                 />
               </label>
-              <button
-                className={`${button} sm:self-end`}
-                disabled={busy || seasons.length === 0}
-                type="submit"
-              >
+              <Button className="sm:self-end" disabled={busy || seasons.length === 0} type="submit">
                 Anlass erstellen
-              </button>
+              </Button>
             </form>
           </details>
           {seasons.length === 0 ? (
@@ -617,9 +632,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                       Plätzen belegt
                                     </p>
                                   </div>
-                                  <span className="rounded-full border px-3 py-1 text-sm">
+                                  <Badge variant={eventStatusVariants[planningEvent.status]}>
                                     {eventStatusLabels[planningEvent.status]}
-                                  </span>
+                                  </Badge>
                                 </div>
                               </summary>
                               <div className="border-t p-4">
@@ -632,16 +647,15 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                 {eventActions[planningEvent.status].length ? (
                                   <div className="mt-3 flex flex-wrap gap-2">
                                     {eventActions[planningEvent.status].map((next) => (
-                                      <button
-                                        className={button}
+                                      <Button
+                                        variant={next === "CANCELLED" ? "destructive" : "secondary"}
                                         disabled={busy}
                                         key={next}
                                         aria-label={`Anlass ${planningEvent.title} ${eventActionLabels[next]?.toLocaleLowerCase("de-CH")}`}
                                         onClick={() => changeEventStatus(planningEvent, next)}
-                                        type="button"
                                       >
                                         {eventActionLabels[next]}
-                                      </button>
+                                      </Button>
                                     ))}
                                   </div>
                                 ) : null}
@@ -673,9 +687,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                     : `${shift.open_places} Plätze offen`}
                                               </p>
                                             </div>
-                                            <span className="rounded-full border px-3 py-1 text-sm">
+                                            <Badge variant={shiftStatusVariants[shift.status]}>
                                               {shiftStatusLabels[shift.status]}
-                                            </span>
+                                            </Badge>
                                           </div>
                                           {shift.public_note ? (
                                             <p className="mt-2 text-sm">
@@ -768,8 +782,12 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                           {shiftActions[shift.status].length ? (
                                             <div className="mt-3 flex flex-wrap gap-2">
                                               {shiftActions[shift.status].map((next) => (
-                                                <button
-                                                  className={button}
+                                                <Button
+                                                  variant={
+                                                    next === "CANCELLED"
+                                                      ? "destructive"
+                                                      : "secondary"
+                                                  }
                                                   disabled={busy}
                                                   key={next}
                                                   aria-label={`Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title} ${shiftActionLabels[next].toLocaleLowerCase("de-CH")}`}
@@ -780,10 +798,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                       next,
                                                     )
                                                   }
-                                                  type="button"
                                                 >
                                                   {shiftActionLabels[next]}
-                                                </button>
+                                                </Button>
                                               ))}
                                             </div>
                                           ) : null}
@@ -850,14 +867,14 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                           name="internal_note"
                                         />
                                       </label>
-                                      <button
-                                        className={`${button} sm:self-end`}
+                                      <Button
+                                        className="sm:self-end"
                                         disabled={busy}
                                         aria-label={`Einsatz für ${planningEvent.title} erstellen`}
                                         type="submit"
                                       >
                                         Einsatz erstellen
-                                      </button>
+                                      </Button>
                                     </form>
                                   </details>
                                 </div>
@@ -877,19 +894,23 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
           <h2 id="periods-title" className="text-xl font-semibold">
             Planungsperioden
           </h2>
-          <section className="rounded-lg border p-4" aria-labelledby="current-season-title">
-            <h3 id="current-season-title" className="font-semibold">
-              Aktuelle Saison
-            </h3>
-            {currentSeason ? (
-              <p className="mt-2 text-sm">
-                <strong>{currentSeason.name}</strong> · {typeLabels[currentSeason.type]} ·{" "}
-                {dateRange(currentSeason.start_date, currentSeason.end_date)}
-              </p>
-            ) : (
-              <p className="mt-2 text-sm text-muted-foreground">Derzeit ist keine Saison aktiv.</p>
-            )}
-          </section>
+          <Card aria-labelledby="current-season-title" role="region">
+            <CardBody>
+              <h3 id="current-season-title" className="font-semibold">
+                Aktuelle Saison
+              </h3>
+              {currentSeason ? (
+                <p className="mt-2 text-sm">
+                  <strong>{currentSeason.name}</strong> · {typeLabels[currentSeason.type]} ·{" "}
+                  {dateRange(currentSeason.start_date, currentSeason.end_date)}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Derzeit ist keine Saison aktiv.
+                </p>
+              )}
+            </CardBody>
+          </Card>
           <section className="grid gap-3" aria-labelledby="club-years-title">
             <h3 id="club-years-title" className="font-semibold">
               Vereinsjahre
@@ -902,7 +923,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   <li key={year.id} className="rounded-lg border p-3 text-sm">
                     <div className="flex flex-wrap justify-between gap-2">
                       <strong>{year.label}</strong>
-                      <span>{statusLabels[year.status]}</span>
+                      <Badge variant={planningStatusVariants[year.status]}>
+                        {statusLabels[year.status]}
+                      </Badge>
                     </div>
                     <p className="mt-1">
                       {dateRange(year.start_date, year.end_date)} ·{" "}
@@ -929,9 +952,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   Enddatum
                   <input className={control} name="end_date" type="date" required />
                 </label>
-                <button className={button} disabled={busy} type="submit">
+                <Button disabled={busy} type="submit">
                   Vereinsjahr erstellen
-                </button>
+                </Button>
               </form>
             </details>
           </section>
@@ -947,7 +970,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   <li key={season.id} className="rounded-lg border p-3 text-sm">
                     <div className="flex flex-wrap justify-between gap-2">
                       <strong>{season.name}</strong>
-                      <span>{statusLabels[season.status]}</span>
+                      <Badge variant={planningStatusVariants[season.status]}>
+                        {statusLabels[season.status]}
+                      </Badge>
                     </div>
                     <p className="mt-1">
                       {typeLabels[season.type]} · {dateRange(season.start_date, season.end_date)}
@@ -961,16 +986,15 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                     {actions[season.status].length ? (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {actions[season.status].map((next) => (
-                          <button
-                            className={button}
+                          <Button
+                            variant="secondary"
                             disabled={busy}
                             key={next}
                             aria-label={`Saison ${season.name} ${actionLabels[next]?.toLocaleLowerCase("de-CH")}`}
                             onClick={() => updateStatus(season, next)}
-                            type="button"
                           >
                             {actionLabels[next]}
-                          </button>
+                          </Button>
                         ))}
                       </div>
                     ) : null}
@@ -1017,9 +1041,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   Enddatum
                   <input className={control} name="end_date" type="date" required />
                 </label>
-                <button className={button} disabled={busy || clubYears.length === 0} type="submit">
+                <Button disabled={busy || clubYears.length === 0} type="submit">
                   Saison erstellen
-                </button>
+                </Button>
               </form>
             </details>
           </section>
