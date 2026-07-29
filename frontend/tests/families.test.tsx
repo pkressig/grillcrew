@@ -150,6 +150,42 @@ describe("family admin", () => {
     expect(await screen.findByLabelText("Familienliste")).toBeInTheDocument();
   });
 
+  it("uses card hierarchy, focus treatment, and a distinct selected family state", async () => {
+    renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family])]));
+    const familyButton = await screen.findByRole("button", { name: "Familie Muster" });
+    expect(screen.getByLabelText("Familienliste").querySelector(".shadow-card")).not.toBeNull();
+    expect(screen.getByLabelText("Familiendetails").querySelector(".shadow-card")).not.toBeNull();
+    expect(familyButton).toHaveClass("focus-visible:ring-2", "focus-visible:ring-primary");
+
+    familyButton.focus();
+    expect(familyButton).toHaveFocus();
+    fireEvent.click(familyButton);
+
+    expect(familyButton).toHaveAttribute("aria-current", "true");
+    expect(familyButton.parentElement).toHaveClass("border-primary", "bg-primary/5", "shadow-card");
+  });
+
+  it("renders children and helpers as visible semantic badge variants", async () => {
+    const child = {
+      ...member,
+      id: "member-child",
+      member_type: "CHILD",
+      first_name: "Lina",
+    };
+    renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", [Response.json([family])], [Response.json([child, member])]),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+
+    expect(await screen.findByText("Lina Andere")).toBeInTheDocument();
+    expect(screen.getByText("Kind", { selector: "span" })).toHaveClass("bg-status-neutral/10");
+    expect(screen.getByText("Helfer", { selector: "span" })).toHaveClass(
+      "bg-primary/10",
+      "text-primary",
+    );
+  });
+
   it("clears transient detail feedback when directly switching families", async () => {
     const secondFamily = { ...family, id: "family-2", display_name: "Familie Keller" };
     renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family, secondFamily])]));

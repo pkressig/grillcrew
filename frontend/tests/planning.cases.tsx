@@ -224,6 +224,34 @@ describe("planning admin", () => {
     expect(fetchMock).toHaveBeenCalledTimes(calls);
   });
 
+  it("applies card, date-tile, status, and occupancy semantics to agenda rows", async () => {
+    renderAdmin("ADMIN", planningFetch("ADMIN", false, [season], true, true));
+    const summary = await screen.findByLabelText(/Anlass Sommerfest am .* anzeigen/);
+    const details = summary.closest("details")!;
+    expect(details.parentElement).toHaveClass("shadow-card", "rounded-md");
+    expect(summary).toHaveClass("focus-visible:ring-2");
+    expect(summary.querySelector('time[datetime="2026-09-12"]')).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    expect(within(summary).getByText("Veröffentlicht")).toHaveClass(
+      "bg-status-success/10",
+      "text-status-success",
+    );
+    expect(
+      within(summary).getByText(
+        (_, element) =>
+          element?.tagName === "SPAN" &&
+          element.textContent?.includes("1 von 3 Plätzen belegt") === true,
+      ),
+    ).toHaveClass("bg-status-neutral/10");
+
+    fireEvent.click(summary);
+    const occupancy = screen.getByText("1 von 3 belegt");
+    expect(occupancy).toHaveClass("bg-status-neutral/10");
+    expect(occupancy.closest("div.rounded-md")).toHaveClass("shadow-none");
+  });
+
   it("keeps creation form values when its native disclosure is closed and reopened", async () => {
     renderAdmin("ADMIN");
     await screen.findAllByText("2026/27");

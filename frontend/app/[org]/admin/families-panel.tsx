@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardBody } from "@/components/ui/card";
 import {
   createFamily,
   createFamilyMember,
@@ -13,6 +14,7 @@ import {
   type FamilyMember,
   type FamilyMemberType,
 } from "@/lib/families";
+import { cn } from "@/lib/utils";
 
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
 const labels: Record<FamilyMemberType, string> = { CHILD: "Kind", HELPER: "Helfer" };
@@ -100,99 +102,128 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
         }
       />
       {error ? (
-        <p className="text-sm text-red-700" role="alert">
+        <p
+          className="rounded-md border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
       {success ? (
-        <p className="text-sm" role="status">
+        <p
+          className="rounded-md border border-status-success/30 bg-status-success/5 p-3 text-sm text-status-success"
+          role="status"
+        >
           {success}
         </p>
       ) : null}
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
         <section
-          className={`${selected || creating ? "hidden lg:block" : "block"} min-w-0 rounded-lg border p-4`}
+          className={`${selected || creating ? "hidden lg:block" : "block"} min-w-0`}
           aria-label="Familienliste"
         >
-          <label className="grid gap-1" htmlFor="family-search">
-            Familien suchen
-            <input
-              className={control}
-              id="family-search"
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
-          {search ? (
-            <button className="mt-2 min-h-11 underline" type="button" onClick={() => setSearch("")}>
-              Suche löschen
-            </button>
-          ) : null}
-          {loading ? (
-            <p className="mt-4" role="status">
-              Familien werden geladen …
-            </p>
-          ) : families.length === 0 ? (
-            <p className="mt-4">Noch keine Familien vorhanden.</p>
-          ) : filtered.length === 0 ? (
-            <p className="mt-4">Keine Familien für diese Suche gefunden.</p>
-          ) : (
-            <ul className="mt-4 grid gap-2" aria-label="Aktive Familien">
-              {filtered.map((family) => (
-                <li key={family.id}>
-                  <button
-                    aria-current={selected?.id === family.id ? "true" : undefined}
-                    className="min-h-11 w-full rounded border p-3 text-left hover:bg-muted"
-                    type="button"
-                    onClick={() => select(family.id)}
-                  >
-                    <span className="font-medium">{family.display_name}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          <Card className="h-full">
+            <CardBody>
+              <label className="grid gap-1" htmlFor="family-search">
+                Familien suchen
+                <input
+                  className={control}
+                  id="family-search"
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+              {search ? (
+                <Button
+                  className="mt-2 px-0 underline"
+                  variant="ghost"
+                  onClick={() => setSearch("")}
+                >
+                  Suche löschen
+                </Button>
+              ) : null}
+              {loading ? (
+                <p className="mt-4" role="status">
+                  Familien werden geladen …
+                </p>
+              ) : families.length === 0 ? (
+                <p className="mt-4">Noch keine Familien vorhanden.</p>
+              ) : filtered.length === 0 ? (
+                <p className="mt-4">Keine Familien für diese Suche gefunden.</p>
+              ) : (
+                <ul className="mt-4 grid gap-2" aria-label="Aktive Familien">
+                  {filtered.map((family) => (
+                    <li key={family.id}>
+                      <Card
+                        className={cn(
+                          "overflow-hidden shadow-none transition-colors",
+                          selected?.id === family.id
+                            ? "border-primary bg-primary/5 shadow-card"
+                            : "hover:border-primary/40",
+                        )}
+                      >
+                        <button
+                          aria-current={selected?.id === family.id ? "true" : undefined}
+                          className="min-h-11 w-full p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                          type="button"
+                          onClick={() => select(family.id)}
+                        >
+                          <span className="font-medium">{family.display_name}</span>
+                        </button>
+                      </Card>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardBody>
+          </Card>
         </section>
         <section
-          className={`${selected || creating ? "block" : "hidden lg:block"} min-w-0 rounded-lg border p-4`}
+          className={`${selected || creating ? "block" : "hidden lg:block"} min-w-0`}
           aria-label="Familiendetails"
         >
-          {selected || creating ? (
-            <button
-              className="mb-4 min-h-11 underline lg:hidden"
-              type="button"
-              onClick={() => select(null)}
-            >
-              Zurück zu Familien
-            </button>
-          ) : null}
-          {creating ? (
-            <FamilyForm
-              org={org}
-              onCancel={() => {
-                setCreating(false);
-                setSuccess(null);
-              }}
-              onCreated={(family) => {
-                setFamilies((items) =>
-                  [...items, family].sort((a, b) => a.display_name.localeCompare(b.display_name)),
-                );
-                setSuccess("Familie wurde erstellt.");
-                select(family.id, true);
-              }}
-            />
-          ) : selected ? (
-            <FamilyDetail
-              key={selected.id}
-              family={selected}
-              org={org}
-              members={cache[selected.id]}
-              onMembers={cacheMembers}
-            />
-          ) : (
-            <p>Wählen Sie eine Familie aus, um die Details anzuzeigen.</p>
-          )}
+          <Card className={cn("h-full", selected && "border-primary/30")}>
+            <CardBody>
+              {selected || creating ? (
+                <Button
+                  className="mb-4 px-0 underline lg:hidden"
+                  variant="ghost"
+                  onClick={() => select(null)}
+                >
+                  Zurück zu Familien
+                </Button>
+              ) : null}
+              {creating ? (
+                <FamilyForm
+                  org={org}
+                  onCancel={() => {
+                    setCreating(false);
+                    setSuccess(null);
+                  }}
+                  onCreated={(family) => {
+                    setFamilies((items) =>
+                      [...items, family].sort((a, b) =>
+                        a.display_name.localeCompare(b.display_name),
+                      ),
+                    );
+                    setSuccess("Familie wurde erstellt.");
+                    select(family.id, true);
+                  }}
+                />
+              ) : selected ? (
+                <FamilyDetail
+                  key={selected.id}
+                  family={selected}
+                  org={org}
+                  members={cache[selected.id]}
+                  onMembers={cacheMembers}
+                />
+              ) : (
+                <p>Wählen Sie eine Familie aus, um die Details anzuzeigen.</p>
+              )}
+            </CardBody>
+          </Card>
         </section>
       </div>
     </section>
@@ -266,7 +297,10 @@ function FamilyForm({
         </div>
       </form>
       {error ? (
-        <p className="mt-3 text-sm text-red-700" role="alert">
+        <p
+          className="mt-3 rounded-md border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
@@ -349,7 +383,7 @@ function FamilyDetail({
         <h3 id="members-heading" className="font-semibold">
           Familienmitglieder
         </h3>
-        <details className="mt-3 rounded border p-3">
+        <details className="mt-3 rounded-md border border-primary/20 bg-primary/5 p-3">
           <summary className="cursor-pointer font-medium">Mitglied erstellen</summary>
           <form className="mt-3 grid gap-3" onSubmit={submit}>
             <label className="grid gap-1" htmlFor="member-type">
@@ -389,7 +423,10 @@ function FamilyDetail({
           </form>
         </details>
         {error ? (
-          <p className="mt-3 text-sm text-red-700" role="alert">
+          <p
+            className="mt-3 rounded-md border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error"
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
@@ -407,14 +444,24 @@ function FamilyDetail({
         ) : (
           <ul className="mt-3 grid gap-2" aria-label={`Mitglieder von ${family.display_name}`}>
             {members?.map((member) => (
-              <li
-                className="flex items-center justify-between gap-3 rounded border p-2"
-                key={member.id}
-              >
-                <span>
-                  {member.first_name} {member.last_name}
-                </span>
-                <Badge variant="neutral">{labels[member.member_type]}</Badge>
+              <li key={member.id}>
+                <Card className="shadow-none">
+                  <CardBody className="flex items-center justify-between gap-3 p-3">
+                    <span>
+                      {member.first_name} {member.last_name}
+                    </span>
+                    <Badge
+                      className={
+                        member.member_type === "HELPER"
+                          ? "border-primary/30 bg-primary/10 text-primary"
+                          : undefined
+                      }
+                      variant="neutral"
+                    >
+                      {labels[member.member_type]}
+                    </Badge>
+                  </CardBody>
+                </Card>
               </li>
             ))}
           </ul>
