@@ -204,10 +204,11 @@ mit dem Grill-Kernworkflow; Kiosk wird architektonisch vorbereitet, aber separat
     (kaufmaennisch auf 1 Rappen); keine neue Rundungsregel noetig.
 
 **Umsetzungsstand:** Phase 1 (Settings-Fundament: Heimplatz-Allowlist, Crew-Regeln,
-Organisationseinstellungen editierbar, ADMIN-only Einstellungen-Navigation) ist lokal implementiert
-und getestet (siehe `docs/FEATURES.md` F015). Phasen 2-6 (Import-Pipeline, Schichterzeugung,
-Einsatzabschluss/Kind-Zuordnung, Auszahlung/Koordinationszeit/Report, Kiosk) sind geplant, aber noch
-nicht umgesetzt.
+Organisationseinstellungen editierbar, ADMIN-only Einstellungen-Navigation) ist gemerged (Commit
+`b1599202940a2898aa299651fcbebcf16b47063b`). Phase 2 (Spielplan-Import: Staging, 5-Wege-Diff-Vorschau,
+Heimplatz-/Typ-Filterung, ADMIN-only Import-Navigation) ist lokal implementiert und getestet (siehe
+`docs/FEATURES.md` F015). Phasen 3-6 (Schichterzeugung mit Crew-Vorschlag, Einsatzabschluss/
+Kind-Zuordnung, Auszahlung/Koordinationszeit/Report, Kiosk) sind geplant, aber noch nicht umgesetzt.
 
 **Non-Goals (vorerst):** automatische Schichtverschiebung, digitale Unterschrift, KI-gestuetzte
 Besetzungsvorschlaege (Gemini), WhatsApp-Versandintegration, Sollstunden-Materialisierung

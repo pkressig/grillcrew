@@ -196,7 +196,9 @@ The club-year foreign key cascades deletion to seasons. Club-year/date lookup is
 
 ### Event
 
-Implemented in F003 Step 3.
+Implemented in F003 Step 3. `sourceImportId`, `kickoffTime`, `externalGameNumber`, and
+`importMatchKey` were added in F015 Phase 2 for game-plan import provenance and re-import matching;
+`sourceImportId` is a real foreign key to `ImportBatch` (`ON DELETE SET NULL`).
 
 - id
 - seasonId
@@ -208,7 +210,63 @@ Implemented in F003 Step 3.
 - internalNote
 - status: DRAFT | PUBLISHED | POSTPONED | CANCELLED | COMPLETED
 - publishedAt
-- sourceImportId nullable
+- sourceImportId nullable (FK ImportBatch)
+- kickoffTime nullable (display only; does not derive shift times)
+- externalGameNumber nullable (association's `Spielnummer`, absent for friendlies)
+- importMatchKey nullable, indexed with seasonId (re-import matching key; `NULL` for manually
+  created events, which re-import therefore never touches)
+- createdAt
+- updatedAt
+
+### ImportBatch
+
+Implemented in F015 Phase 2. One row per uploaded Heimspielplan file.
+
+- id
+- organizationId
+- clubYearId (FK ClubYear, RESTRICT)
+- sourceFilename
+- uploadedByUserId (FK User, RESTRICT)
+- status: STAGED | CONFIRMED | DISCARDED
+- uploadedAt
+- confirmedAt nullable
+- confirmedByUserId nullable (FK User, SET NULL)
+- rowCount
+- createdAt
+- updatedAt
+
+### ImportRow
+
+Implemented in F015 Phase 2. One row per parsed game, staged for review before any `Event` write.
+Diffing against existing events uses `importMatchKey` (association `Spielnummer` when present,
+otherwise normalized teams + date) and classifies each row as `NEU` | `GEAENDERT` | `VERSCHOBEN` |
+`ENTFERNT` | `UNVERAENDERT`. Applying a batch never writes to `Event` for `VERSCHOBEN`, `ENTFERNT`,
+or `UNVERAENDERT` rows — see `docs/ARCHITECTURE.md` for the exact per-classification apply rules.
+
+- id
+- importBatchId (FK ImportBatch, CASCADE)
+- seasonId (FK Season, RESTRICT)
+- sheetTab
+- spielTyp: MEISTERSCHAFT | CUP | TESTSPIEL | TURNIER
+- bezeichnung nullable
+- spielnummer nullable (association's game number; `NULL` when the source says "Ohne")
+- weekdayShort nullable
+- gameDate
+- gameTime nullable
+- teams
+- venue
+- venueNormalized
+- remark nullable
+- isHomeVenue (computed against the `HomeVenue` allowlist at staging time)
+- classification: NEU | GEAENDERT | VERSCHOBEN | ENTFERNT | UNVERAENDERT
+- matchedEventId nullable (FK Event, SET NULL)
+- diffDetails nullable (JSON `{field: {old, new}}`)
+- includeDecision: INCLUDE | EXCLUDE (defaults from `isHomeVenue`, always manually overridable)
+- grillShiftDecision: PENDING | CREATE_SHIFT | NO_SHIFT (per-game manual decision, tracked here;
+  does not itself create a `Shift` — that wiring is F015 Phase 3)
+- verschobenAcknowledgedAt nullable (coordinator confirms they contacted affected helpers outside
+  the app; does not gate batch confirmation)
+- appliedAt nullable (set for every row when the batch is confirmed, regardless of decision)
 - createdAt
 - updatedAt
 

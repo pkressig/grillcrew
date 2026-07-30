@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import date as date_type
 from datetime import datetime
+from datetime import time as time_type
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -93,6 +94,9 @@ class EventCreate(BaseModel):  # type: ignore[explicit-any]
     status: EventStatus = EventStatus.DRAFT
     published_at: datetime | None = None
     source_import_id: uuid.UUID | None = None
+    kickoff_time: time_type | None = None
+    external_game_number: str | None = Field(default=None, max_length=20)
+    import_match_key: str | None = Field(default=None, max_length=300)
 
 
 class EventUpdate(BaseModel):  # type: ignore[explicit-any]
@@ -106,6 +110,9 @@ class EventUpdate(BaseModel):  # type: ignore[explicit-any]
     status: EventStatus | None = None
     published_at: datetime | None = None
     source_import_id: uuid.UUID | None = None
+    kickoff_time: time_type | None = None
+    external_game_number: str | None = Field(default=None, max_length=20)
+    import_match_key: str | None = Field(default=None, max_length=300)
 
     @model_validator(mode="after")
     def reject_null_required_fields(self) -> EventUpdate:
@@ -128,6 +135,9 @@ class EventResponse(BaseModel):  # type: ignore[explicit-any]
     status: EventStatus
     published_at: datetime | None
     source_import_id: uuid.UUID | None
+    kickoff_time: time_type | None
+    external_game_number: str | None
+    import_match_key: str | None
     created_at: datetime
     updated_at: datetime
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, time
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
@@ -17,15 +17,17 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    Time,
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.identity import User
     from app.models.organization import Organization
 
 
@@ -80,6 +82,38 @@ class SignupSource(StrEnum):
     PUBLIC_SIGNUP = "PUBLIC_SIGNUP"
     ADMIN = "ADMIN"
     IMPORT = "IMPORT"
+
+
+class ImportBatchStatus(StrEnum):
+    STAGED = "STAGED"
+    CONFIRMED = "CONFIRMED"
+    DISCARDED = "DISCARDED"
+
+
+class SpielTyp(StrEnum):
+    MEISTERSCHAFT = "MEISTERSCHAFT"
+    CUP = "CUP"
+    TESTSPIEL = "TESTSPIEL"
+    TURNIER = "TURNIER"
+
+
+class ImportRowClassification(StrEnum):
+    NEU = "NEU"
+    GEAENDERT = "GEAENDERT"
+    VERSCHOBEN = "VERSCHOBEN"
+    ENTFERNT = "ENTFERNT"
+    UNVERAENDERT = "UNVERAENDERT"
+
+
+class ImportRowDecision(StrEnum):
+    INCLUDE = "INCLUDE"
+    EXCLUDE = "EXCLUDE"
+
+
+class GrillShiftDecision(StrEnum):
+    PENDING = "PENDING"
+    CREATE_SHIFT = "CREATE_SHIFT"
+    NO_SHIFT = "NO_SHIFT"
 
 
 class ClubYear(Base):
@@ -151,7 +185,10 @@ class Season(Base):
 
 class Event(Base):
     __tablename__ = "event"
-    __table_args__ = (Index("ix_event_season_date", "season_id", "date"),)
+    __table_args__ = (
+        Index("ix_event_season_date", "season_id", "date"),
+        Index("ix_event_season_import_match_key", "season_id", "import_match_key"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -171,7 +208,12 @@ class Event(Base):
         server_default=EventStatus.DRAFT.value,
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    source_import_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    source_import_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("import_batch.id", ondelete="SET NULL"), nullable=True
+    )
+    kickoff_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    external_game_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    import_match_key: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -298,3 +340,109 @@ class Signup(Base):
     )
     shift: Mapped[Shift] = relationship(back_populates="signups")
     volunteer: Mapped[Volunteer] = relationship(back_populates="signups")
+
+
+class ImportBatch(Base):
+    __tablename__ = "import_batch"
+    __table_args__ = (Index("ix_import_batch_organization_status", "organization_id", "status"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organization.id", ondelete="RESTRICT"), nullable=False
+    )
+    club_year_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("club_year.id", ondelete="RESTRICT"), nullable=False
+    )
+    source_filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[ImportBatchStatus] = mapped_column(
+        Enum(ImportBatchStatus, name="import_batch_status"),
+        nullable=False,
+        server_default=ImportBatchStatus.STAGED.value,
+    )
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
+    row_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    club_year: Mapped[ClubYear] = relationship()
+    uploaded_by: Mapped[User] = relationship(foreign_keys=[uploaded_by_user_id])
+    confirmed_by: Mapped[User | None] = relationship(foreign_keys=[confirmed_by_user_id])
+    rows: Mapped[list[ImportRow]] = relationship(
+        back_populates="import_batch", cascade="all, delete-orphan"
+    )
+
+
+class ImportRow(Base):
+    __tablename__ = "import_row"
+    __table_args__ = (
+        Index("ix_import_row_batch", "import_batch_id"),
+        Index("ix_import_row_season", "season_id"),
+        Index("ix_import_row_matched_event", "matched_event_id"),
+        Index("ix_import_row_batch_classification", "import_batch_id", "classification"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    import_batch_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("import_batch.id", ondelete="CASCADE"), nullable=False
+    )
+    season_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("season.id", ondelete="RESTRICT"), nullable=False
+    )
+    sheet_tab: Mapped[str] = mapped_column(String(50), nullable=False)
+    spiel_typ: Mapped[SpielTyp] = mapped_column(Enum(SpielTyp, name="spiel_typ"), nullable=False)
+    bezeichnung: Mapped[str | None] = mapped_column(Text, nullable=True)
+    spielnummer: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    weekday_short: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    game_date: Mapped[date] = mapped_column(Date, nullable=False)
+    game_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    teams: Mapped[str] = mapped_column(Text, nullable=False)
+    venue: Mapped[str] = mapped_column(Text, nullable=False)
+    venue_normalized: Mapped[str] = mapped_column(String(200), nullable=False)
+    remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_home_venue: Mapped[bool] = mapped_column(nullable=False)
+    classification: Mapped[ImportRowClassification] = mapped_column(
+        Enum(ImportRowClassification, name="import_row_classification"), nullable=False
+    )
+    matched_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("event.id", ondelete="SET NULL"), nullable=True
+    )
+    diff_details: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
+    include_decision: Mapped[ImportRowDecision] = mapped_column(
+        Enum(ImportRowDecision, name="import_row_decision"), nullable=False
+    )
+    grill_shift_decision: Mapped[GrillShiftDecision] = mapped_column(
+        Enum(GrillShiftDecision, name="grill_shift_decision"),
+        nullable=False,
+        server_default=GrillShiftDecision.PENDING.value,
+    )
+    verschoben_acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now()
+    )
+
+    import_batch: Mapped[ImportBatch] = relationship(back_populates="rows")
+    season: Mapped[Season] = relationship()
+    matched_event: Mapped[Event | None] = relationship()

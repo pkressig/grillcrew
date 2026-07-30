@@ -6,6 +6,7 @@ import {
   ClipboardCheck,
   LayoutDashboard,
   Settings as SettingsIcon,
+  Upload,
   Users,
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
@@ -17,11 +18,12 @@ import { Card, CardBody } from "@/components/ui/card";
 import type { PublicOrganization } from "@/lib/organization";
 import { FamiliesPanel } from "./families-panel";
 import { AttendancePanel } from "./attendance-panel";
+import { ImportPanel } from "./import-panel";
 import { PlanningPanel } from "./planning-panel";
 import { OverviewPanel } from "./overview-panel";
 import { SettingsPanel } from "./settings-panel";
 
-export type AdminView = "overview" | "planning" | "families" | "attendance" | "settings";
+export type AdminView = "overview" | "planning" | "families" | "attendance" | "settings" | "import";
 
 const roleLabels = {
   ADMIN: "Administration",
@@ -66,6 +68,13 @@ const NAV_ITEMS: ReadonlyArray<{
     icon: <ClipboardCheck aria-hidden="true" size={18} />,
     path: "/attendance",
     roles: ["ADMIN", "KOORDINATION"],
+  },
+  {
+    view: "import",
+    label: "Spielplan-Import",
+    icon: <Upload aria-hidden="true" size={18} />,
+    path: "/import",
+    roles: ["ADMIN"],
   },
   {
     view: "settings",
@@ -152,6 +161,8 @@ export function AdminShell({
             <FamiliesPanel org={org} />
           ) : activeView === "settings" ? (
             <SettingsPanel org={org} />
+          ) : activeView === "import" ? (
+            <ImportPanel org={org} />
           ) : (
             <AttendancePanel org={org} timezone={organization.timezone} />
           )}

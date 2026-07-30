@@ -124,6 +124,24 @@ soft-deactivated (`is_active`), never hard-deleted, so historical import/event r
 valid. Crew-size rules always include one non-deletable default rule (`pattern = null`) evaluated
 last regardless of stored `sort_order`, guaranteeing a crew-size suggestion always exists.
 
+Authenticated game-plan import (F015 Phase 2, D-041) uses `/api/admin/{organization_slug}/imports`:
+`POST` (multipart upload of the association's Heimspielplan xlsx plus a target `club_year_id`),
+`GET {batch_id}/rows`, `PATCH {batch_id}/rows/{row_id}`, and `POST {batch_id}/confirm`. Every
+endpoint requires ADMIN membership specifically, matching `docs/PERMISSIONS.md`'s "Import aus
+Bestandsdaten ausführen" row. Parsing is pure and side-effect-free
+(`app.services.game_plan_parser`); resolving sheets to seasons, matching against the `HomeVenue`
+allowlist, and diffing against existing `Event` rows all happen in `app.services.imports` and are
+staged as `ImportRow` records before any `Event` write. Re-import matching uses
+`Event.import_match_key` (the association's `Spielnummer` when present, otherwise normalized teams
++ date); a duplicate key within one upload aborts the whole batch rather than guessing a match.
+Confirming a batch writes `Event` rows only for `INCLUDE`-decided rows classified `NEU` (create,
+`status=DRAFT`) or `GEAENDERT` (update `location`/`event_type`/`kickoff_time`/`title` only; a
+changed `remark` is appended to `internal_note` as a dated note, never overwritten). Rows
+classified `VERSCHOBEN` (rescheduled) or `ENTFERNT` (removed from the source) never trigger an
+automatic `Event` write — the coordinator reviews and acts manually, since a reschedule requires
+contacting already-signed-up helpers outside the app. Confirming is idempotent-guarded: a batch can
+only be confirmed once (`ImportBatchStatus.STAGED -> CONFIRMED`).
+
 ## Permissions
 
 Permissions are organization-local. A user may be Admin in one organization and have no access to another. Role checks must combine:

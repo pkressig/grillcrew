@@ -9,6 +9,7 @@ from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
 from app.api.families import router as families_router
 from app.api.health import router as health_router
+from app.api.imports import router as imports_router
 from app.api.internal import router as internal_router
 from app.api.invitations import router as invitations_router
 from app.api.planning import router as planning_router
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     application.include_router(families_router)
     application.include_router(planning_router)
     application.include_router(settings_router)
+    application.include_router(imports_router)
     if settings.app_env != AppEnv.PRODUCTION:
         application.include_router(internal_router)
 

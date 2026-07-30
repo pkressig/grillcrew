@@ -592,17 +592,26 @@ High.
 
 **Status**
 
-Phase 1 (Settings foundation) is implemented locally and passes full checks, but is not yet
-committed/merged: organization-scoped `HomeVenue` allowlist (soft-deactivatable, no hard delete),
-`CrewSizeRule` ordered rule table with a non-deletable default rule, and an editable
-`OrganizationSettings` surface (payout rate, signup rate limits, coordination contact label). All
-of it lives behind a new ADMIN-only "Einstellungen" admin view. See D-041 for the ratified product
-direction and `ai/incoming/claude-latest.md` for the implementation report.
+Phase 1 (Settings foundation) is merged on `main` (commit `b1599202940a2898aa299651fcbebcf16b47063b`):
+organization-scoped `HomeVenue` allowlist (soft-deactivatable, no hard delete), `CrewSizeRule`
+ordered rule table with a non-deletable default rule, and an editable `OrganizationSettings`
+surface (payout rate, signup rate limits, coordination contact label) behind a new ADMIN-only
+"Einstellungen" admin view.
 
-Phases 2-6 (Excel game-plan import with 5-way diff preview, shift generation wired to the crew-size
-suggestion engine, deferred work-record/child-assignment reconciliation, payout/coordination-time
-tracking and season-end export, Kiosk fixed-assignment module) are planned per D-041 but not yet
-implemented.
+Phase 2 (game-plan import) is implemented locally and passes full checks, but is not yet
+committed/merged: `ImportBatch`/`ImportRow` staging tables, a pure xlsx parser for the
+association's Heimspielplan export (`app/services/game_plan_parser.py`), a 5-way diff engine
+(neu/geändert/verschoben/entfernt/unverändert) matched via `Spielnummer` or a team+date fallback
+key, venue filtering against the Phase 1 `HomeVenue` allowlist with per-row manual override, and a
+new ADMIN-only "Spielplan-Import" admin view (upload, grouped diff review, per-row include/grill-
+shift decisions, confirm). Confirming only ever writes `Event` rows for `NEU`/`GEAENDERT`
+rows — `VERSCHOBEN`/`ENTFERNT` rows are surfaced for manual follow-up and never auto-applied. See
+D-041 for the ratified product direction and `ai/incoming/claude-latest.md` for the implementation
+report.
+
+Phases 3-6 (shift generation wired to the crew-size suggestion engine, deferred
+work-record/child-assignment reconciliation, payout/coordination-time tracking and season-end
+export, Kiosk fixed-assignment module) are planned per D-041 but not yet implemented.
 
 **Goal**
 
@@ -639,7 +648,8 @@ High (multi-phase).
 
 - `home_venue`, `crew_size_rule` (Phase 1, implemented).
 - `import_batch`, `import_row`, `event.kickoff_time`/`external_game_number`/`import_match_key`
-  (Phase 2, planned).
+  (Phase 2, implemented). `import_row.season_id` was added during implementation (not in the
+  original design note) so `confirm()` never has to re-derive a season from sheet-tab text.
 - `shift.shift_type`/`assignment_mode`/`menu_type`/`crew_suggestion_overridden` (Phase 3, planned).
 - `work_record` (Phase 4), `payment`, `coordination_time_entry` (Phase 5) - all planned.
 
@@ -649,14 +659,21 @@ High (multi-phase).
   `GET/POST/PATCH /api/admin/{org}/settings/home-venues`,
   `GET/POST/PATCH /api/admin/{org}/settings/crew-size-rules`,
   `POST /api/admin/{org}/settings/crew-size-rules/reorder` (Phase 1, implemented).
-- Import and shift-generation endpoints (Phase 2/3, planned).
+- `POST /api/admin/{org}/imports` (multipart upload), `GET /api/admin/{org}/imports/{id}/rows`,
+  `PATCH /api/admin/{org}/imports/{id}/rows/{row_id}`, `POST /api/admin/{org}/imports/{id}/confirm`
+  (Phase 2, implemented, ADMIN-only).
+- Shift-generation crew-size suggestion endpoints (Phase 3, planned).
 
 **UI impact**
 
 - New ADMIN-only "Einstellungen" admin view (implemented): organization settings form, home-venue
   list with create/deactivate, crew-size rule ordered list with create/reorder/deactivate and a
   visually distinct default rule.
-- Import review UI and shift-creation crew-size suggestion wiring (planned).
+- New ADMIN-only "Spielplan-Import" admin view (implemented): club-year-scoped file upload, diff
+  review grouped by classification (unchanged rows collapsed behind a disclosure), per-row
+  include/grill-shift controls, verschoben-acknowledgement action, and a confirmation-gated
+  "Import übernehmen" action.
+- Shift-creation crew-size suggestion wiring (Phase 3, planned).
 
 ## Recommended Implementation Order
 
