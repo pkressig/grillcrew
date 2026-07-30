@@ -230,7 +230,7 @@ export function OrganizationLanding() {
                 <Card key={event.id} className="overflow-hidden">
                   <article aria-labelledby={`event-${event.id}-title`}>
                     <CardHeader className="border-b border-border/70 pb-5">
-                      <div className="flex items-start gap-4">
+                      <div className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-3 sm:gap-4">
                         <time
                           dateTime={event.date}
                           aria-label={dateFormatter.format(new Date(`${event.date}T00:00:00Z`))}
@@ -250,13 +250,13 @@ export function OrganizationLanding() {
                           <h2 id={`event-${event.id}-title`} className="mt-1 text-xl font-bold">
                             {event.title}
                           </h2>
-                          <p className="mt-2 flex items-center gap-2 text-sm">
+                          <p className="mt-2 flex items-start gap-2 text-sm">
                             <CalendarDays aria-hidden="true" className="h-4 w-4 shrink-0" />
                             {dateFormatter.format(new Date(`${event.date}T00:00:00Z`))}
                           </p>
-                          <p className="flex items-center gap-2">
-                            <MapPin aria-hidden="true" className="h-4 w-4 shrink-0" />
-                            {event.location}
+                          <p className="mt-1 flex items-start gap-2 text-sm">
+                            <MapPin aria-hidden="true" className="mt-0.5 h-4 w-4 shrink-0" />
+                            <span className="min-w-0 break-words">{event.location}</span>
                           </p>
                         </div>
                       </div>
@@ -278,23 +278,33 @@ export function OrganizationLanding() {
                         return (
                           <section
                             key={shift.id}
-                            aria-label={`Einsatz ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
+                            aria-labelledby={`shift-${shift.id}-title`}
                             className="p-5"
                           >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <p className="flex items-center gap-2 font-bold">
+                            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                              <div className="min-w-0">
+                                <h3
+                                  id={`shift-${shift.id}-title`}
+                                  className="flex items-center gap-2 font-bold"
+                                >
                                   <Clock3 aria-hidden="true" className="h-5 w-5" />
                                   {formatTime(shift.starts_at, organization.timezone)}–
                                   {formatTime(shift.ends_at, organization.timezone)} Uhr
-                                </p>
-                                <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                                </h3>
+                                <p
+                                  id={`shift-${shift.id}-capacity`}
+                                  className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"
+                                >
                                   <Users aria-hidden="true" className="h-4 w-4" />
                                   {shift.occupied_volunteers} von {shift.required_volunteers}{" "}
                                   Plätzen besetzt
                                 </p>
                               </div>
-                              <Badge variant={label === "Offen" ? "success" : "neutral"}>
+                              <Badge
+                                id={`shift-${shift.id}-status`}
+                                variant={label === "Offen" ? "success" : "neutral"}
+                                className="w-fit"
+                              >
                                 {label}
                               </Badge>
                             </div>
@@ -311,7 +321,8 @@ export function OrganizationLanding() {
                               disabled={shift.status !== "OPEN" || full}
                               onClick={() => openSignup(shift.id)}
                               aria-label={`Eintragen: ${event.title}, ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
-                              className="mt-4 w-full sm:w-auto"
+                              aria-describedby={`shift-${shift.id}-capacity shift-${shift.id}-status`}
+                              className="mt-4 w-full"
                             >
                               {shift.status !== "OPEN"
                                 ? "Geschlossen"

@@ -75,7 +75,13 @@ describe("OrganizationLanding", () => {
     const action = screen.getByRole("button", { name: /Eintragen: Heimspiel/ });
     expect(action).toBeEnabled();
     expect(action).toHaveTextContent("Einsatz anmelden");
-    expect(action).toHaveClass("bg-primary", "w-full", "sm:w-auto", "min-h-11");
+    expect(action).toHaveClass("bg-primary", "w-full", "min-h-11");
+    expect(action).toHaveAttribute(
+      "aria-describedby",
+      "shift-shift-1-capacity shift-shift-1-status",
+    );
+    expect(screen.getByRole("region", { name: /10:00.*12:00 Uhr/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /10:00.*12:00 Uhr/, level: 3 })).toBeInTheDocument();
     expect(screen.getByText("Offen")).toHaveClass("text-status-success");
     fireEvent.click(action);
     expect(screen.getByRole("form", { name: /Eintragung für Heimspiel/ })).toBeInTheDocument();

@@ -75,7 +75,7 @@ export function ManagedSignupPage({ token }: Readonly<{ token: string }>) {
   return (
     <Shell>
       <Card>
-        <CardBody className="p-5 sm:p-7">
+        <CardBody className="p-4 sm:p-7">
           <PageHeader
             title="Meine Eintragung"
             description={signup.organization_name}
@@ -97,51 +97,92 @@ export function ManagedSignupPage({ token }: Readonly<{ token: string }>) {
             {cancelled ? "Diese Eintragung ist abgesagt." : "Du bist verbindlich eingetragen."}
           </p>
 
-          <dl className="mt-6 grid grid-cols-1 gap-x-6 gap-y-5 sm:grid-cols-2">
-            <Detail label="Anlass" value={`${signup.event_title} · ${signup.event_type}`} />
-            <Detail label="Datum" value={formatDate(signup.event_date)} />
-            <Detail label="Ort" value={signup.event_location} />
-            <Detail
-              label="Einsatz"
-              value={`${formatTime(signup.shift_starts_at, organization.timezone)}–${formatTime(signup.shift_ends_at, organization.timezone)} Uhr`}
-            />
-            <Detail label="Öffentlicher Name" value={signup.public_name} />
-            <Detail label="Telefon" value={signup.phone} />
-            <Detail label="E-Mail" value={signup.email} />
-            <Detail
-              label="Absagefrist"
-              value={formatDateTime(signup.cancellation_deadline, organization.timezone) + " Uhr"}
-            />
-          </dl>
+          <section
+            aria-labelledby="event-details-heading"
+            className="mt-5 rounded-md border border-border/70 p-4 sm:p-5"
+          >
+            <h2 id="event-details-heading" className="text-lg font-semibold">
+              Einsatzdetails
+            </h2>
+            <p className="mt-3 text-xl font-semibold text-foreground">{signup.event_title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{signup.event_type}</p>
+            <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+              <Detail label="Datum" value={formatDate(signup.event_date)} />
+              <Detail
+                label="Zeit"
+                value={`${formatTime(signup.shift_starts_at, organization.timezone)}–${formatTime(signup.shift_ends_at, organization.timezone)} Uhr`}
+              />
+              <Detail label="Ort" value={signup.event_location} />
+              <Detail
+                label="Absagefrist"
+                value={formatDateTime(signup.cancellation_deadline, organization.timezone) + " Uhr"}
+              />
+            </dl>
+            {signup.event_public_description ? (
+              <p className="mt-4 border-t border-border/70 pt-4 text-sm text-muted-foreground">
+                {signup.event_public_description}
+              </p>
+            ) : null}
+          </section>
 
-          <aside className="mt-6 rounded-md border border-border/70 bg-muted/50 p-4 text-sm text-muted-foreground">
-            <p className="font-semibold text-foreground">Deine Daten bleiben geschützt</p>
+          <section aria-labelledby="personal-details-heading" className="mt-5">
+            <h2 id="personal-details-heading" className="text-lg font-semibold">
+              Persönliche Angaben
+            </h2>
+            <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+              <Detail label="Öffentlicher Name" value={signup.public_name} />
+              <Detail label="Telefon" value={signup.phone} />
+              <Detail label="E-Mail" value={signup.email} />
+            </dl>
+          </section>
+
+          <aside
+            aria-labelledby="privacy-heading"
+            className="mt-5 rounded-md border border-border/70 bg-muted/50 p-4 text-sm text-muted-foreground"
+          >
+            <h2 id="privacy-heading" className="font-semibold text-foreground">
+              Deine Daten bleiben geschützt
+            </h2>
             <p className="mt-1">
               Deine Kontaktdaten sind nur über diesen persönlichen Link einsehbar und nicht
               öffentlich im Einsatzplan sichtbar.
             </p>
           </aside>
 
-          {signup.event_public_description ? (
-            <p className="mt-5 text-sm text-muted-foreground">{signup.event_public_description}</p>
-          ) : null}
-          {!cancelled && signup.can_cancel ? (
-            <Button
-              variant="destructive"
-              aria-label="Eintragung endgültig absagen"
-              disabled={cancelling}
-              onClick={() => void cancelSignup()}
-              className="mt-6 w-full sm:w-auto"
-            >
-              {cancelling ? "Wird abgesagt …" : "Eintragung absagen"}
-            </Button>
-          ) : null}
-          {!cancelled && !signup.can_cancel ? (
-            <div className="mt-6 rounded-md border border-status-warning/30 bg-status-warning/10 p-4 text-foreground">
-              <p className="font-semibold text-status-warning">Direkte Absage nicht mehr möglich</p>
-              <p className="mt-1 text-sm">{signup.cancellation_guidance}</p>
-            </div>
-          ) : null}
+          <section aria-labelledby="cancellation-heading" className="mt-6">
+            <h2 id="cancellation-heading" className="text-lg font-semibold">
+              Absage
+            </h2>
+            {cancelled ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                Für diese Eintragung ist keine weitere Aktion nötig.
+              </p>
+            ) : null}
+            {!cancelled && signup.can_cancel ? (
+              <>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Falls du verhindert bist, kannst du deine Eintragung hier endgültig absagen.
+                </p>
+                <Button
+                  variant="destructive"
+                  aria-label="Eintragung endgültig absagen"
+                  disabled={cancelling}
+                  onClick={() => void cancelSignup()}
+                  className="mt-4 w-full sm:w-auto"
+                >
+                  {cancelling ? "Wird abgesagt …" : "Eintragung absagen"}
+                </Button>
+              </>
+            ) : null}
+            {!cancelled && !signup.can_cancel ? (
+              <div className="mt-3 rounded-md border border-status-warning/30 bg-status-warning/10 p-4 text-foreground">
+                <p className="font-semibold text-status-warning">
+                  Direkte Absage nicht mehr möglich
+                </p>
+                <p className="mt-1 text-sm">{signup.cancellation_guidance}</p>
+              </div>
+            ) : null}
+          </section>
           {cancelError ? (
             <p
               role="alert"

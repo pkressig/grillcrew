@@ -125,11 +125,19 @@ function planningFetch(
   });
 }
 
-function renderAdmin(role: Parameters<typeof session>[0], fetchMock = planningFetch(role)) {
+function renderAdmin(
+  role: Parameters<typeof session>[0],
+  fetchMock = planningFetch(role),
+  timezone = platformFallbackOrganization.timezone,
+) {
   vi.stubGlobal("fetch", fetchMock);
   render(
     <AuthProvider>
-      <AdminShell activeView="planning" org="example" organization={platformFallbackOrganization} />
+      <AdminShell
+        activeView="planning"
+        org="example"
+        organization={{ ...platformFallbackOrganization, timezone }}
+      />
     </AuthProvider>,
   );
   return fetchMock;
@@ -207,6 +215,7 @@ describe("planning admin", () => {
     });
     renderAdmin("ADMIN", fetchMock);
     await screen.findByText("Früher Anlass");
+    fireEvent.click(screen.getByRole("button", { name: "Kalender" }));
     expect(
       screen.getAllByLabelText(/Anlass .* anzeigen/).map((summary) => summary.textContent),
     ).toEqual([
@@ -214,6 +223,150 @@ describe("planning admin", () => {
       expect.stringContaining("Sommerfest"),
       expect.stringContaining("Gleicher Tag"),
     ]);
+  });
+
+  it("switches accessibly to a week-grouped calendar with a narrow-screen list fallback", async () => {
+    const laterEvent = {
+      ...planningEvent,
+      id: "event-later",
+      title: "Herbstmarkt",
+      date: "2026-09-22",
+    };
+    const base = planningFetch("ADMIN", false, [season], true, true, [planningEvent, laterEvent]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("event-later/shifts")) return Response.json([]);
+      return base(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    const agendaButton = await screen.findByRole("button", { name: "Agenda" });
+    const calendarButton = screen.getByRole("button", { name: "Kalender" });
+    expect(agendaButton).toHaveAttribute("aria-pressed", "true");
+    expect(calendarButton).toHaveAttribute("aria-pressed", "false");
+
+    fireEvent.click(calendarButton);
+
+    expect(screen.getByRole("heading", { level: 2, name: "Kalender" })).toBeInTheDocument();
+    expect(calendarButton).toHaveAttribute("aria-pressed", "true");
+    const calendar = screen.getByRole("list", { name: "Kalenderwochen Herbstrunde" });
+    expect(calendar).toHaveClass("grid", "md:grid-cols-2");
+    expect(within(calendar).getAllByRole("heading", { name: /^Woche / })).toHaveLength(2);
+    expect(within(calendar).getByText("Sommerfest")).toBeInTheDocument();
+    expect(within(calendar).getByText("Herbstmarkt")).toBeInTheDocument();
+
+    fireEvent.click(agendaButton);
+    expect(screen.getByRole("heading", { level: 2, name: "Agenda" })).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Agenda Herbstrunde" })).not.toHaveClass(
+      "md:grid-cols-2",
+    );
+  });
+
+  it("navigates real loaded week windows and resets to the current loaded week", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-12T12:00:00Z"));
+    const laterEvent = {
+      ...planningEvent,
+      id: "event-later-navigation",
+      title: "Herbstmarkt Navigation",
+      date: "2026-09-22",
+    };
+    const base = planningFetch("ADMIN", false, [season], true, true, [planningEvent, laterEvent]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("event-later-navigation/shifts")) return Response.json([]);
+      return base(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    const navigation = await screen.findByRole("navigation", { name: "Datumsnavigation" });
+    expect(navigation).toHaveClass("flex-col", "sm:flex-row");
+    await waitFor(() => expect(navigation).toHaveTextContent("07.09.2026"));
+    expect(navigation).toHaveTextContent("Ausgewähltes Zeitfenster:");
+    expect(within(navigation).getByRole("button", { name: "Zurück" })).toBeDisabled();
+    expect(within(navigation).getByRole("button", { name: "Aktuell" })).toBeDisabled();
+    expect(screen.getByText("Sommerfest")).toBeInTheDocument();
+    expect(screen.queryByText("Herbstmarkt Navigation")).not.toBeInTheDocument();
+
+    fireEvent.click(within(navigation).getByRole("button", { name: "Weiter" }));
+    expect(navigation).toHaveTextContent("21.09.2026");
+    expect(within(navigation).getByRole("button", { name: "Weiter" })).toBeDisabled();
+    expect(within(navigation).getByRole("button", { name: "Aktuell" })).toBeEnabled();
+    expect(screen.queryByText("Sommerfest")).not.toBeInTheDocument();
+    expect(screen.getByText("Herbstmarkt Navigation")).toBeInTheDocument();
+
+    fireEvent.click(within(navigation).getByRole("button", { name: "Aktuell" }));
+    expect(navigation).toHaveTextContent("07.09.2026");
+    expect(screen.getByText("Sommerfest")).toBeInTheDocument();
+  });
+
+  it("keeps the selected date window when switching views and marks its calendar week", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-12T12:00:00Z"));
+    renderAdmin("ADMIN", planningFetch("ADMIN", false, [season], true, true));
+    const navigation = await screen.findByRole("navigation", { name: "Datumsnavigation" });
+    await waitFor(() => expect(navigation).toHaveTextContent("07.09.2026"));
+    const selectedWindow = navigation.querySelector("p")!.textContent;
+
+    fireEvent.click(screen.getByRole("button", { name: "Kalender" }));
+
+    expect(navigation.querySelector("p")).toHaveTextContent(selectedWindow!);
+    expect(screen.getByRole("heading", { name: /^Woche / })).toHaveAttribute(
+      "aria-current",
+      "date",
+    );
+    expect(screen.getByRole("heading", { name: /^Woche / })).toHaveFocus();
+    expect(screen.getByRole("heading", { name: /^Woche / })).toHaveClass("bg-primary/10");
+  });
+
+  it("shows an honest empty state when a planning period has no events in the selected week", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-12T12:00:00Z"));
+    const springEvent = {
+      ...planningEvent,
+      id: "event-spring",
+      season_id: secondSeason.id,
+      title: "Frühlingsfest",
+      date: "2026-09-22",
+    };
+    const base = planningFetch("ADMIN", false, [season, secondSeason], true, true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/seasons/season-2/events")) return Response.json([springEvent]);
+      if (url.endsWith("/events/event-spring/shifts")) return Response.json([]);
+      return base(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByText("Sommerfest");
+    expect(
+      screen.getByText("In dieser Saison gibt es in der ausgewählten Woche keine Anlässe."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Weiter" }));
+    expect(screen.getByText("Frühlingsfest")).toBeInTheDocument();
+    expect(screen.queryByText("Sommerfest")).not.toBeInTheDocument();
+  });
+
+  it("selects the current loaded week using the organization timezone", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-09-14T12:30:00Z"));
+    const laterEvent = {
+      ...planningEvent,
+      id: "event-timezone-boundary",
+      title: "Zeitzonen-Anlass",
+      date: "2026-09-22",
+    };
+    const base = planningFetch("ADMIN", false, [season], true, true, [planningEvent, laterEvent]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes("event-timezone-boundary/shifts")) return Response.json([]);
+      return base(input, init);
+    });
+
+    renderAdmin("ADMIN", fetchMock, "Pacific/Kiritimati");
+
+    const navigation = await screen.findByRole("navigation", { name: "Datumsnavigation" });
+    await waitFor(() => expect(navigation).toHaveTextContent("21.09.2026"));
+    expect(screen.getByText("Zeitzonen-Anlass")).toBeInTheDocument();
+    expect(screen.queryByText("Sommerfest")).not.toBeInTheDocument();
   });
 
   it("keeps event details native and opening them does not request data", async () => {

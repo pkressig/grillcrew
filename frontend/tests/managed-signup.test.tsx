@@ -73,10 +73,13 @@ describe("ManagedSignupPage", () => {
       "border-status-success/30",
       "text-status-success",
     );
-    expect(screen.getByText("Anlass").parentElement?.parentElement).toHaveClass(
+    expect(screen.getByRole("heading", { name: "Einsatzdetails" })).toBeInTheDocument();
+    expect(screen.getByText("Datum").parentElement?.parentElement).toHaveClass(
       "grid-cols-1",
       "sm:grid-cols-2",
     );
+    expect(screen.getByRole("heading", { name: "Persönliche Angaben" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Absage" })).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Eintragung endgültig absagen" });
     expect(button).toHaveClass("min-h-11", "bg-status-error", "w-full", "sm:w-auto");
   });
@@ -89,6 +92,9 @@ describe("ManagedSignupPage", () => {
     expect(screen.getByText("+41 79 123 45 67")).toBeInTheDocument();
     expect(
       screen.getByText(/nur über diesen persönlichen Link einsehbar und nicht öffentlich/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Deine Daten bleiben geschützt" }),
     ).toBeInTheDocument();
   });
 
@@ -107,6 +113,9 @@ describe("ManagedSignupPage", () => {
     await waitFor(() => expect(mockedCancel).toHaveBeenCalledWith("example", "secret-token"));
     expect(await screen.findByText("Diese Eintragung ist abgesagt.")).toBeInTheDocument();
     expect(screen.getByText("Abgesagt")).toHaveClass("bg-status-neutral/10");
+    expect(
+      screen.getByText("Für diese Eintragung ist keine weitere Aktion nötig."),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /absagen/i })).not.toBeInTheDocument();
   });
 

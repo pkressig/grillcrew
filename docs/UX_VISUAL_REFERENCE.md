@@ -71,9 +71,9 @@ Only after an approved volunteer-account or management-link contract. Target: mo
 
 Only after F010 contract. Target: staff table, work-record detail, duration/breaks, compensation state, correction audit, and responsive mobile read view.
 
-### 8. Kalender — future
+### 8. Kalender — implemented presentation view
 
-Separate contract required for month/week/list modes, date navigation, timezone, collisions, mobile agenda, and drag/drop. Do not infer from the current Agenda.
+The Planning workspace may switch between the default Agenda and a presentation-only Calendar view. Deterministic previous/current/next navigation moves only among weeks represented by the already-loaded real events; it does not request or infer additional dates.
 
 ## Component patterns
 
@@ -101,3 +101,15 @@ Each visual phase must name exact files, preserve APIs, include responsive/acces
 **Scope:** Admin navigation, presentation, and documentation for the dedicated organization-scoped attendance workspace, including the continuity link from Planung.
 
 **Non-goals:** This decision does not add or change backend endpoints, request or response schemas, permissions, attendance outcomes, or the attendance section in Planung.
+
+## Decision record: Planning Calendar presentation and loaded-week navigation
+
+**Date:** 2026-07-30
+
+**Decision:** Planung keeps Agenda as its default and provides a presentation-only Calendar view. Previous, current, and next navigation deterministically selects only weeks represented by already-loaded real events. Agenda shows events from the selected loaded week, including an honest empty state for a planning period without events in that week. Calendar retains all loaded events and visibly highlights and focuses the selected week.
+
+**Rationale:** The controls need an observable, accessible effect without expanding the existing event and shift data contracts. Loaded event weeks provide truthful navigation boundaries and preserve every event through deterministic navigation.
+
+**Scope:** Admin Planning presentation, accessible view switching, selected-week filtering or focus, responsive controls with 44px targets, and tests for the loaded data already returned by the existing APIs.
+
+**Non-goals:** No backend date contract, recurrence, drag/drop, timezone changes, inferred unavailable dates, month modes, collision rules, API/schema changes, or new event/shift mutations are introduced.
