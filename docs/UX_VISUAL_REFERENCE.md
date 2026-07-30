@@ -75,6 +75,10 @@ Only after F010 contract. Target: staff table, work-record detail, duration/brea
 
 The Planning workspace may switch between the default Agenda and a presentation-only Calendar view. Deterministic previous/current/next navigation moves only among weeks represented by the already-loaded real events; it does not request or infer additional dates.
 
+### 9. Einstellungen — implemented, ADMIN-only
+
+Reference: D-041. A dedicated `/{org}/admin/settings` route, visible in navigation and reachable only for ADMIN; a KOORDINATION user who navigates there directly sees the same "keine Berechtigung" state used elsewhere in the admin shell, not the settings content. Three stacked sections in one page: organization settings (payout rate, signup rate limits, coordination contact label), a home-venue allowlist (create, soft-deactivate, never hard-deleted), and an ordered crew-size rule list (create, reorder via up/down controls, deactivate) with a visually distinct, non-deletable default rule always evaluated last. All forms follow the existing hand-rolled form/busy/error/success convention; no invented components.
+
 ## Component patterns
 
 - PageHeader: title, description, action.

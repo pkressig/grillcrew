@@ -12,7 +12,14 @@ from app.models.identity import (
     User,
     UserStatus,
 )
-from app.models.organization import Organization, OrganizationSettings, Theme
+from app.models.organization import (
+    CrewSizeRule,
+    HomeVenue,
+    MenuType,
+    Organization,
+    OrganizationSettings,
+    Theme,
+)
 from app.models.planning import (
     ClubYear,
     Event,
@@ -33,13 +40,16 @@ from app.models.planning import (
 __all__ = [
     "AuditEvent",
     "ClubYear",
+    "CrewSizeRule",
     "Event",
     "EventStatus",
     "Family",
     "FamilyMember",
     "FamilyMemberType",
     "FamilyStatus",
+    "HomeVenue",
     "Invitation",
+    "MenuType",
     "Organization",
     "OrganizationSettings",
     "PasswordResetToken",

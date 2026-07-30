@@ -10,6 +10,8 @@ erDiagram
   ORGANIZATION ||--o{ VOLUNTEER : owns
   ORGANIZATION ||--o{ FAMILY : owns
   ORGANIZATION ||--o{ STAFF_MEMBERSHIP : grants
+  ORGANIZATION ||--o{ HOME_VENUE : allowlists
+  ORGANIZATION ||--o{ CREW_SIZE_RULE : configures
   ORGANIZATION ||--o{ IMPORT_BATCH : owns
   CLUB_YEAR ||--o{ SEASON : contains
   SEASON ||--o{ EVENT : contains
@@ -17,7 +19,6 @@ erDiagram
   SHIFT ||--o{ SIGNUP : receives
   VOLUNTEER ||--o{ SIGNUP : makes
   SIGNUP ||--o{ WORK_RECORD : becomes
-  FAMILY ||--o{ CHILD : contains
   FAMILY ||--o{ FAMILY_MEMBER : has
   VOLUNTEER ||--o{ FAMILY_MEMBER : linked
   FAMILY ||--o{ WORK_RECORD : credited
@@ -73,6 +74,39 @@ Rules:
 - signupRateLimitPerContact
 - signupRateLimitWindowMinutes
 - coordinationContactLabel nullable
+
+### HomeVenue
+
+Implemented for the Grill-workflow game-plan import (D-041). A configurable, organization-scoped
+allowlist of venues that count as a catering home venue; only games at an active home venue are
+proposed for inclusion during import. Soft-deactivated via `isActive`, never hard-deleted, so
+historical imports and events keep a valid reference.
+
+- id
+- organizationId
+- name
+- nameNormalized (lower/trim/collapsed-whitespace, used for de-duplication and matching)
+- isActive
+- createdAt
+- updatedAt
+
+### CrewSizeRule
+
+Implemented for the Grill-workflow crew-size/menu suggestion engine (D-041). Organization-scoped,
+ordered rules matching a game's team text to a suggested menu type and required griller count. One
+non-deletable, always-last-evaluated default rule (`pattern = null`) guarantees a suggestion always
+exists. Suggestions are always editable and never silently applied.
+
+- id
+- organizationId
+- sortOrder
+- pattern nullable (null marks the default/catch-all rule)
+- menuType (`FRIES_NUGGETS` | `FRIES_NUGGETS_BURGER`)
+- requiredGrillerCount
+- minGamesPerShift
+- isActive
+- createdAt
+- updatedAt
 
 ### User
 
@@ -224,14 +258,14 @@ Materialized for public self-signup in F004 Step 2. `preferredLanguage`, `accoun
 Materialized for immediate public reservations in F004 Step 2. F004 Step 3 generates management
 tokens for new public signups, persists only their SHA-256 hashes, and materializes cancellation
 timestamp/reason metadata. F004 Step 4 dispatches a confirmation email using the raw token
-transiently; no additional column is persisted for it. Compensation/family assignment remain
-deferred.
+transiently; no additional column is persisted for it. `Signup` carries no compensation or family
+fields today and is not planned to: per D-041, compensation type and child/family credit are
+decided at shift close-out (often long after signup, sometimes with no signup at all for paper
+entries) and belong on a separate future `WorkRecord` entity, optionally linked back to a `Signup`.
 
 - id
 - shiftId
 - volunteerId
-- provisionalCompensationType
-- provisionalFamilyId nullable
 - publicNameSnapshot
 - status: ACTIVE | CANCELLED_BY_VOLUNTEER | CANCELLED_BY_ADMIN
 - outcome: OPEN | ATTENDED | EXCUSED_CANCELLED | LATE_CANCELLED | NO_SHOW | SUBSTITUTE_ORGANIZED;
@@ -247,39 +281,36 @@ deferred.
 
 ### Family
 
+Implemented in F007 Step 1.
+
 - id
 - organizationId
 - displayName
-- status
+- status: ACTIVE (only status implemented; no deactivate/delete endpoint exists yet)
 - internalNote
-
-### Child
-
-- id
-- familyId
-- firstName
-- lastName
-- team
-- activeFrom
-- activeUntil
+- createdAt
+- updatedAt
 
 ### FamilyMember
 
+Implemented in F007 Step 1/2. Unifies the previously separate Child/FamilyMember concepts into one
+entity distinguished by `memberType`; there is no separate `Child` table. Create and list endpoints
+exist; there is no update/delete endpoint for the member's own fields, only a dedicated PATCH to
+change or clear the `volunteerId` link on a HELPER member.
+
 - id
 - familyId
-- volunteerId
-- relationship
-- verifiedAt
-- isPrimaryContact
+- memberType: CHILD | HELPER
+- firstName
+- lastName
+- volunteerId nullable (only meaningful for HELPER members)
 
 ### FamilyRequirement
 
-- id
-- familyId
-- clubYearId
-- requiredMinutes
-- reason
-- source: DEFAULT | OVERRIDE
+Not implemented. The Sollstunden materialization/freeze/override behavior from BR-001/D-024 has no
+backing table or endpoint yet; the rule is currently applied only manually against the season-end
+Excel export. Needs its own decision record and contract before implementation (see
+`docs/BACKLOG.md`).
 
 ### WorkRecord
 

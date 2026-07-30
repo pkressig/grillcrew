@@ -588,6 +588,76 @@ High.
 - Duplicate review.
 - Import result screen.
 
+## F015 Grill Game-Plan Import and Crew-Size Configuration
+
+**Status**
+
+Phase 1 (Settings foundation) is implemented locally and passes full checks, but is not yet
+committed/merged: organization-scoped `HomeVenue` allowlist (soft-deactivatable, no hard delete),
+`CrewSizeRule` ordered rule table with a non-deletable default rule, and an editable
+`OrganizationSettings` surface (payout rate, signup rate limits, coordination contact label). All
+of it lives behind a new ADMIN-only "Einstellungen" admin view. See D-041 for the ratified product
+direction and `ai/incoming/claude-latest.md` for the implementation report.
+
+Phases 2-6 (Excel game-plan import with 5-way diff preview, shift generation wired to the crew-size
+suggestion engine, deferred work-record/child-assignment reconciliation, payout/coordination-time
+tracking and season-end export, Kiosk fixed-assignment module) are planned per D-041 but not yet
+implemented.
+
+**Goal**
+
+Replace the manual Excel/WhatsApp/VolunteerSignup workflow for organizing grill (and later kiosk)
+volunteer shifts with an organization-configurable, auditable pipeline: import the association's
+home game schedule, suggest crew size/menu per shift, and let volunteers self-signup exactly as
+today's public flow already supports.
+
+**User stories**
+
+- As Admin, I can configure which venues count as home venues for catering and which team-name
+  patterns suggest which menu/crew size.
+- As Koordination, I can import the season's game plan, review a diff before anything changes, and
+  decide per game whether it needs a grill shift.
+- As Koordination, I get an editable crew-size/menu suggestion when creating a shift instead of
+  guessing from scratch.
+
+**Acceptance criteria**
+
+- Home venues and crew-size rules are organization-scoped, editable only by ADMIN.
+- Import never silently overwrites a coordinator's manual edits or auto-moves a shift on a game
+  reschedule.
+- Crew-size suggestions are always shown as editable, never silently applied.
+
+**Dependencies**
+
+F003 Seasons, F004 Events, F005 Shifts.
+
+**Estimated complexity**
+
+High (multi-phase).
+
+**Database impact**
+
+- `home_venue`, `crew_size_rule` (Phase 1, implemented).
+- `import_batch`, `import_row`, `event.kickoff_time`/`external_game_number`/`import_match_key`
+  (Phase 2, planned).
+- `shift.shift_type`/`assignment_mode`/`menu_type`/`crew_suggestion_overridden` (Phase 3, planned).
+- `work_record` (Phase 4), `payment`, `coordination_time_entry` (Phase 5) - all planned.
+
+**API impact**
+
+- `GET/PATCH /api/admin/{org}/settings/organization-settings`,
+  `GET/POST/PATCH /api/admin/{org}/settings/home-venues`,
+  `GET/POST/PATCH /api/admin/{org}/settings/crew-size-rules`,
+  `POST /api/admin/{org}/settings/crew-size-rules/reorder` (Phase 1, implemented).
+- Import and shift-generation endpoints (Phase 2/3, planned).
+
+**UI impact**
+
+- New ADMIN-only "Einstellungen" admin view (implemented): organization settings form, home-venue
+  list with create/deactivate, crew-size rule ordered list with create/reorder/deactivate and a
+  visually distinct default rule.
+- Import review UI and shift-creation crew-size suggestion wiring (planned).
+
 ## Recommended Implementation Order
 
 1. F001 Platform Core
@@ -604,5 +674,6 @@ High.
 12. F012 Dashboard and Operational Tasks
 13. F013 Statistics, Reports, and Exports
 14. F014 Import and Onboarding Data Migration
+15. F015 Grill Game-Plan Import and Crew-Size Configuration
 
 F001 comes first because every future feature depends on a trustworthy organization context, database-driven branding, and tenant-safe data model. Authentication starts only after the tenant boundary exists.

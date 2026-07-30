@@ -1,7 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, ClipboardCheck, LayoutDashboard, Users } from "lucide-react";
+import {
+  CalendarDays,
+  ClipboardCheck,
+  LayoutDashboard,
+  Settings as SettingsIcon,
+  Users,
+} from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { LogoutButton } from "@/components/logout-button";
@@ -13,8 +19,9 @@ import { FamiliesPanel } from "./families-panel";
 import { AttendancePanel } from "./attendance-panel";
 import { PlanningPanel } from "./planning-panel";
 import { OverviewPanel } from "./overview-panel";
+import { SettingsPanel } from "./settings-panel";
 
-export type AdminView = "overview" | "planning" | "families" | "attendance";
+export type AdminView = "overview" | "planning" | "families" | "attendance" | "settings";
 
 const roleLabels = {
   ADMIN: "Administration",
@@ -22,6 +29,52 @@ const roleLabels = {
   KIOSK: "Kiosk",
   VORSTAND_LESEN: "Vorstand (Lesen)",
 } as const;
+
+type Role = keyof typeof roleLabels;
+
+const NAV_ITEMS: ReadonlyArray<{
+  view: AdminView;
+  label: string;
+  icon: ReactNode;
+  path: string;
+  roles: readonly Role[];
+}> = [
+  {
+    view: "overview",
+    label: "Übersicht",
+    icon: <LayoutDashboard aria-hidden="true" size={18} />,
+    path: "",
+    roles: ["ADMIN", "KOORDINATION"],
+  },
+  {
+    view: "planning",
+    label: "Planung",
+    icon: <CalendarDays aria-hidden="true" size={18} />,
+    path: "/planning",
+    roles: ["ADMIN", "KOORDINATION"],
+  },
+  {
+    view: "families",
+    label: "Familien",
+    icon: <Users aria-hidden="true" size={18} />,
+    path: "/families",
+    roles: ["ADMIN", "KOORDINATION"],
+  },
+  {
+    view: "attendance",
+    label: "Anwesenheit",
+    icon: <ClipboardCheck aria-hidden="true" size={18} />,
+    path: "/attendance",
+    roles: ["ADMIN", "KOORDINATION"],
+  },
+  {
+    view: "settings",
+    label: "Einstellungen",
+    icon: <SettingsIcon aria-hidden="true" size={18} />,
+    path: "/settings",
+    roles: ["ADMIN"],
+  },
+];
 
 export function AdminShell({
   org,
@@ -64,7 +117,9 @@ export function AdminShell({
       </a>
       <aside className="hidden border-r border-foreground/80 bg-foreground p-6 text-background lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:gap-7">
         <ShellIdentity organization={organization} role={roleLabels[membership.role]} />
-        {canManage ? <AdminNavigation activeView={activeView} org={org} vertical /> : null}
+        {canManage ? (
+          <AdminNavigation activeView={activeView} org={org} role={membership.role} vertical />
+        ) : null}
         <div className="mt-auto grid gap-5 border-t border-background/15 pt-5">
           <OrganizationSwitcher memberships={auth.memberships} currentSlug={org} />
           <LogoutButton />
@@ -76,36 +131,48 @@ export function AdminShell({
             <ShellIdentity organization={organization} role={roleLabels[membership.role]} />
             <LogoutButton />
           </div>
-          {canManage ? <AdminNavigation activeView={activeView} org={org} /> : null}
+          {canManage ? (
+            <AdminNavigation activeView={activeView} org={org} role={membership.role} />
+          ) : null}
           <OrganizationSwitcher memberships={auth.memberships} currentSlug={org} />
         </header>
         <main
           id="admin-content"
           className="mx-auto min-w-0 max-w-[90rem] px-4 py-6 md:px-7 lg:px-10 lg:py-9"
         >
-          {canManage ? (
-            activeView === "overview" ? (
-              <OverviewPanel org={org} timezone={organization.timezone} />
-            ) : activeView === "planning" ? (
-              <PlanningPanel org={org} timezone={organization.timezone} />
-            ) : activeView === "families" ? (
-              <FamiliesPanel org={org} />
-            ) : (
-              <AttendancePanel org={org} timezone={organization.timezone} />
-            )
+          {!canManage ? (
+            <NoPermission text="Ihre Rolle darf diesen Administrationsbereich nicht verwalten." />
+          ) : !viewAllowsRole(activeView, membership.role) ? (
+            <NoPermission text="Ihre Rolle darf diesen Bereich nicht verwalten." />
+          ) : activeView === "overview" ? (
+            <OverviewPanel org={org} timezone={organization.timezone} />
+          ) : activeView === "planning" ? (
+            <PlanningPanel org={org} timezone={organization.timezone} />
+          ) : activeView === "families" ? (
+            <FamiliesPanel org={org} />
+          ) : activeView === "settings" ? (
+            <SettingsPanel org={org} />
           ) : (
-            <Card>
-              <CardBody>
-                <h1 className="text-2xl font-bold">keine Berechtigung</h1>
-                <p className="mt-2">
-                  Ihre Rolle darf diesen Administrationsbereich nicht verwalten.
-                </p>
-              </CardBody>
-            </Card>
+            <AttendancePanel org={org} timezone={organization.timezone} />
           )}
         </main>
       </div>
     </div>
+  );
+}
+
+function viewAllowsRole(view: AdminView, role: Role): boolean {
+  return NAV_ITEMS.find((item) => item.view === view)?.roles.includes(role) ?? false;
+}
+
+function NoPermission({ text }: Readonly<{ text: string }>) {
+  return (
+    <Card>
+      <CardBody>
+        <h1 className="text-2xl font-bold">keine Berechtigung</h1>
+        <p className="mt-2">{text}</p>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -128,52 +195,26 @@ function ShellIdentity({
 function AdminNavigation({
   activeView,
   org,
+  role,
   vertical = false,
-}: Readonly<{ activeView: AdminView; org: string; vertical?: boolean }>) {
+}: Readonly<{ activeView: AdminView; org: string; role: Role; vertical?: boolean }>) {
   const base = `/${org}/admin`;
+  const items = NAV_ITEMS.filter((item) => item.roles.includes(role));
   return (
     <nav aria-label="Administration">
       <ul className={vertical ? "grid gap-2.5" : "flex flex-wrap gap-2"}>
-        <li>
-          <AdminNavLink
-            active={activeView === "overview"}
-            href={base}
-            icon={<LayoutDashboard aria-hidden="true" size={18} />}
-            inverted={vertical}
-          >
-            Übersicht
-          </AdminNavLink>
-        </li>
-        <li>
-          <AdminNavLink
-            active={activeView === "planning"}
-            href={`${base}/planning`}
-            icon={<CalendarDays aria-hidden="true" size={18} />}
-            inverted={vertical}
-          >
-            Planung
-          </AdminNavLink>
-        </li>
-        <li>
-          <AdminNavLink
-            active={activeView === "families"}
-            href={`${base}/families`}
-            icon={<Users aria-hidden="true" size={18} />}
-            inverted={vertical}
-          >
-            Familien
-          </AdminNavLink>
-        </li>
-        <li>
-          <AdminNavLink
-            active={activeView === "attendance"}
-            href={`${base}/attendance`}
-            icon={<ClipboardCheck aria-hidden="true" size={18} />}
-            inverted={vertical}
-          >
-            Anwesenheit
-          </AdminNavLink>
-        </li>
+        {items.map((item) => (
+          <li key={item.view}>
+            <AdminNavLink
+              active={activeView === item.view}
+              href={`${base}${item.path}`}
+              icon={item.icon}
+              inverted={vertical}
+            >
+              {item.label}
+            </AdminNavLink>
+          </li>
+        ))}
       </ul>
     </nav>
   );

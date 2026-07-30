@@ -13,6 +13,7 @@ from app.api.internal import router as internal_router
 from app.api.invitations import router as invitations_router
 from app.api.planning import router as planning_router
 from app.api.public import router as public_router
+from app.api.settings import router as settings_router
 from app.core.config import AppEnv, get_settings
 from app.core.logging import configure_logging
 from app.middleware.organization_context import OrganizationContextMiddleware
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     application.include_router(admin_router)
     application.include_router(families_router)
     application.include_router(planning_router)
+    application.include_router(settings_router)
     if settings.app_env != AppEnv.PRODUCTION:
         application.include_router(internal_router)
 

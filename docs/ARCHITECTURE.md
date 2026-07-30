@@ -114,6 +114,16 @@ active signups. Real changes write one same-transaction tenant-scoped `AuditEven
 id, signup id, previous outcome, and new outcome; idempotent repeats do not audit. Attendance outcomes
 appear in admin planning projections only and never in public plan or signup responses.
 
+Authenticated organization settings administration (D-041) uses
+`/api/admin/{organization_slug}/settings/...`: `GET/PATCH organization-settings`,
+`GET/POST/PATCH home-venues`, and `GET/POST/PATCH crew-size-rules` plus
+`POST crew-size-rules/reorder`. Every endpoint requires ADMIN membership specifically (not
+KOORDINATION), matching `docs/PERMISSIONS.md`'s "Organisationseinstellungen verwalten" row, and
+write endpoints validate CSRF and Origin/Host like every other admin mutation. Home venues are
+soft-deactivated (`is_active`), never hard-deleted, so historical import/event references stay
+valid. Crew-size rules always include one non-deletable default rule (`pattern = null`) evaluated
+last regardless of stored `sort_order`, guaranteeing a crew-size suggestion always exists.
+
 ## Permissions
 
 Permissions are organization-local. A user may be Admin in one organization and have no access to another. Role checks must combine:

@@ -159,3 +159,56 @@ Access- und Refresh-Token werden als `HttpOnly`, `Secure` Cookies uebertragen; s
 ## D-040 – E-Mail-Versand fuer Einladung und Passwort-Reset
 **Status:** beschlossen
 Transaktionale E-Mails (Passwort-Reset, Staff-Einladungen) laufen ueber eine anbieterunabhaengige `EmailSender`-Abstraktion. Die konkrete Transportart in Version 1 ist SMTP, konfiguriert ausschliesslich ueber Umgebungsvariablen; der Versand erfolgt asynchron ueber FastAPI `BackgroundTasks`, ohne zusaetzlichen Broker oder Worker-Prozess. Fehlgeschlagene Sendeversuche werden protokolliert, sind fuer Operatoren sichtbar und sicher wiederholbar; Passwort-Reset- und Einladungs-Token bleiben auch bei fehlgeschlagenem Versand sicher (kurzlebig, einmal verwendbar, nur als Hash gespeichert). Rohtoken und Geheimnisse werden niemals geloggt. Entspricht F002_DECISIONS.md P-4.
+
+## D-041 - Spielplan-Import und Grill-Workflow-Digitalisierung
+**Status:** beschlossen (2026-07-30)
+
+Grundlage: Analyse realer FCTC-Excel-Dateien (Heimspielplan-Export, Kiosk-/Grillplan, Grilleinsatzplan,
+Saisonabschluss-Auswertung) und direkte Produktentscheidungen mit dem Product Owner. Ziel ist die
+vollstaendige Abloesung des bisherigen externen Tools ("VolunteerSignup") durch GrillCrew, beginnend
+mit dem Grill-Kernworkflow; Kiosk wird architektonisch vorbereitet, aber separat umgesetzt.
+
+1. Crew-Groesse/Menue wird durch eine organisationsweit konfigurierbare Regel-Engine vorgeschlagen
+   (Team-Textmuster -> Menuetyp -> benoetigte Grilleranzahl + Mindestanzahl Spiele je Schicht), immer
+   als editierbarer Vorschlag, nie stillschweigend uebernommen. Ein nicht loeschbarer Standardfall
+   (`pattern = null`) garantiert immer ein Ergebnis.
+2. Nur explizit konfigurierte, aktive Heimplaetze (initial "Cazis / St. Martin") gelten als
+   Grill-/Kiosk-Standort; die Zuordnung ist eine organisationsweite Einstellung mit Vorschau und
+   manuellem Override pro importiertem Spiel, kein hartcodierter Wert.
+3. Alle Spieltypen (Meisterschaft, Cup, Test-/Trainingsspiele, Turnier) werden importiert, sofern am
+   Heimplatz; ob daraus ein Grill-Einsatz entsteht, entscheidet die Koordination pro Spiel manuell.
+4. Re-Import erzeugt eine ueberpruefbare 5-Wege-Diff-Vorschau (neu/geaendert/verschoben/entfernt/
+   unveraendert). Abgleich ueber die Spielnummer des Verbands, ersatzweise ueber Team-Paarung + Datum,
+   wenn keine Spielnummer vorliegt. Nichts wird beim Re-Import blind ueberschrieben.
+5. Eine Spielverschiebung nach bereits erfolgten Anmeldungen loest keine automatische
+   Schichtverschiebung aus; sie wird nur angezeigt, die Koordination kontaktiert betroffene Helfer
+   manuell ausserhalb der App. Ein Werkzeug zur Nachrichtengenerierung (z. B. fuer WhatsApp) bleibt
+   Backlog.
+6. Die Zuordnung einer Schicht zu einem Kind/einer Familie ist optional und erfolgt typischerweise
+   nachtraeglich (oft erst am Saisonende), nie als Pflichtfeld beim Signup. Sie gehoert auf eine
+   kuenftige eigenstaendige `WorkRecord`-Entitaet, nicht auf `Signup` selbst (`Signup` hat und erhaelt
+   keine Verguetungs- oder Familienfelder).
+7. Kiosk wird architektonisch vorbereitet (gemeinsames Event-/Schicht-Fundament, kuenftige
+   Unterscheidung Grill/Kiosk und offene/feste Zuteilung je Schicht), aber als eigenstaendiges Modul
+   separat umgesetzt; feste Zuteilung durch die Koordination statt offenem Self-Signup.
+8. Auszahlung bleibt in Version 1 papierbasiert (Unterschrift auf Papier); die App dokumentiert nur
+   Verguetungsart, Betrag, Auszahlungsstatus und einen manuellen "Unterschrift erhalten"-Vermerk
+   (Zeitstempel, bestaetigende Person). Eine digitale Unterschrift bleibt Backlog.
+9. Die Arbeitszeit der Grill-/Kiosk-Koordination wird ausbezahlt und als eigener, ADMIN-only
+   Datensatz (kein Helfer-Signup/-WorkRecord) mit eigenem Stundensatz erfasst.
+10. Der Saisonend-Report enthaelt mindestens Helfername, Familie, zugeordnetes Kind (falls
+    vorhanden), geleistete Stunden, Sollstunden, Differenz, Erfuellungsstatus,
+    unentgeltlich/ausbezahlt-Aufteilung, Auszahlungsbetrag und offene Zuordnungen; Export zunaechst
+    als CSV/XLSX, PDF folgt spaeter.
+11. Die Rundung des Auszahlungsbetrags folgt der bereits ratifizierten Regel BR-003/D-028
+    (kaufmaennisch auf 1 Rappen); keine neue Rundungsregel noetig.
+
+**Umsetzungsstand:** Phase 1 (Settings-Fundament: Heimplatz-Allowlist, Crew-Regeln,
+Organisationseinstellungen editierbar, ADMIN-only Einstellungen-Navigation) ist lokal implementiert
+und getestet (siehe `docs/FEATURES.md` F015). Phasen 2-6 (Import-Pipeline, Schichterzeugung,
+Einsatzabschluss/Kind-Zuordnung, Auszahlung/Koordinationszeit/Report, Kiosk) sind geplant, aber noch
+nicht umgesetzt.
+
+**Non-Goals (vorerst):** automatische Schichtverschiebung, digitale Unterschrift, KI-gestuetzte
+Besetzungsvorschlaege (Gemini), WhatsApp-Versandintegration, Sollstunden-Materialisierung
+(`FamilyRequirement`) - alle in `docs/BACKLOG.md` erfasst.
