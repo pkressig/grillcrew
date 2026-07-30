@@ -2,7 +2,12 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { CalendarDays, Clock3, MapPin, Users } from "lucide-react";
+import { PageHeader } from "@/components/page-header";
 import { useOrganization } from "@/components/organization-provider";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import {
   createPublicSignup,
   fetchPublicPlan,
@@ -15,6 +20,14 @@ const dateFormatter = new Intl.DateTimeFormat("de-CH", {
   day: "2-digit",
   month: "long",
   year: "numeric",
+  timeZone: "UTC",
+});
+const dateTileMonthFormatter = new Intl.DateTimeFormat("de-CH", {
+  month: "short",
+  timeZone: "UTC",
+});
+const dateTileDayFormatter = new Intl.DateTimeFormat("de-CH", {
+  day: "2-digit",
   timeZone: "UTC",
 });
 export function OrganizationLanding() {
@@ -133,7 +146,7 @@ export function OrganizationLanding() {
         className="border-b bg-background px-4 py-5"
         style={{ borderColor: organization.theme.secondary_color }}
       >
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
+        <div className="mx-auto flex max-w-4xl items-center gap-3">
           {organization.theme.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -149,21 +162,27 @@ export function OrganizationLanding() {
             />
           )}
           <div>
-            <p className="text-sm font-semibold text-muted-foreground">GrillCrew · Einsatzplan</p>
+            <p className="text-sm font-semibold text-muted-foreground">Öffentlicher Einsatzplan</p>
             <h1 className="text-xl font-bold sm:text-2xl">{organization.name}</h1>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl space-y-5 px-4 py-5">
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <PageHeader
+          title="Kommende Einsätze"
+          description={`Wähle einen Einsatz bei ${organization.name} und melde dich direkt an.`}
+        />
         {error ? (
           <StateMessage title="Plan nicht verfügbar">
             Bitte versuche es später nochmals.
           </StateMessage>
         ) : plan === null ? (
-          <div role="status" className="rounded-2xl border bg-background p-6 text-center">
-            Einsatzplan wird geladen …
-          </div>
+          <Card role="status" aria-live="polite">
+            <CardBody className="text-center text-muted-foreground">
+              Einsatzplan wird geladen …
+            </CardBody>
+          </Card>
         ) : plan.events.length === 0 ? (
           <StateMessage title="Noch keine Einsätze">
             Zurzeit sind keine kommenden Einsätze veröffentlicht.
@@ -177,19 +196,16 @@ export function OrganizationLanding() {
             {success ? (
               <div
                 role="status"
-                className="flex items-start justify-between gap-3 rounded-xl bg-green-100 p-4 font-semibold text-green-900"
+                className="flex items-start justify-between gap-3 rounded-md border border-status-success/30 bg-status-success/10 p-4 font-semibold text-status-success"
               >
                 <div>
                   <p>{success.message} Dein Platz ist reserviert.</p>
                   {success.managementUrl ? (
                     <>
-                      <a
-                        href={success.managementUrl}
-                        className="mt-3 inline-flex min-h-11 items-center rounded-lg bg-green-900 px-4 text-white hover:bg-green-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-900"
-                      >
+                      <a href={success.managementUrl} className={cn(buttonVariants(), "mt-3")}>
                         Meine Eintragung öffnen
                       </a>
-                      <p className="mt-2 text-sm font-normal text-green-950">
+                      <p className="mt-2 text-sm font-normal text-foreground">
                         Wir haben dir eine Bestätigung per E-Mail gesendet. Speichere oder öffne
                         diesen Link trotzdem jetzt – die E-Mail kann verspätet eintreffen oder im
                         Spam-Ordner landen. Damit kannst du deine Eintragung später ansehen oder
@@ -198,187 +214,197 @@ export function OrganizationLanding() {
                     </>
                   ) : null}
                 </div>
-                <button
+                <Button
+                  variant="ghost"
                   type="button"
                   onClick={() => setSuccess(null)}
-                  className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg hover:bg-green-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-900"
+                  className="min-w-11 shrink-0 px-0"
                   aria-label="Hinweis schliessen"
                 >
                   ✕
-                </button>
+                </Button>
               </div>
             ) : null}
             <section aria-label="Kommende Anlässe" className="space-y-5">
               {plan.events.map((event) => (
-                <article
-                  key={event.id}
-                  className="overflow-hidden rounded-2xl border bg-background shadow-sm"
-                >
-                  <div className="border-b p-5">
-                    <p className="text-sm font-semibold text-muted-foreground">
-                      {event.event_type}
-                    </p>
-                    <h2 className="mt-1 text-xl font-bold">{event.title}</h2>
-                    <div className="mt-3 space-y-2 text-sm">
-                      <p className="flex items-center gap-2">
-                        <CalendarDays aria-hidden="true" className="h-4 w-4" />
-                        {dateFormatter.format(new Date(`${event.date}T00:00:00Z`))}
-                      </p>
-                      <p className="flex items-center gap-2">
-                        <MapPin aria-hidden="true" className="h-4 w-4" />
-                        {event.location}
-                      </p>
-                    </div>
-                    {event.public_description ? (
-                      <p className="mt-3 text-sm text-muted-foreground">
-                        {event.public_description}
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="divide-y">
-                    {event.shifts.map((shift) => {
-                      const remaining = Math.max(
-                        shift.required_volunteers - shift.occupied_volunteers,
-                        0,
-                      );
-                      const full = remaining === 0;
-                      const label =
-                        shift.status === "CLOSED" ? "Geschlossen" : full ? "Besetzt" : "Offen";
-                      return (
-                        <section
-                          key={shift.id}
-                          aria-label={`Einsatz ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
-                          className="p-5"
+                <Card key={event.id} className="overflow-hidden">
+                  <article aria-labelledby={`event-${event.id}-title`}>
+                    <CardHeader className="border-b border-border/70 pb-5">
+                      <div className="flex items-start gap-4">
+                        <time
+                          dateTime={event.date}
+                          aria-label={dateFormatter.format(new Date(`${event.date}T00:00:00Z`))}
+                          className="flex w-16 shrink-0 flex-col overflow-hidden rounded-md border border-primary/30 bg-primary/5 text-center"
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="flex items-center gap-2 font-bold">
-                                <Clock3 aria-hidden="true" className="h-5 w-5" />
-                                {formatTime(shift.starts_at, organization.timezone)}–
-                                {formatTime(shift.ends_at, organization.timezone)} Uhr
-                              </p>
-                              <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-                                <Users aria-hidden="true" className="h-4 w-4" />
-                                {shift.occupied_volunteers} von {shift.required_volunteers} Plätzen
-                                besetzt
-                              </p>
-                            </div>
-                            <span
-                              className={`rounded-full px-3 py-1 text-sm font-semibold ${label === "Offen" ? "bg-green-100 text-green-800" : "bg-neutral-200 text-neutral-700"}`}
-                            >
-                              {label}
-                            </span>
-                          </div>
-                          {shift.public_note ? (
-                            <p className="mt-3 text-sm">{shift.public_note}</p>
-                          ) : null}
-                          {shift.volunteer_names.length > 0 ? (
-                            <p className="mt-3 text-sm">
-                              Eingetragen: {shift.volunteer_names.join(", ")}
-                            </p>
-                          ) : null}
-                          <button
-                            type="button"
-                            disabled={shift.status !== "OPEN" || full}
-                            onClick={() => openSignup(shift.id)}
-                            aria-label={`Eintragen: ${event.title}, ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
-                            className="mt-4 min-h-11 w-full rounded-lg border px-4 font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                          <span className="bg-primary px-2 py-1 text-xs font-bold uppercase tracking-wide text-primary-foreground">
+                            {dateTileMonthFormatter.format(new Date(`${event.date}T00:00:00Z`))}
+                          </span>
+                          <span className="px-2 py-2 text-2xl font-bold leading-none">
+                            {dateTileDayFormatter.format(new Date(`${event.date}T00:00:00Z`))}
+                          </span>
+                        </time>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-muted-foreground">
+                            {event.event_type}
+                          </p>
+                          <h2 id={`event-${event.id}-title`} className="mt-1 text-xl font-bold">
+                            {event.title}
+                          </h2>
+                          <p className="mt-2 flex items-center gap-2 text-sm">
+                            <CalendarDays aria-hidden="true" className="h-4 w-4 shrink-0" />
+                            {dateFormatter.format(new Date(`${event.date}T00:00:00Z`))}
+                          </p>
+                          <p className="flex items-center gap-2">
+                            <MapPin aria-hidden="true" className="h-4 w-4 shrink-0" />
+                            {event.location}
+                          </p>
+                        </div>
+                      </div>
+                      {event.public_description ? (
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          {event.public_description}
+                        </p>
+                      ) : null}
+                    </CardHeader>
+                    <div className="divide-y">
+                      {event.shifts.map((shift) => {
+                        const remaining = Math.max(
+                          shift.required_volunteers - shift.occupied_volunteers,
+                          0,
+                        );
+                        const full = remaining === 0;
+                        const label =
+                          shift.status === "CLOSED" ? "Geschlossen" : full ? "Besetzt" : "Offen";
+                        return (
+                          <section
+                            key={shift.id}
+                            aria-label={`Einsatz ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
+                            className="p-5"
                           >
-                            {shift.status !== "OPEN"
-                              ? "Geschlossen"
-                              : full
-                                ? "Besetzt"
-                                : "Eintragen"}
-                          </button>
-                          {selectedShift === shift.id ? (
-                            <form
-                              aria-label={`Eintragung für ${event.title}, ${formatTime(shift.starts_at, organization.timezone)} Uhr`}
-                              className="mt-4 space-y-3 rounded-xl bg-muted/60 p-4"
-                              onSubmit={(formEvent) => void submitSignup(formEvent, shift.id)}
-                            >
-                              <div className="border-b pb-2">
-                                <h3 className="text-base font-bold text-foreground">
-                                  Eintragung für{" "}
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="flex items-center gap-2 font-bold">
+                                  <Clock3 aria-hidden="true" className="h-5 w-5" />
                                   {formatTime(shift.starts_at, organization.timezone)}–
                                   {formatTime(shift.ends_at, organization.timezone)} Uhr
-                                </h3>
-                                <p className="mt-0.5 text-xs text-muted-foreground">
-                                  Alle Angaben sind Pflichtfelder.
+                                </p>
+                                <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+                                  <Users aria-hidden="true" className="h-4 w-4" />
+                                  {shift.occupied_volunteers} von {shift.required_volunteers}{" "}
+                                  Plätzen besetzt
                                 </p>
                               </div>
-                              <SignupField
-                                id={`first_name-${shift.id}`}
-                                name="first_name"
-                                label="Vorname"
-                              />
-                              <SignupField
-                                id={`last_name-${shift.id}`}
-                                name="last_name"
-                                label="Nachname"
-                              />
-                              <SignupField
-                                id={`phone-${shift.id}`}
-                                name="phone"
-                                label="Telefon"
-                                type="tel"
-                              />
-                              <SignupField
-                                id={`email-${shift.id}`}
-                                name="email"
-                                label="E-Mail"
-                                type="email"
-                              />
-                              <div hidden aria-hidden="true" style={{ display: "none" }}>
-                                <label htmlFor={`website-${shift.id}`}>Website</label>
-                                <input
-                                  id={`website-${shift.id}`}
-                                  name="website"
-                                  tabIndex={-1}
-                                  autoComplete="off"
+                              <Badge variant={label === "Offen" ? "success" : "neutral"}>
+                                {label}
+                              </Badge>
+                            </div>
+                            {shift.public_note ? (
+                              <p className="mt-3 text-sm">{shift.public_note}</p>
+                            ) : null}
+                            {shift.volunteer_names.length > 0 ? (
+                              <p className="mt-3 text-sm">
+                                Eingetragen: {shift.volunteer_names.join(", ")}
+                              </p>
+                            ) : null}
+                            <Button
+                              type="button"
+                              disabled={shift.status !== "OPEN" || full}
+                              onClick={() => openSignup(shift.id)}
+                              aria-label={`Eintragen: ${event.title}, ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
+                              className="mt-4 w-full sm:w-auto"
+                            >
+                              {shift.status !== "OPEN"
+                                ? "Geschlossen"
+                                : full
+                                  ? "Besetzt"
+                                  : "Einsatz anmelden"}
+                            </Button>
+                            {selectedShift === shift.id ? (
+                              <form
+                                aria-label={`Eintragung für ${event.title}, ${formatTime(shift.starts_at, organization.timezone)} Uhr`}
+                                className="mt-4 space-y-3 rounded-xl bg-muted/60 p-4"
+                                onSubmit={(formEvent) => void submitSignup(formEvent, shift.id)}
+                              >
+                                <div className="border-b pb-2">
+                                  <h3 className="text-base font-bold text-foreground">
+                                    Eintragung für{" "}
+                                    {formatTime(shift.starts_at, organization.timezone)}–
+                                    {formatTime(shift.ends_at, organization.timezone)} Uhr
+                                  </h3>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    Alle Angaben sind Pflichtfelder.
+                                  </p>
+                                </div>
+                                <SignupField
+                                  id={`first_name-${shift.id}`}
+                                  name="first_name"
+                                  label="Vorname"
                                 />
-                              </div>
-                              <label className="flex min-h-11 items-start gap-3 text-sm">
-                                <input
-                                  className="mt-1 h-5 w-5 shrink-0"
-                                  type="checkbox"
-                                  name="public_display_consent"
-                                  required
+                                <SignupField
+                                  id={`last_name-${shift.id}`}
+                                  name="last_name"
+                                  label="Nachname"
                                 />
-                                <span>
-                                  Ich bin einverstanden, dass mein Vor- und Nachname im öffentlichen
-                                  Einsatzplan angezeigt wird. Telefonnummer und E-Mail sehen nur
-                                  berechtigte Verantwortliche.
-                                </span>
-                              </label>
-                              {signupError ? (
-                                <p role="alert" className="text-sm text-red-700">
-                                  {signupError}
-                                </p>
-                              ) : null}
-                              <div className="flex flex-col gap-2 sm:flex-row">
-                                <button
-                                  type="submit"
-                                  disabled={submitting}
-                                  className="min-h-11 flex-1 rounded-lg bg-foreground px-4 font-semibold text-background disabled:opacity-60"
-                                >
-                                  {submitting ? "Wird eingetragen …" : "Verbindlich eintragen"}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={submitting}
-                                  onClick={() => setSelectedShift(null)}
-                                  className="min-h-11 rounded-lg border bg-background px-4 font-semibold text-foreground hover:bg-muted disabled:opacity-60"
-                                >
-                                  Abbrechen
-                                </button>
-                              </div>
-                            </form>
-                          ) : null}
-                        </section>
-                      );
-                    })}
-                  </div>
-                </article>
+                                <SignupField
+                                  id={`phone-${shift.id}`}
+                                  name="phone"
+                                  label="Telefon"
+                                  type="tel"
+                                />
+                                <SignupField
+                                  id={`email-${shift.id}`}
+                                  name="email"
+                                  label="E-Mail"
+                                  type="email"
+                                />
+                                <div hidden aria-hidden="true" style={{ display: "none" }}>
+                                  <label htmlFor={`website-${shift.id}`}>Website</label>
+                                  <input
+                                    id={`website-${shift.id}`}
+                                    name="website"
+                                    tabIndex={-1}
+                                    autoComplete="off"
+                                  />
+                                </div>
+                                <label className="flex min-h-11 items-start gap-3 text-sm">
+                                  <input
+                                    className="mt-1 h-5 w-5 shrink-0"
+                                    type="checkbox"
+                                    name="public_display_consent"
+                                    required
+                                  />
+                                  <span>
+                                    Ich bin einverstanden, dass mein Vor- und Nachname im
+                                    öffentlichen Einsatzplan angezeigt wird. Telefonnummer und
+                                    E-Mail sehen nur berechtigte Verantwortliche.
+                                  </span>
+                                </label>
+                                {signupError ? (
+                                  <p role="alert" className="text-sm text-status-error">
+                                    {signupError}
+                                  </p>
+                                ) : null}
+                                <div className="flex flex-col gap-2 sm:flex-row">
+                                  <Button type="submit" disabled={submitting} className="flex-1">
+                                    {submitting ? "Wird eingetragen …" : "Verbindlich eintragen"}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="secondary"
+                                    disabled={submitting}
+                                    onClick={() => setSelectedShift(null)}
+                                  >
+                                    Abbrechen
+                                  </Button>
+                                </div>
+                              </form>
+                            ) : null}
+                          </section>
+                        );
+                      })}
+                    </div>
+                  </article>
+                </Card>
               ))}
             </section>
           </>
@@ -417,10 +443,12 @@ function formatTime(value: string, timeZone: string) {
 }
 function Summary({ value, label }: Readonly<{ value: number; label: string }>) {
   return (
-    <div className="rounded-2xl border bg-background p-4">
-      <strong className="block text-2xl">{value}</strong>
-      <span className="text-sm text-muted-foreground">{label}</span>
-    </div>
+    <Card>
+      <CardBody className="p-4">
+        <strong className="block text-2xl">{value}</strong>
+        <span className="text-sm text-muted-foreground">{label}</span>
+      </CardBody>
+    </Card>
   );
 }
 export function StateMessage({
@@ -428,9 +456,11 @@ export function StateMessage({
   children,
 }: Readonly<{ title: string; children: React.ReactNode }>) {
   return (
-    <section className="rounded-2xl border bg-background p-7 text-center">
-      <h2 className="text-xl font-bold">{title}</h2>
-      <p className="mt-2 text-muted-foreground">{children}</p>
-    </section>
+    <Card>
+      <CardBody className="p-7 text-center">
+        <h2 className="text-xl font-bold">{title}</h2>
+        <p className="mt-2 text-muted-foreground">{children}</p>
+      </CardBody>
+    </Card>
   );
 }

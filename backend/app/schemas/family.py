@@ -53,3 +53,18 @@ class FamilyMemberResponse(BaseModel):  # type: ignore[explicit-any]
     member_type: FamilyMemberType
     first_name: str
     last_name: str
+    volunteer_id: uuid.UUID | None
+
+
+class FamilyVolunteerResponse(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    first_name: str
+    last_name: str
+
+
+class FamilyMemberVolunteerUpdate(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+
+    volunteer_id: uuid.UUID | None

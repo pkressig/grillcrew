@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OrganizationProvider } from "@/components/organization-provider";
 import { platformFallbackOrganization } from "@/lib/organization";
 import { createPublicSignup, fetchPublicPlan } from "@/lib/public-plan";
-import { OrganizationLanding, StateMessage } from "@/app/organization-landing";
+import { OrganizationLanding } from "@/app/organization-landing";
 
 vi.mock("@/lib/public-plan", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/public-plan")>();
@@ -38,7 +38,9 @@ describe("OrganizationLanding", () => {
         resolvePlan = resolve;
       }),
     );
-    renderPage();
+    const { container } = renderPage();
+    expect(screen.getByText("Öffentlicher Einsatzplan")).toBeInTheDocument();
+    expect(screen.queryByText(/GrillCrew/)).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("geladen");
     resolvePlan({
       events: [
@@ -65,15 +67,23 @@ describe("OrganizationLanding", () => {
       ],
     });
     expect(await screen.findByRole("heading", { name: "Heimspiel" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Kommende Einsätze" })).toBeInTheDocument();
+    const dateTile = container.querySelector('time[datetime="2026-08-01"]');
+    expect(dateTile).toHaveAccessibleName(/August 2026/);
+    expect(dateTile).toHaveClass("bg-primary/5");
     expect(screen.getByText("0 von 3 Plätzen besetzt")).toBeInTheDocument();
     const action = screen.getByRole("button", { name: /Eintragen: Heimspiel/ });
     expect(action).toBeEnabled();
+    expect(action).toHaveTextContent("Einsatz anmelden");
+    expect(action).toHaveClass("bg-primary", "w-full", "sm:w-auto", "min-h-11");
+    expect(screen.getByText("Offen")).toHaveClass("text-status-success");
     fireEvent.click(action);
     expect(screen.getByRole("form", { name: /Eintragung für Heimspiel/ })).toBeInTheDocument();
     expect(screen.getByLabelText("Vorname")).toBeRequired();
     expect(screen.getByLabelText("Telefon")).toBeRequired();
     expect(screen.getByLabelText("E-Mail")).toBeRequired();
     expect(screen.getByLabelText(/Ich bin einverstanden/)).toBeRequired();
+    expect(screen.getByText(/Telefonnummer und E-Mail sehen nur/)).toBeInTheDocument();
     expect(screen.getByLabelText("Website")).not.toBeVisible();
   });
 
@@ -112,6 +122,16 @@ describe("OrganizationLanding", () => {
     fireEvent.click(screen.getByLabelText(/Ich bin einverstanden/));
     fireEvent.submit(screen.getByRole("form"));
     expect(await screen.findByRole("alert")).toHaveTextContent("nicht gelungen");
+    expect(mockedSignup).toHaveBeenCalledWith(
+      "example",
+      "shift-1",
+      expect.objectContaining({
+        first_name: "Mia",
+        website: "",
+        form_started_at: expect.any(String),
+        public_display_consent: true,
+      }),
+    );
     expect(screen.getByLabelText("Vorname")).toHaveValue("Mia");
     mockedSignup.mockResolvedValue({
       message: "Du bist eingetragen.",
@@ -168,10 +188,12 @@ describe("OrganizationLanding", () => {
     expect(await screen.findByRole("heading", { name: "Noch keine Einsätze" })).toBeInTheDocument();
   });
 
-  it("renders an error state", () => {
-    render(
-      <StateMessage title="Plan nicht verfügbar">Bitte versuche es später nochmals.</StateMessage>,
-    );
-    expect(screen.getByRole("heading", { name: "Plan nicht verfügbar" })).toBeInTheDocument();
+  it("renders the plan error state after loading fails", async () => {
+    mockedFetch.mockRejectedValue(new Error("offline"));
+    renderPage();
+    expect(
+      await screen.findByRole("heading", { name: "Plan nicht verfügbar" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Bitte versuche es später nochmals.")).toBeInTheDocument();
   });
 });

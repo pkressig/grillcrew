@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, ClipboardCheck, Users } from "lucide-react";
+import { CalendarDays, ClipboardCheck, LayoutDashboard, Users } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { LogoutButton } from "@/components/logout-button";
@@ -10,9 +10,11 @@ import { OrganizationLogo } from "@/components/organization-logo";
 import { Card, CardBody } from "@/components/ui/card";
 import type { PublicOrganization } from "@/lib/organization";
 import { FamiliesPanel } from "./families-panel";
+import { AttendancePanel } from "./attendance-panel";
 import { PlanningPanel } from "./planning-panel";
+import { OverviewPanel } from "./overview-panel";
 
-export type AdminView = "planning" | "families";
+export type AdminView = "overview" | "planning" | "families" | "attendance";
 
 const roleLabels = {
   ADMIN: "Administration",
@@ -46,7 +48,7 @@ export function AdminShell({
 
   return (
     <div
-      className="mx-auto min-h-dvh w-full max-w-[1440px] lg:grid lg:grid-cols-[16rem_minmax(0,1fr)]"
+      className="min-h-dvh w-full lg:grid lg:grid-cols-[17rem_minmax(0,1fr)]"
       style={
         {
           "--primary": organization.theme.primary_color,
@@ -60,16 +62,16 @@ export function AdminShell({
       >
         Zum Inhalt
       </a>
-      <aside className="hidden border-r p-6 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:gap-6">
+      <aside className="hidden border-r border-foreground/80 bg-foreground p-6 text-background lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:gap-7">
         <ShellIdentity organization={organization} role={roleLabels[membership.role]} />
         {canManage ? <AdminNavigation activeView={activeView} org={org} vertical /> : null}
-        <div className="mt-auto grid gap-4">
+        <div className="mt-auto grid gap-5 border-t border-background/15 pt-5">
           <OrganizationSwitcher memberships={auth.memberships} currentSlug={org} />
           <LogoutButton />
         </div>
       </aside>
       <div className="min-w-0">
-        <header className="grid gap-4 border-b px-4 py-4 lg:hidden md:px-6">
+        <header className="grid gap-4 border-b bg-background/95 px-4 py-4 shadow-sm lg:hidden md:px-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <ShellIdentity organization={organization} role={roleLabels[membership.role]} />
             <LogoutButton />
@@ -77,12 +79,19 @@ export function AdminShell({
           {canManage ? <AdminNavigation activeView={activeView} org={org} /> : null}
           <OrganizationSwitcher memberships={auth.memberships} currentSlug={org} />
         </header>
-        <main id="admin-content" className="min-w-0 px-4 py-6 md:px-6 lg:px-8 lg:py-8">
+        <main
+          id="admin-content"
+          className="mx-auto min-w-0 max-w-[90rem] px-4 py-6 md:px-7 lg:px-10 lg:py-9"
+        >
           {canManage ? (
-            activeView === "planning" ? (
+            activeView === "overview" ? (
+              <OverviewPanel org={org} timezone={organization.timezone} />
+            ) : activeView === "planning" ? (
               <PlanningPanel org={org} timezone={organization.timezone} />
-            ) : (
+            ) : activeView === "families" ? (
               <FamiliesPanel org={org} />
+            ) : (
+              <AttendancePanel org={org} timezone={organization.timezone} />
             )
           ) : (
             <Card>
@@ -106,11 +115,11 @@ function ShellIdentity({
 }: Readonly<{ organization: PublicOrganization; role: string }>) {
   return (
     <div className="flex items-center gap-3">
-      <OrganizationLogo organization={organization} />
-      <div>
-        <p className="text-sm text-muted-foreground">{organization.name}</p>
-        <p className="text-xl font-bold">Administration</p>
-        <p className="mt-1 text-sm">Rolle: {role}</p>
+      <OrganizationLogo organization={organization} className="h-11 w-11 ring-2 ring-primary" />
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium opacity-70">{organization.name}</p>
+        <p className="text-xl font-bold tracking-tight">Administration</p>
+        <p className="mt-0.5 text-xs opacity-70">Rolle: {role}</p>
       </div>
     </div>
   );
@@ -124,12 +133,23 @@ function AdminNavigation({
   const base = `/${org}/admin`;
   return (
     <nav aria-label="Administration">
-      <ul className={vertical ? "grid gap-2" : "flex flex-wrap gap-2"}>
+      <ul className={vertical ? "grid gap-2.5" : "flex flex-wrap gap-2"}>
+        <li>
+          <AdminNavLink
+            active={activeView === "overview"}
+            href={base}
+            icon={<LayoutDashboard aria-hidden="true" size={18} />}
+            inverted={vertical}
+          >
+            Übersicht
+          </AdminNavLink>
+        </li>
         <li>
           <AdminNavLink
             active={activeView === "planning"}
             href={`${base}/planning`}
             icon={<CalendarDays aria-hidden="true" size={18} />}
+            inverted={vertical}
           >
             Planung
           </AdminNavLink>
@@ -139,15 +159,17 @@ function AdminNavigation({
             active={activeView === "families"}
             href={`${base}/families`}
             icon={<Users aria-hidden="true" size={18} />}
+            inverted={vertical}
           >
             Familien
           </AdminNavLink>
         </li>
         <li>
           <AdminNavLink
-            active={false}
-            href={`${base}/planning#attendance`}
+            active={activeView === "attendance"}
+            href={`${base}/attendance`}
             icon={<ClipboardCheck aria-hidden="true" size={18} />}
+            inverted={vertical}
           >
             Anwesenheit
           </AdminNavLink>
@@ -162,14 +184,23 @@ function AdminNavLink({
   children,
   href,
   icon,
-}: Readonly<{ active: boolean; children: ReactNode; href: string; icon: ReactNode }>) {
+  inverted,
+}: Readonly<{
+  active: boolean;
+  children: ReactNode;
+  href: string;
+  icon: ReactNode;
+  inverted: boolean;
+}>) {
   return (
     <Link
       aria-current={active ? "page" : undefined}
-      className={`inline-flex min-h-11 items-center gap-2 rounded-sm border px-3 py-2 text-sm font-medium ${
+      className={`inline-flex min-h-11 items-center gap-3 rounded-md border px-3.5 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
         active
-          ? "border-primary bg-primary text-primary-foreground"
-          : "bg-background hover:bg-muted"
+          ? "border-primary bg-primary text-primary-foreground shadow-card"
+          : inverted
+            ? "border-background/20 bg-transparent text-background hover:border-background/40 hover:bg-background/10"
+            : "border-border bg-background text-foreground hover:bg-muted"
       }`}
       href={href}
     >

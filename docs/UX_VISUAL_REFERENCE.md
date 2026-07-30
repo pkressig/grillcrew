@@ -1,0 +1,103 @@
+# GrillCrew Visual & UX Reference
+
+## Purpose
+
+This document is the shared visual reference for ChatGPT, Claude, AGY, and Codex. The supplied GrillCrew concept image is inspiration and target direction, not a pixel-perfect requirement. Existing product rules, permissions, APIs, and data contracts remain authoritative.
+
+Reference board: `docs/design-reference/grillcrew-product-board.png`
+
+## Product character
+
+GrillCrew should feel like a modern, warm, trustworthy club-management product: energetic enough for events, calm enough for administration, and simple enough for volunteers on a phone.
+
+Visual language: charcoal sidebar, warm cream canvas, paprika primary actions, ember accents, sage/gold only as restrained platform accents, white/cream cards, subtle elevation, clear status badges, confident typography, generous spacing, and strong focus states.
+
+## Token rules
+
+- Organization theme controls only `primaryColor`, `secondaryColor`, and `logoUrl`.
+- Platform tokens provide neutral surfaces, typography, radii, shadows, and semantic status colors.
+- Never hard-code brand hex values inside page components.
+- Color is never the only status signal; every badge includes visible text.
+- Use existing Button, Badge, Card, PageHeader, OrganizationLogo, and Lucide conventions.
+- Minimum interactive target: 44px.
+
+## Shared admin shell
+
+- Desktop: sticky dark sidebar, organization/logo identity, role, existing navigation, account and organization actions at bottom.
+- Main canvas: warm neutral background, max readable width, one page `h1`, description, primary action.
+- Navigation only links to implemented routes. Anwesenheit uses the implemented organization-scoped `/{org}/admin/attendance` route as its primary workspace; Planung retains its attendance section and links to that workspace.
+- Tablet/mobile: accessible header navigation; public volunteer screens remain a separate mobile-first experience.
+- Required states: authenticated loading, no permission, route loading, alert, success, empty, and retry.
+
+## Page catalogue
+
+### 1. Übersicht / Dashboard — implemented reference
+
+Reference: `docs/design-reference/admin-overview.png`
+
+Four summary cards may only show metrics backed by an approved endpoint. Current candidates: active families, upcoming published shifts, signup coverage, unresolved attendance. Work hours and payments remain unavailable until F010+.
+
+Below cards: next events, attendance handlungsbedarf, and one clear planning action. No fake numbers.
+
+### 2. Planung — implemented
+
+Reference: `docs/design-reference/admin-planning.png`
+
+Agenda-first layout. Attendance handlungsbedarf appears above the agenda. Events are compact cards with date tile, title, location, status badge, occupancy summary, and native disclosure. Planungsperioden occupy the secondary desktop column and stack below on mobile.
+
+### 3. Familien — implemented
+
+Reference: `docs/design-reference/admin-families.png`
+
+Searchable family master list and selected detail. Do not invent location, child-count, helper-count, or pagination fields until APIs support them. Detail groups members as Kind/Helfer and keeps creation contextual.
+
+### 4. Anwesenheit — implemented
+
+Reference: `docs/design-reference/admin-attendance.png`
+
+The organization-scoped `/{org}/admin/attendance` route is the primary attendance workspace. It reuses the existing planning, events, shifts, and signup request functions plus the existing attendance mutation endpoint. Use the same cards, badges, warnings, and explicit German outcomes. Planung keeps its attendance section and links to the dedicated workspace for continuity.
+
+### 5. Öffentliche Helfer-Anmeldung — implemented mobile-first
+
+Reference: `docs/design-reference/public-helper-signup.png`
+
+One primary action per event card, clear date/time/location/capacity, short form, privacy notice, loading/error/success states, and management-link confirmation. Do not add profile tabs or volunteer accounts until approved.
+
+### 6. Meine Einsätze / Helferportal — future
+
+Only after an approved volunteer-account or management-link contract. Target: mobile list of available and booked shifts, assignment detail, status actions, and profile/settings only when backed by real auth/data.
+
+### 7. Arbeitszeiten / Work Records — future
+
+Only after F010 contract. Target: staff table, work-record detail, duration/breaks, compensation state, correction audit, and responsive mobile read view.
+
+### 8. Kalender — future
+
+Separate contract required for month/week/list modes, date navigation, timezone, collisions, mobile agenda, and drag/drop. Do not infer from the current Agenda.
+
+## Component patterns
+
+- PageHeader: title, description, action.
+- Card: surface, border, elevation, optional header/body.
+- Badge: success/warning/error/neutral with visible text.
+- DateTile: decorative date plus accessible full date in parent label.
+- EmptyState: explain what is empty and give one next action.
+- FeedbackMessage: alert/status with token-driven styling.
+- MasterDetail: list/detail desktop, list/detail back navigation mobile.
+- Disclosure: native details/summary, closed by default for creation and dense detail.
+
+## Implementation discipline
+
+Each visual phase must name exact files, preserve APIs, include responsive/accessibility tests, and pass full checks. Design images are references; they must never justify invented fields, metrics, routes, or permissions.
+
+## Decision record: dedicated Admin Anwesenheit workspace
+
+**Date:** 2026-07-29
+
+**Decision:** The GrillCrew Admin area uses a dedicated organization-scoped `/{org}/admin/attendance` route as the primary Anwesenheit workspace. It reuses the existing planning/events/shifts/signup request functions and attendance mutation endpoint. It is a presentation/navigation separation only; no new backend data contract is introduced. The Planning page keeps its attendance section and links to the dedicated workspace for continuity.
+
+**Rationale:** Attendance follow-up is a distinct admin workflow that benefits from a focused navigation destination, while reusing the established requests and mutation keeps behavior consistent and avoids duplicating backend responsibilities.
+
+**Scope:** Admin navigation, presentation, and documentation for the dedicated organization-scoped attendance workspace, including the continuity link from Planung.
+
+**Non-goals:** This decision does not add or change backend endpoints, request or response schemas, permissions, attendance outcomes, or the attendance section in Planung.

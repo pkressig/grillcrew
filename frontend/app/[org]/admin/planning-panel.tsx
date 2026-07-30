@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,9 +11,6 @@ import {
   createEvent,
   createSeason,
   createShift,
-  loadEvents,
-  loadPlanning,
-  loadShifts,
   updateEventStatus,
   updateSeasonStatus,
   updateShiftStatus,
@@ -29,6 +26,7 @@ import {
   type ShiftStatus,
   type SignupOutcome,
 } from "@/lib/planning";
+import { loadAdminPlanningData } from "@/lib/admin-planning-data";
 
 const statusLabels: Record<PlanningStatus, string> = {
   DRAFT: "Entwurf",
@@ -203,35 +201,45 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const requestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const currentRequest = ++requestId.current;
     setError(null);
     try {
-      const data = await loadPlanning(org);
-      setClubYears(data.clubYears);
-      setSeasons(data.seasons);
-      setCurrentSeason(data.currentSeason);
-      const eventGroups = await Promise.all(
-        data.seasons.map((season) => loadEvents(org, season.id)),
-      );
-      const loadedEvents = eventGroups.flat();
-      setEvents(loadedEvents);
-      const shiftGroups = await Promise.all(
-        loadedEvents.map((planningEvent) => loadShifts(org, planningEvent.id)),
-      );
-      setShifts(shiftGroups.flat());
+      const data = await loadAdminPlanningData(org, (planning) => {
+        if (currentRequest !== requestId.current) return;
+        setClubYears(planning.clubYears);
+        setSeasons(planning.seasons);
+        setCurrentSeason(planning.currentSeason);
+      });
+      if (currentRequest !== requestId.current) return;
+      setEvents(data.events);
+      setShifts(data.shifts);
     } catch (caught) {
+      if (currentRequest !== requestId.current) return;
       setError(
         caught instanceof Error
           ? caught.message
           : "Die Planungsdaten konnten nicht geladen werden.",
       );
     } finally {
-      setLoading(false);
+      if (currentRequest === requestId.current) setLoading(false);
     }
   }, [org]);
 
-  useEffect(() => void refresh(), [refresh]);
+  useEffect(() => {
+    setLoading(true);
+    setClubYears([]);
+    setSeasons([]);
+    setCurrentSeason(null);
+    setEvents([]);
+    setShifts([]);
+    void refresh();
+    return () => {
+      requestId.current += 1;
+    };
+  }, [refresh]);
 
   async function run(operation: () => Promise<unknown>, message: string): Promise<boolean> {
     setBusy(true);
@@ -416,7 +424,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
       </section>
     );
   return (
-    <section className="grid gap-6" aria-labelledby="planning-title">
+    <section className="grid gap-7" aria-labelledby="planning-title">
       <PageHeader
         headingId="planning-title"
         title="Planung"
@@ -436,8 +444,10 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
         </p>
       ) : null}
       <section className="scroll-mt-4" id="attendance" aria-labelledby="handlungsbedarf-title">
-        <Card className={unresolvedItems.length > 0 ? "border-status-error/30" : undefined}>
-          <CardBody>
+        <Card
+          className={unresolvedItems.length > 0 ? "border-status-error/30" : "border-border/70"}
+        >
+          <CardBody className="p-4 md:p-5">
             <h2 id="handlungsbedarf-title" className="text-lg font-semibold">
               Handlungsbedarf Anwesenheit
               {unresolvedItems.length > 0 ? (
@@ -505,8 +515,8 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
           </CardBody>
         </Card>
       </section>
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
-        <section className="grid min-w-0 gap-4" aria-labelledby="events-title">
+      <div className="grid min-w-0 gap-7 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start xl:gap-9">
+        <section className="grid min-w-0 gap-5" aria-labelledby="events-title">
           <div>
             <h2 id="events-title" className="text-xl font-semibold">
               Agenda
@@ -515,7 +525,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
               Anlässe nach Saison planen und die benötigten Einsätze erfassen.
             </p>
           </div>
-          <details className="rounded-lg border p-4">
+          <details className="rounded-lg border border-border/80 bg-background p-4 shadow-card">
             <summary className="min-h-11 cursor-pointer font-medium">Anlass erstellen</summary>
             <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={submitEvent}>
               <label htmlFor="create-event-season">
@@ -612,7 +622,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                       In dieser Saison sind noch keine Anlässe vorhanden.
                     </p>
                   ) : (
-                    <ul className="grid gap-5">
+                    <ul className="grid gap-4">
                       {seasonEvents.map((planningEvent) => {
                         const eventShifts = shifts.filter(
                           (shift) => shift.event_id === planningEvent.id,
@@ -620,17 +630,17 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                         const dateTile = eventDateTile(planningEvent.date);
                         return (
                           <li key={planningEvent.id}>
-                            <Card className="overflow-hidden">
+                            <Card className="overflow-hidden border-border/80 transition-shadow hover:shadow-md">
                               <details className="group">
                                 <summary
-                                  className="min-h-11 cursor-pointer list-none p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden"
+                                  className="min-h-11 cursor-pointer list-none p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset [&::-webkit-details-marker]:hidden"
                                   aria-label={`Anlass ${planningEvent.title} am ${formatDate(planningEvent.date)} anzeigen`}
                                 >
                                   <div className="flex flex-wrap items-start justify-between gap-3">
                                     <div className="flex min-w-0 gap-3">
                                       <time
                                         aria-hidden="true"
-                                        className="grid h-16 w-14 shrink-0 place-content-center rounded-sm border border-primary/20 bg-primary/10 text-center text-primary"
+                                        className="grid h-16 w-14 shrink-0 place-content-center rounded-md border border-primary/25 bg-primary/10 text-center text-primary shadow-sm"
                                         dateTime={planningEvent.date}
                                       >
                                         <span className="text-[0.65rem] font-semibold uppercase leading-none">
@@ -940,11 +950,15 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
             })
           )}
         </section>
-        <aside className="grid min-w-0 gap-4 lg:sticky lg:top-8" aria-labelledby="periods-title">
+        <aside className="grid min-w-0 gap-5 lg:sticky lg:top-8" aria-labelledby="periods-title">
           <h2 id="periods-title" className="text-xl font-semibold">
             Planungsperioden
           </h2>
-          <Card aria-labelledby="current-season-title" role="region">
+          <Card
+            className="border-primary/20 bg-primary/5"
+            aria-labelledby="current-season-title"
+            role="region"
+          >
             <CardBody>
               <h3 id="current-season-title" className="font-semibold">
                 Aktuelle Saison
@@ -971,7 +985,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
               <ul className="grid gap-2">
                 {clubYears.map((year) => (
                   <li key={year.id}>
-                    <Card className="shadow-none">
+                    <Card className="border-border/80 shadow-sm">
                       <CardBody className="p-3 text-sm">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <strong>{year.label}</strong>
@@ -989,7 +1003,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                 ))}
               </ul>
             )}
-            <details className="rounded-lg border p-3">
+            <details className="rounded-lg border border-border/80 bg-background p-3 shadow-sm">
               <summary className="min-h-11 cursor-pointer font-medium">
                 Vereinsjahr erstellen
               </summary>
@@ -1022,7 +1036,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
               <ul className="grid gap-2">
                 {seasons.map((season) => (
                   <li key={season.id}>
-                    <Card className="shadow-none">
+                    <Card className="border-border/80 shadow-sm">
                       <CardBody className="p-3 text-sm">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <strong>{season.name}</strong>
@@ -1061,7 +1075,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                 ))}
               </ul>
             )}
-            <details className="rounded-lg border p-3">
+            <details className="rounded-lg border border-border/80 bg-background p-3 shadow-sm">
               <summary className="min-h-11 cursor-pointer font-medium">Saison erstellen</summary>
               <form className="mt-3 grid gap-3" onSubmit={submitSeason}>
                 <label>

@@ -5,11 +5,21 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.family import Family, FamilyMember, FamilyStatus
-from app.schemas.family import FamilyCreate, FamilyMemberCreate
+from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStatus
+from app.models.identity import AuditEvent
+from app.models.planning import Volunteer, VolunteerStatus
+from app.schemas.family import FamilyCreate, FamilyMemberCreate, FamilyMemberVolunteerUpdate
 
 
 class FamilyNotFoundError(Exception):
+    pass
+
+
+class FamilyMemberNotFoundError(Exception):
+    pass
+
+
+class FamilyMemberLinkError(Exception):
     pass
 
 
@@ -66,6 +76,68 @@ class FamilyService:
             last_name=payload.last_name,
         )
         self.db.add(member)
+        self.db.commit()
+        self.db.refresh(member)
+        return member
+
+    def list_active_volunteers(self) -> list[Volunteer]:
+        return list(
+            self.db.scalars(
+                select(Volunteer)
+                .where(
+                    Volunteer.organization_id == self.organization_id,
+                    Volunteer.status == VolunteerStatus.ACTIVE,
+                )
+                .order_by(Volunteer.last_name, Volunteer.first_name, Volunteer.id)
+            )
+        )
+
+    def update_member_volunteer(
+        self,
+        family_id: uuid.UUID,
+        member_id: uuid.UUID,
+        payload: FamilyMemberVolunteerUpdate,
+        actor_user_id: uuid.UUID,
+    ) -> FamilyMember:
+        self._get_active_family(family_id)
+        member = self.db.scalar(
+            select(FamilyMember).where(
+                FamilyMember.id == member_id,
+                FamilyMember.family_id == family_id,
+            )
+        )
+        if member is None:
+            raise FamilyMemberNotFoundError
+        if member.member_type != FamilyMemberType.HELPER:
+            raise FamilyMemberLinkError("only helper family members can link volunteers")
+        if member.volunteer_id == payload.volunteer_id:
+            return member
+        if payload.volunteer_id is not None:
+            volunteer = self.db.scalar(
+                select(Volunteer).where(
+                    Volunteer.id == payload.volunteer_id,
+                    Volunteer.organization_id == self.organization_id,
+                    Volunteer.status == VolunteerStatus.ACTIVE,
+                )
+            )
+            if volunteer is None:
+                raise FamilyMemberLinkError("active volunteer not found")
+        previous_id = member.volunteer_id
+        member.volunteer_id = payload.volunteer_id
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="FAMILY_MEMBER_VOLUNTEER_LINK_CHANGED",
+                entity_type="family_member",
+                entity_id=member.id,
+                event_metadata={
+                    "family_id": str(family_id),
+                    "previous_volunteer_id": str(previous_id) if previous_id else None,
+                    "new_volunteer_id": str(payload.volunteer_id) if payload.volunteer_id else None,
+                },
+            )
+        )
         self.db.commit()
         self.db.refresh(member)
         return member

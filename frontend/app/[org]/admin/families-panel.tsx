@@ -10,9 +10,12 @@ import {
   createFamilyMember,
   loadFamilies,
   loadFamilyMembers,
+  loadFamilyVolunteers,
+  updateFamilyMemberVolunteer,
   type Family,
   type FamilyMember,
   type FamilyMemberType,
+  type FamilyVolunteer,
 } from "@/lib/families";
 import { cn } from "@/lib/utils";
 
@@ -84,7 +87,7 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
   }
 
   return (
-    <section className="grid gap-6" aria-labelledby="families-heading">
+    <section className="grid gap-7" aria-labelledby="families-heading">
       <PageHeader
         headingId="families-heading"
         title="Familien"
@@ -122,7 +125,7 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
           className={`${selected || creating ? "hidden lg:block" : "block"} min-w-0`}
           aria-label="Familienliste"
         >
-          <Card className="h-full">
+          <Card className="h-full border-border/80">
             <CardBody>
               <label className="grid gap-1" htmlFor="family-search">
                 Familien suchen
@@ -183,7 +186,7 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
           className={`${selected || creating ? "block" : "hidden lg:block"} min-w-0`}
           aria-label="Familiendetails"
         >
-          <Card className={cn("h-full", selected && "border-primary/30")}>
+          <Card className={cn("h-full border-border/80", selected && "border-primary/30")}>
             <CardBody>
               {selected || creating ? (
                 <Button
@@ -323,6 +326,10 @@ function FamilyDetail({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [volunteers, setVolunteers] = useState<FamilyVolunteer[]>([]);
+  const [volunteersLoading, setVolunteersLoading] = useState(true);
+  const [volunteersError, setVolunteersError] = useState<string | null>(null);
+  const [volunteerSearch, setVolunteerSearch] = useState<Record<string, string>>({});
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -341,6 +348,51 @@ function FamilyDetail({
   useEffect(() => {
     if (members === undefined) void refresh();
   }, [members, refresh]);
+  const refreshVolunteers = useCallback(async () => {
+    setVolunteersLoading(true);
+    setVolunteersError(null);
+    try {
+      setVolunteers(await loadFamilyVolunteers(org));
+    } catch (caught) {
+      setVolunteersError(
+        caught instanceof Error ? caught.message : "Die Volunteers konnten nicht geladen werden.",
+      );
+    } finally {
+      setVolunteersLoading(false);
+    }
+  }, [org]);
+  useEffect(() => void refreshVolunteers(), [refreshVolunteers]);
+
+  async function saveVolunteer(member: FamilyMember, volunteerId: string | null) {
+    if (
+      volunteerId === null &&
+      member.volunteer_id !== null &&
+      !window.confirm(`Verknüpfung von ${member.first_name} ${member.last_name} entfernen?`)
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await updateFamilyMemberVolunteer(org, family.id, member.id, volunteerId);
+      setSuccess(
+        volunteerId === null
+          ? "Volunteer-Verknüpfung wurde entfernt."
+          : member.volunteer_id
+            ? "Volunteer-Verknüpfung wurde ersetzt."
+            : "Volunteer wurde verknüpft.",
+      );
+      await refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Die Volunteer-Verknüpfung konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -446,20 +498,111 @@ function FamilyDetail({
             {members?.map((member) => (
               <li key={member.id}>
                 <Card className="shadow-none">
-                  <CardBody className="flex items-center justify-between gap-3 p-3">
-                    <span>
-                      {member.first_name} {member.last_name}
-                    </span>
-                    <Badge
-                      className={
-                        member.member_type === "HELPER"
-                          ? "border-primary/30 bg-primary/10 text-primary"
-                          : undefined
-                      }
-                      variant="neutral"
-                    >
-                      {labels[member.member_type]}
-                    </Badge>
+                  <CardBody className="grid gap-3 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span>
+                        {member.first_name} {member.last_name}
+                      </span>
+                      <Badge
+                        className={
+                          member.member_type === "HELPER"
+                            ? "border-primary/30 bg-primary/10 text-primary"
+                            : undefined
+                        }
+                        variant="neutral"
+                      >
+                        {labels[member.member_type]}
+                      </Badge>
+                    </div>
+                    {member.member_type === "HELPER" ? (
+                      <div className="grid gap-2 border-t pt-3">
+                        <p className="text-sm font-medium">
+                          {member.volunteer_id
+                            ? `Verknüpft mit ${
+                                volunteers.find((item) => item.id === member.volunteer_id)
+                                  ? `${volunteers.find((item) => item.id === member.volunteer_id)!.first_name} ${volunteers.find((item) => item.id === member.volunteer_id)!.last_name}`
+                                  : "Volunteer"
+                              }`
+                            : "Noch nicht mit einem Volunteer verknüpft"}
+                        </p>
+                        {volunteersLoading ? (
+                          <p className="text-sm text-muted-foreground" role="status">
+                            Volunteers werden geladen …
+                          </p>
+                        ) : volunteersError ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-sm text-status-error" role="alert">
+                              {volunteersError}
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => void refreshVolunteers()}
+                            >
+                              Erneut versuchen
+                            </Button>
+                          </div>
+                        ) : volunteers.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">
+                            Keine aktiven Volunteers verfügbar.
+                          </p>
+                        ) : (
+                          <>
+                            <label
+                              className="grid gap-1 text-sm"
+                              htmlFor={`volunteer-search-${member.id}`}
+                            >
+                              Volunteer suchen
+                              <input
+                                className={control}
+                                id={`volunteer-search-${member.id}`}
+                                value={volunteerSearch[member.id] ?? ""}
+                                onChange={(event) =>
+                                  setVolunteerSearch((current) => ({
+                                    ...current,
+                                    [member.id]: event.target.value,
+                                  }))
+                                }
+                              />
+                            </label>
+                            <label
+                              className="grid gap-1 text-sm"
+                              htmlFor={`volunteer-link-${member.id}`}
+                            >
+                              Volunteer für {member.first_name} {member.last_name}
+                              <select
+                                className={control}
+                                id={`volunteer-link-${member.id}`}
+                                value={member.volunteer_id ?? ""}
+                                disabled={busy}
+                                onChange={(event) =>
+                                  void saveVolunteer(member, event.target.value || null)
+                                }
+                              >
+                                <option value="">Keine Verknüpfung</option>
+                                {volunteers
+                                  .filter(
+                                    (item) =>
+                                      item.id === member.volunteer_id ||
+                                      `${item.first_name} ${item.last_name}`
+                                        .toLocaleLowerCase()
+                                        .includes(
+                                          (volunteerSearch[member.id] ?? "")
+                                            .trim()
+                                            .toLocaleLowerCase(),
+                                        ),
+                                  )
+                                  .map((item) => (
+                                    <option key={item.id} value={item.id}>
+                                      {item.first_name} {item.last_name}
+                                    </option>
+                                  ))}
+                              </select>
+                            </label>
+                          </>
+                        )}
+                      </div>
+                    ) : null}
                   </CardBody>
                 </Card>
               </li>

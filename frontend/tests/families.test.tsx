@@ -23,6 +23,7 @@ const member = {
   member_type: "HELPER",
   first_name: "Mia",
   last_name: "Andere",
+  volunteer_id: null,
 };
 
 function session(role: StaffRole): AuthSession {
@@ -48,14 +49,18 @@ function adminFetch(
   role: StaffRole,
   familyResponses: Response[] = [Response.json([])],
   memberResponses: Response[] = [Response.json([])],
+  volunteerResponses: Response[] = [Response.json([])],
 ) {
   let familyIndex = 0;
   let memberIndex = 0;
+  let volunteerIndex = 0;
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     if (url.endsWith("/api/auth/me")) return Response.json(session(role));
     if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "csrf-memory" });
+    if (url.endsWith("/families/volunteers") && method === "GET")
+      return volunteerResponses[Math.min(volunteerIndex++, volunteerResponses.length - 1)]!;
     if (url.endsWith("/families") && method === "GET")
       return familyResponses[Math.min(familyIndex++, familyResponses.length - 1)]!;
     if (url.endsWith("/families") && method === "POST")
@@ -64,6 +69,10 @@ function adminFetch(
       return memberResponses[Math.min(memberIndex++, memberResponses.length - 1)]!;
     if (url.endsWith("/families/family-1/members") && method === "POST")
       return Response.json(member, { status: 201 });
+    if (url.endsWith("/families/family-1/members/member-1/volunteer") && method === "PATCH") {
+      const volunteerId = JSON.parse(String(init?.body)).volunteer_id as string | null;
+      return Response.json({ ...member, volunteer_id: volunteerId });
+    }
     if (url.endsWith("/families/family-2/members") && method === "GET") return Response.json([]);
     if (url.endsWith("/club-years") || url.endsWith("/seasons")) return Response.json([]);
     if (url.endsWith("/seasons/current")) return new Response(null, { status: 404 });
@@ -101,10 +110,23 @@ describe("family admin", () => {
     );
     expect(screen.getAllByRole("link", { name: "Anwesenheit" })[0]).toHaveAttribute(
       "href",
-      "/example/admin/planning#attendance",
+      "/example/admin/attendance",
     );
     expect(document.querySelector("aside")).toHaveClass("lg:sticky");
+    expect(document.querySelector("aside")).toHaveClass("bg-foreground", "text-background");
     expect(document.querySelector("header nav ul")).toHaveClass("flex", "flex-wrap");
+    const desktopFamilyLink = screen.getAllByRole("link", { name: "Familien" })[0]!;
+    expect(desktopFamilyLink).toHaveClass(
+      "bg-primary",
+      "text-primary-foreground",
+      "focus-visible:ring-2",
+    );
+    expect(desktopFamilyLink.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.getAllByText("Volunteer Platform", { selector: "p" })[0]).toHaveClass(
+      "truncate",
+      "opacity-70",
+    );
+    expect(screen.getAllByText("Rolle: Administration")[0]).toHaveClass("text-xs", "opacity-70");
     expect(
       fetchMock.mock.calls.some(([url]) => /club-years|seasons|events|shifts/.test(String(url))),
     ).toBe(false);
@@ -174,7 +196,12 @@ describe("family admin", () => {
     };
     renderAdmin(
       "ADMIN",
-      adminFetch("ADMIN", [Response.json([family])], [Response.json([child, member])]),
+      adminFetch(
+        "ADMIN",
+        [Response.json([family])],
+        [Response.json([child, member])],
+        [Response.json([{ id: "volunteer-1", first_name: "Anna", last_name: "Zeta" }])],
+      ),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
 
@@ -184,6 +211,8 @@ describe("family admin", () => {
       "bg-primary/10",
       "text-primary",
     );
+    expect(await screen.findByLabelText("Volunteer für Mia Andere")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Volunteer für Lina Andere")).not.toBeInTheDocument();
   });
 
   it("clears transient detail feedback when directly switching families", async () => {
@@ -440,5 +469,108 @@ describe("family admin", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Das Familienmitglied konnte nicht erstellt werden.",
     );
+  });
+
+  it("searches active volunteers by name and links, replaces, and removes with refresh", async () => {
+    document.cookie = "gc_csrf=link-token";
+    const first = { id: "volunteer-1", first_name: "Anna", last_name: "Zeta" };
+    const second = { id: "volunteer-2", first_name: "Berta", last_name: "Alpha" };
+    const fetchMock = adminFetch(
+      "ADMIN",
+      [Response.json([family])],
+      [
+        Response.json([member]),
+        Response.json([{ ...member, volunteer_id: first.id }]),
+        Response.json([{ ...member, volunteer_id: second.id }]),
+        Response.json([member]),
+      ],
+      [Response.json([second, first])],
+    );
+    renderAdmin("ADMIN", fetchMock);
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+
+    const search = await screen.findByLabelText("Volunteer suchen");
+    const picker = screen.getByLabelText("Volunteer für Mia Andere");
+    expect(picker).toHaveValue("");
+    expect(screen.getByText("Noch nicht mit einem Volunteer verknüpft")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "berta" } });
+    expect(screen.queryByRole("option", { name: "Anna Zeta" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Berta Alpha" })).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "" } });
+
+    fireEvent.change(picker, { target: { value: first.id } });
+    expect(await screen.findByRole("status")).toHaveTextContent("Volunteer wurde verknüpft.");
+    expect(await screen.findByText("Verknüpft mit Anna Zeta")).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "berta" } });
+    expect(screen.getByRole("option", { name: "Anna Zeta" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Berta Alpha" })).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: "" } });
+
+    fireEvent.change(screen.getByLabelText("Volunteer für Mia Andere"), {
+      target: { value: second.id },
+    });
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Volunteer-Verknüpfung wurde ersetzt.",
+    );
+    expect(await screen.findByText("Verknüpft mit Berta Alpha")).toBeInTheDocument();
+
+    vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const linkedPicker = screen.getByLabelText("Volunteer für Mia Andere");
+    fireEvent.change(linkedPicker, { target: { value: "" } });
+    const patchesBefore = fetchMock.mock.calls.filter(
+      ([url, init]) => String(url).endsWith("/member-1/volunteer") && init?.method === "PATCH",
+    ).length;
+    expect(patchesBefore).toBe(2);
+    fireEvent.change(linkedPicker, { target: { value: "" } });
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Volunteer-Verknüpfung wurde entfernt.",
+    );
+    expect(await screen.findByText("Noch nicht mit einem Volunteer verknüpft")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.filter(
+        ([url, init]) => String(url).endsWith("/member-1/volunteer") && init?.method === "PATCH",
+      ),
+    ).toHaveLength(3);
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/members\/member-1\/volunteer$/),
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({ "X-CSRF-Token": "link-token" }),
+        body: JSON.stringify({ volunteer_id: null }),
+      }),
+    );
+  });
+
+  it("shows volunteer loading, empty, and retryable error states only for helpers", async () => {
+    let resolveVolunteers!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveVolunteers = resolve;
+    });
+    const base = adminFetch("ADMIN", [Response.json([family])], [Response.json([member])]);
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith("/families/volunteers") ? pending : base(input, init),
+    );
+    renderAdmin("ADMIN", fetchMock);
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    expect(await screen.findByText("Volunteers werden geladen …")).toBeInTheDocument();
+    resolveVolunteers(Response.json([]));
+    expect(await screen.findByText("Keine aktiven Volunteers verfügbar.")).toBeInTheDocument();
+    cleanup();
+
+    renderAdmin(
+      "ADMIN",
+      adminFetch(
+        "ADMIN",
+        [Response.json([family])],
+        [Response.json([member])],
+        [new Response(null, { status: 500 }), Response.json([])],
+      ),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Die Volunteers konnten nicht geladen werden.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
+    expect(await screen.findByText("Keine aktiven Volunteers verfügbar.")).toBeInTheDocument();
   });
 });

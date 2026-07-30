@@ -22,8 +22,14 @@ export type FamilyMember = {
   member_type: FamilyMemberType;
   first_name: string;
   last_name: string;
+  volunteer_id: string | null;
 };
-export type FamilyMemberInput = Omit<FamilyMember, "id" | "family_id">;
+export type FamilyMemberInput = Omit<FamilyMember, "id" | "family_id" | "volunteer_id">;
+export type FamilyVolunteer = {
+  id: string;
+  first_name: string;
+  last_name: string;
+};
 
 async function request<T>(path: string, init?: RequestInit, errorMessage?: string): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, { credentials: "include", ...init });
@@ -64,4 +70,27 @@ export const createFamilyMember = (org: string, familyId: string, payload: Famil
       body: JSON.stringify(payload),
     },
     "Das Familienmitglied konnte nicht erstellt werden.",
+  );
+
+export const loadFamilyVolunteers = (org: string) =>
+  request<FamilyVolunteer[]>(
+    `/api/admin/${encodeURIComponent(org)}/families/volunteers`,
+    undefined,
+    "Die Volunteers konnten nicht geladen werden.",
+  );
+
+export const updateFamilyMemberVolunteer = (
+  org: string,
+  familyId: string,
+  memberId: string,
+  volunteerId: string | null,
+) =>
+  request<FamilyMember>(
+    `${memberPath(org, familyId)}/${encodeURIComponent(memberId)}/volunteer`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+      body: JSON.stringify({ volunteer_id: volunteerId }),
+    },
+    "Die Volunteer-Verknüpfung konnte nicht gespeichert werden.",
   );

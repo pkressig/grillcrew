@@ -162,7 +162,7 @@ afterEach(() => {
 });
 
 describe("planning admin", () => {
-  it("renders the ordered accessible Phase 2 workspace and responsive desktop grid", async () => {
+  it("renders the ordered accessible reference-aligned workspace and responsive desktop grid", async () => {
     renderAdmin("ADMIN");
     await screen.findByRole("heading", { level: 1, name: "Planung" });
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
@@ -175,7 +175,12 @@ describe("planning admin", () => {
     ).toBeTruthy();
     expect(agenda.compareDocumentPosition(periods) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(agenda.closest("section")?.parentElement).toHaveClass(
-      "lg:grid-cols-[minmax(0,1fr)_21rem]",
+      "lg:grid-cols-[minmax(0,1fr)_22rem]",
+    );
+    expect(periods.closest("aside")).toHaveClass("lg:sticky", "lg:top-8");
+    expect(screen.getByRole("region", { name: "Aktuelle Saison" })).toHaveClass(
+      "border-primary/20",
+      "bg-primary/5",
     );
   });
 
@@ -233,6 +238,11 @@ describe("planning admin", () => {
     expect(summary.querySelector('time[datetime="2026-09-12"]')).toHaveAttribute(
       "aria-hidden",
       "true",
+    );
+    expect(summary.querySelector('time[datetime="2026-09-12"]')).toHaveClass(
+      "rounded-md",
+      "bg-primary/10",
+      "shadow-sm",
     );
     expect(within(summary).getByText("Veröffentlicht")).toHaveClass(
       "bg-status-success/10",

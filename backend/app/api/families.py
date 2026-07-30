@@ -16,9 +16,16 @@ from app.schemas.family import (
     FamilyCreate,
     FamilyMemberCreate,
     FamilyMemberResponse,
+    FamilyMemberVolunteerUpdate,
     FamilyResponse,
+    FamilyVolunteerResponse,
 )
-from app.services.family import FamilyNotFoundError, FamilyService
+from app.services.family import (
+    FamilyMemberLinkError,
+    FamilyMemberNotFoundError,
+    FamilyNotFoundError,
+    FamilyService,
+)
 
 router = APIRouter(prefix="/api/admin/{organization_slug}/families", tags=["families"])
 manage = require_staff_role(StaffRole.KOORDINATION)
@@ -55,6 +62,18 @@ def create_family(
     return FamilyResponse.model_validate(_service(organization_slug, current, db).create(payload))
 
 
+@router.get("/volunteers", response_model=list[FamilyVolunteerResponse])
+def list_family_volunteers(
+    organization_slug: str,
+    current: CurrentStaffMembership = Depends(manage),
+    db: Session = Depends(get_db),
+) -> list[FamilyVolunteerResponse]:
+    return [
+        FamilyVolunteerResponse.model_validate(item)
+        for item in _service(organization_slug, current, db).list_active_volunteers()
+    ]
+
+
 @router.get("/{family_id}/members", response_model=list[FamilyMemberResponse])
 def list_family_members(
     organization_slug: str,
@@ -87,3 +106,26 @@ def create_family_member(
         return FamilyMemberResponse.model_validate(member)
     except FamilyNotFoundError:
         raise HTTPException(status_code=404, detail="family not found") from None
+
+
+@router.patch("/{family_id}/members/{member_id}/volunteer", response_model=FamilyMemberResponse)
+def update_family_member_volunteer(
+    organization_slug: str,
+    family_id: uuid.UUID,
+    member_id: uuid.UUID,
+    payload: FamilyMemberVolunteerUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> FamilyMemberResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        member = _service(organization_slug, current, db).update_member_volunteer(
+            family_id, member_id, payload, current.user.id
+        )
+        return FamilyMemberResponse.model_validate(member)
+    except (FamilyNotFoundError, FamilyMemberNotFoundError):
+        raise HTTPException(status_code=404, detail="family member not found") from None
+    except FamilyMemberLinkError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from None

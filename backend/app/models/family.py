@@ -64,6 +64,7 @@ class FamilyMember(Base):
             "first_name",
             "member_type",
         ),
+        Index("ix_family_member_volunteer_id", "volunteer_id"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -77,5 +78,8 @@ class FamilyMember(Base):
     )
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    volunteer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("volunteer.id", ondelete="RESTRICT"), nullable=True
+    )
 
     family: Mapped[Family] = relationship(back_populates="members")
