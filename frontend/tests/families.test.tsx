@@ -100,7 +100,7 @@ afterEach(() => {
 });
 
 describe("family admin", () => {
-  it("provides responsive navigation, active state, skip link, and separated requests", async () => {
+  it("provides responsive navigation, active state, skip link, and family-scoped counts", async () => {
     const fetchMock = renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family])]));
     await screen.findByRole("heading", { name: "Familien" });
     expect(screen.getByText("Zum Inhalt")).toHaveAttribute("href", "#admin-content");
@@ -130,7 +130,11 @@ describe("family admin", () => {
     expect(
       fetchMock.mock.calls.some(([url]) => /club-years|seasons|events|shifts/.test(String(url))),
     ).toBe(false);
-    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/members"))).toBe(false);
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/members"))).toBe(true),
+    );
+    expect(screen.getByRole("columnheader", { name: "Kinder" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Helfer" })).toBeInTheDocument();
   });
 
   it("searches case-insensitively, clears, and distinguishes no results", async () => {
@@ -148,6 +152,26 @@ describe("family admin", () => {
     expect(screen.getByText("Keine Familien für diese Suche gefunden.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Suche löschen" }));
     expect(screen.getByRole("button", { name: "Familie Muster" })).toBeInTheDocument();
+  });
+
+  it("shows real child and helper counts without exposing contact data", async () => {
+    const child = {
+      ...member,
+      id: "member-2",
+      member_type: "CHILD",
+      first_name: "Lina",
+      email: "private@example.test",
+      phone: "+41 79 000 00 00",
+    };
+    renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", [Response.json([family])], [Response.json([child, member])]),
+    );
+
+    const row = (await screen.findByRole("button", { name: "Familie Muster" })).closest("tr")!;
+    await waitFor(() => expect(row).toHaveTextContent("Familie Muster11"));
+    expect(screen.queryByText("private@example.test")).not.toBeInTheDocument();
+    expect(screen.queryByText("+41 79 000 00 00")).not.toBeInTheDocument();
   });
 
   it("supports query selection, mobile back, browser back, and cached selected-only loading", async () => {
@@ -172,7 +196,7 @@ describe("family admin", () => {
     expect(await screen.findByLabelText("Familienliste")).toBeInTheDocument();
   });
 
-  it("uses card hierarchy, focus treatment, and a distinct selected family state", async () => {
+  it("uses table hierarchy, focus treatment, and a distinct selected family state", async () => {
     renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family])]));
     const familyButton = await screen.findByRole("button", { name: "Familie Muster" });
     expect(screen.getByLabelText("Familienliste").querySelector(".shadow-card")).not.toBeNull();
@@ -184,7 +208,7 @@ describe("family admin", () => {
     fireEvent.click(familyButton);
 
     expect(familyButton).toHaveAttribute("aria-current", "true");
-    expect(familyButton.parentElement).toHaveClass("border-primary", "bg-primary/5", "shadow-card");
+    expect(familyButton.closest("tr")).toHaveClass("bg-primary/5");
   });
 
   it("renders children and helpers as visible semantic badge variants", async () => {

@@ -37,16 +37,29 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
   const [creating, setCreating] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [cache, setCache] = useState<Record<string, FamilyMember[]>>({});
-  const cacheMembers = useCallback(
-    (familyId: string, members: FamilyMember[]) =>
-      setCache((current) => ({ ...current, [familyId]: members })),
-    [],
-  );
+  const [counts, setCounts] = useState<Record<string, { children: number; helpers: number }>>({});
+  const cacheMembers = useCallback((familyId: string, members: FamilyMember[]) => {
+    setCache((current) => ({ ...current, [familyId]: members }));
+    setCounts((current) => ({
+      ...current,
+      [familyId]: {
+        children: members.filter((member) => member.member_type === "CHILD").length,
+        helpers: members.filter((member) => member.member_type === "HELPER").length,
+      },
+    }));
+  }, []);
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      setFamilies(await loadFamilies(org));
+      const loadedFamilies = await loadFamilies(org);
+      setFamilies(loadedFamilies);
+      void Promise.allSettled(
+        loadedFamilies.map(async (family) => {
+          const members = await loadFamilyMembers(org, family.id);
+          cacheMembers(family.id, members);
+        }),
+      );
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Die Familien konnten nicht geladen werden.",
@@ -54,7 +67,7 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
     } finally {
       setLoading(false);
     }
-  }, [org]);
+  }, [cacheMembers, org]);
 
   useEffect(() => void refresh(), [refresh]);
   useEffect(() => {
@@ -155,29 +168,55 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
               ) : filtered.length === 0 ? (
                 <p className="mt-4">Keine Familien für diese Suche gefunden.</p>
               ) : (
-                <ul className="mt-4 grid gap-2" aria-label="Aktive Familien">
-                  {filtered.map((family) => (
-                    <li key={family.id}>
-                      <Card
-                        className={cn(
-                          "overflow-hidden shadow-none transition-colors",
-                          selected?.id === family.id
-                            ? "border-primary bg-primary/5 shadow-card"
-                            : "hover:border-primary/40",
-                        )}
-                      >
-                        <button
-                          aria-current={selected?.id === family.id ? "true" : undefined}
-                          className="min-h-11 w-full p-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
-                          type="button"
-                          onClick={() => select(family.id)}
-                        >
-                          <span className="font-medium">{family.display_name}</span>
-                        </button>
-                      </Card>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-4 overflow-x-auto rounded-md border">
+                  <table className="w-full border-collapse text-left" aria-label="Aktive Familien">
+                    <thead className="bg-muted/60 text-sm text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 font-medium" scope="col">
+                          Familie
+                        </th>
+                        <th className="px-3 py-2 text-right font-medium" scope="col">
+                          Kinder
+                        </th>
+                        <th className="px-3 py-2 text-right font-medium" scope="col">
+                          Helfer
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((family) => {
+                        const familyCounts = counts[family.id];
+                        const active = selected?.id === family.id;
+                        return (
+                          <tr
+                            className={cn(
+                              "border-t transition-colors",
+                              active ? "bg-primary/5" : "hover:bg-muted/40",
+                            )}
+                            key={family.id}
+                          >
+                            <th className="p-0 font-medium" scope="row">
+                              <button
+                                aria-current={active ? "true" : undefined}
+                                className="min-h-11 w-full px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                                type="button"
+                                onClick={() => select(family.id)}
+                              >
+                                {family.display_name}
+                              </button>
+                            </th>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {familyCounts?.children ?? "–"}
+                            </td>
+                            <td className="px-3 py-2 text-right tabular-nums">
+                              {familyCounts?.helpers ?? "–"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </CardBody>
           </Card>
@@ -205,6 +244,7 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
                     setSuccess(null);
                   }}
                   onCreated={(family) => {
+                    cacheMembers(family.id, []);
                     setFamilies((items) =>
                       [...items, family].sort((a, b) =>
                         a.display_name.localeCompare(b.display_name),
