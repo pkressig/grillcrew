@@ -2,7 +2,7 @@
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStatus
@@ -28,17 +28,28 @@ class FamilyService:
         self.db = db
         self.organization_id = organization_id
 
-    def list_active(self) -> list[Family]:
-        return list(
-            self.db.scalars(
-                select(Family)
-                .where(
-                    Family.organization_id == self.organization_id,
-                    Family.status == FamilyStatus.ACTIVE,
-                )
-                .order_by(Family.display_name, Family.id)
+    def list_active(self) -> list[tuple[Family, int, int]]:
+        statement = (
+            select(
+                Family,
+                func.count(FamilyMember.id)
+                .filter(FamilyMember.member_type == FamilyMemberType.CHILD)
+                .label("children_count"),
+                func.count(FamilyMember.id)
+                .filter(FamilyMember.member_type == FamilyMemberType.HELPER)
+                .label("helpers_count"),
             )
+            .outerjoin(FamilyMember, FamilyMember.family_id == Family.id)
+            .where(
+                Family.organization_id == self.organization_id,
+                Family.status == FamilyStatus.ACTIVE,
+            )
+            .group_by(Family.id)
+            .order_by(Family.display_name, Family.id)
         )
+        return [
+            (family, children, helpers) for family, children, helpers in self.db.execute(statement)
+        ]
 
     def create(self, payload: FamilyCreate) -> Family:
         family = Family(

@@ -13,6 +13,7 @@ import {
   loadFamilyVolunteers,
   updateFamilyMemberVolunteer,
   type Family,
+  type FamilyListItem,
   type FamilyMember,
   type FamilyMemberType,
   type FamilyVolunteer,
@@ -29,7 +30,7 @@ function queryFamily() {
 }
 
 export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
-  const [families, setFamilies] = useState<Family[]>([]);
+  const [families, setFamilies] = useState<FamilyListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -37,16 +38,19 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
   const [creating, setCreating] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [cache, setCache] = useState<Record<string, FamilyMember[]>>({});
-  const [counts, setCounts] = useState<Record<string, { children: number; helpers: number }>>({});
   const cacheMembers = useCallback((familyId: string, members: FamilyMember[]) => {
     setCache((current) => ({ ...current, [familyId]: members }));
-    setCounts((current) => ({
-      ...current,
-      [familyId]: {
-        children: members.filter((member) => member.member_type === "CHILD").length,
-        helpers: members.filter((member) => member.member_type === "HELPER").length,
-      },
-    }));
+    setFamilies((current) =>
+      current.map((family) =>
+        family.id === familyId
+          ? {
+              ...family,
+              children_count: members.filter((member) => member.member_type === "CHILD").length,
+              helpers_count: members.filter((member) => member.member_type === "HELPER").length,
+            }
+          : family,
+      ),
+    );
   }, []);
 
   const refresh = useCallback(async () => {
@@ -54,12 +58,6 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
     try {
       const loadedFamilies = await loadFamilies(org);
       setFamilies(loadedFamilies);
-      void Promise.allSettled(
-        loadedFamilies.map(async (family) => {
-          const members = await loadFamilyMembers(org, family.id);
-          cacheMembers(family.id, members);
-        }),
-      );
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Die Familien konnten nicht geladen werden.",
@@ -67,7 +65,7 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
     } finally {
       setLoading(false);
     }
-  }, [cacheMembers, org]);
+  }, [org]);
 
   useEffect(() => void refresh(), [refresh]);
   useEffect(() => {
@@ -185,7 +183,6 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
                     </thead>
                     <tbody>
                       {filtered.map((family) => {
-                        const familyCounts = counts[family.id];
                         const active = selected?.id === family.id;
                         return (
                           <tr
@@ -206,10 +203,10 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
                               </button>
                             </th>
                             <td className="px-3 py-2 text-right tabular-nums">
-                              {familyCounts?.children ?? "–"}
+                              {family.children_count}
                             </td>
                             <td className="px-3 py-2 text-right tabular-nums">
-                              {familyCounts?.helpers ?? "–"}
+                              {family.helpers_count}
                             </td>
                           </tr>
                         );
@@ -244,9 +241,8 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
                     setSuccess(null);
                   }}
                   onCreated={(family) => {
-                    cacheMembers(family.id, []);
                     setFamilies((items) =>
-                      [...items, family].sort((a, b) =>
+                      [...items, { ...family, children_count: 0, helpers_count: 0 }].sort((a, b) =>
                         a.display_name.localeCompare(b.display_name),
                       ),
                     );

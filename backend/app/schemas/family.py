@@ -32,6 +32,11 @@ class FamilyResponse(BaseModel):  # type: ignore[explicit-any]
     updated_at: datetime
 
 
+class FamilyListResponse(FamilyResponse):  # type: ignore[explicit-any]
+    children_count: int
+    helpers_count: int
+
+
 class FamilyMemberCreate(BaseModel):  # type: ignore[explicit-any]
     model_config = ConfigDict(extra="forbid")
 

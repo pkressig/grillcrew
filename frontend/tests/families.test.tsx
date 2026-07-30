@@ -16,6 +16,8 @@ const family = {
   internal_note: "Nur intern",
   created_at: "2026-07-28T10:00:00Z",
   updated_at: "2026-07-28T10:00:00Z",
+  children_count: 1,
+  helpers_count: 1,
 };
 const member = {
   id: "member-1",
@@ -130,10 +132,11 @@ describe("family admin", () => {
     expect(
       fetchMock.mock.calls.some(([url]) => /club-years|seasons|events|shifts/.test(String(url))),
     ).toBe(false);
-    await waitFor(() =>
-      expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/members"))).toBe(true),
+    expect(await screen.findByRole("columnheader", { name: "Kinder" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/families"))).toHaveLength(
+      1,
     );
-    expect(screen.getByRole("columnheader", { name: "Kinder" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/members"))).toBe(false);
     expect(screen.getByRole("columnheader", { name: "Helfer" })).toBeInTheDocument();
   });
 
@@ -155,21 +158,10 @@ describe("family admin", () => {
   });
 
   it("shows real child and helper counts without exposing contact data", async () => {
-    const child = {
-      ...member,
-      id: "member-2",
-      member_type: "CHILD",
-      first_name: "Lina",
-      email: "private@example.test",
-      phone: "+41 79 000 00 00",
-    };
-    renderAdmin(
-      "ADMIN",
-      adminFetch("ADMIN", [Response.json([family])], [Response.json([child, member])]),
-    );
+    renderAdmin("ADMIN", adminFetch("ADMIN", [Response.json([family])]));
 
     const row = (await screen.findByRole("button", { name: "Familie Muster" })).closest("tr")!;
-    await waitFor(() => expect(row).toHaveTextContent("Familie Muster11"));
+    expect(row).toHaveTextContent("Familie Muster11");
     expect(screen.queryByText("private@example.test")).not.toBeInTheDocument();
     expect(screen.queryByText("+41 79 000 00 00")).not.toBeInTheDocument();
   });

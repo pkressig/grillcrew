@@ -10,6 +10,11 @@ export type Family = {
   updated_at: string;
 };
 
+export type FamilyListItem = Family & {
+  children_count: number;
+  helpers_count: number;
+};
+
 export type FamilyInput = {
   display_name: string;
   internal_note: string | null;
@@ -38,7 +43,7 @@ async function request<T>(path: string, init?: RequestInit, errorMessage?: strin
 }
 
 export const loadFamilies = (org: string) =>
-  request<Family[]>(`/api/admin/${encodeURIComponent(org)}/families`);
+  request<FamilyListItem[]>(`/api/admin/${encodeURIComponent(org)}/families`);
 
 export const createFamily = (org: string, payload: FamilyInput) =>
   request<Family>(

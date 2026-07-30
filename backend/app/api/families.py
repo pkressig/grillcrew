@@ -14,6 +14,7 @@ from app.db.session import get_db
 from app.models.identity import StaffRole
 from app.schemas.family import (
     FamilyCreate,
+    FamilyListResponse,
     FamilyMemberCreate,
     FamilyMemberResponse,
     FamilyMemberVolunteerUpdate,
@@ -37,15 +38,21 @@ def _service(organization_slug: str, current: CurrentStaffMembership, db: Sessio
     return FamilyService(db, current.organization.id)
 
 
-@router.get("", response_model=list[FamilyResponse])
+@router.get("", response_model=list[FamilyListResponse])
 def list_families(
     organization_slug: str,
     current: CurrentStaffMembership = Depends(manage),
     db: Session = Depends(get_db),
-) -> list[FamilyResponse]:
+) -> list[FamilyListResponse]:
     return [
-        FamilyResponse.model_validate(item)
-        for item in _service(organization_slug, current, db).list_active()
+        FamilyListResponse(
+            **FamilyResponse.model_validate(family).model_dump(),
+            children_count=children_count,
+            helpers_count=helpers_count,
+        )
+        for family, children_count, helpers_count in _service(
+            organization_slug, current, db
+        ).list_active()
     ]
 
 

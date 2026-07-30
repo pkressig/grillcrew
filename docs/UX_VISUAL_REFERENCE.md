@@ -49,7 +49,7 @@ Agenda-first layout. Attendance handlungsbedarf appears above the agenda. Events
 
 Reference: `docs/design-reference/admin-families.png`
 
-Searchable family master list and selected detail. Do not invent location, child-count, helper-count, or pagination fields until APIs support them. Detail groups members as Kind/Helfer and keeps creation contextual.
+Searchable family master list and selected detail. Child and helper counts come from the authenticated family-list response; do not invent location or pagination fields. Detail groups members as Kind/Helfer and keeps creation contextual.
 
 ### 4. Anwesenheit — implemented
 

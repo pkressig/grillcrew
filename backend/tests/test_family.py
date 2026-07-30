@@ -57,13 +57,13 @@ def test_family_name_is_trimmed_and_payload_rejects_tenant_or_status() -> None:
 
 
 class _FamilyDb:
-    def __init__(self, rows: list[Family] | None = None) -> None:
+    def __init__(self, rows: list[tuple[Family, int, int]] | None = None) -> None:
         self.rows = rows or []
         self.added: list[Family] = []
         self.statements: list[object] = []
         self.commits = 0
 
-    def scalars(self, statement: object) -> list[Family]:
+    def execute(self, statement: object) -> list[tuple[Family, int, int]]:
         self.statements.append(statement)
         return self.rows
 
@@ -86,7 +86,21 @@ def test_service_lists_only_active_families_for_its_tenant() -> None:
     sql = str(db.statements[0])
     assert "family.organization_id" in sql
     assert "family.status" in sql
+    assert "family_member" in sql
+    assert "FILTER (WHERE family_member.member_type" in sql
+    assert "LEFT OUTER JOIN" in sql
     assert "ORDER BY family.display_name, family.id" in sql
+
+
+def test_service_preserves_zero_member_counts() -> None:
+    family = Family(
+        organization_id=uuid4(),
+        display_name="Familie Leer",
+        status=FamilyStatus.ACTIVE,
+        internal_note=None,
+    )
+    db = _FamilyDb([(family, 0, 0)])
+    assert FamilyService(cast(object, db), family.organization_id).list_active() == [(family, 0, 0)]  # type: ignore[arg-type]
 
 
 def test_duplicate_names_are_allowed_and_always_created_active() -> None:
@@ -132,8 +146,8 @@ def test_create_and_list_return_only_admin_family_fields(
         def __init__(self, _db: object, received_organization_id: UUID) -> None:
             assert received_organization_id == organization_id
 
-        def list_active(self) -> list[object]:
-            return [item]
+        def list_active(self) -> list[tuple[object, int, int]]:
+            return [(item, 2, 1)]
 
         def create(self, payload: FamilyCreate) -> object:
             assert payload.display_name == "Familie Muster"
@@ -157,7 +171,7 @@ def test_create_and_list_return_only_admin_family_fields(
 
     assert listed.status_code == 200
     assert created.status_code == 201
-    expected_keys = {
+    family_keys = {
         "id",
         "organization_id",
         "display_name",
@@ -166,7 +180,9 @@ def test_create_and_list_return_only_admin_family_fields(
         "created_at",
         "updated_at",
     }
-    assert set(listed.json()[0]) == expected_keys
-    assert set(created.json()) == expected_keys
+    assert set(listed.json()[0]) == family_keys | {"children_count", "helpers_count"}
+    assert set(created.json()) == family_keys
+    assert listed.json()[0]["children_count"] == 2
+    assert listed.json()[0]["helpers_count"] == 1
     assert listed.json()[0]["internal_note"] == "Nur intern"
     assert "child_data" not in listed.text

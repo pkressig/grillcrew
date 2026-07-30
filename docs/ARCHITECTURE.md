@@ -45,6 +45,10 @@ Browser
 - Settings: rates, anti-abuse thresholds, coordination labels, public signup behavior.
 - Planning: club years, seasons, events, shifts.
 - People: volunteers, families, children, family members.
+
+The organization-scoped active-family list derives child and helper counts with one aggregate query;
+member names and volunteer links remain available only through the authenticated family detail APIs.
+
 - Access: users, staff memberships, roles, permissions.
 - Operations: signups, attendance outcomes, work records, payments, dashboard items, statistics, exports.
 
