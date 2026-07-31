@@ -621,9 +621,16 @@ against real data. This verification surfaced and fixed two real-world parser ga
 prefix matching for verbose tournament labels, and "keine" as an additional Spielnummer placeholder
 alongside "Ohne" — documented in `docs/DATA_MODEL.md`'s `ImportRow` section.
 
-Phases 4-6 (deferred work-record/child-assignment reconciliation, payout/coordination-time
-tracking and season-end export, Kiosk fixed-assignment module) are planned per D-041 but not yet
-implemented.
+Phase 4A (retroactive child assignment and per-signup compensation classification) is implemented:
+`WorkRecord` (`docs/DATA_MODEL.md`) lets ADMIN/KOORDINATION retroactively assign an `ATTENDED` signup
+to a `CHILD` family member (or leave it explicitly unassigned) and classify it as `WORK_HOURS`,
+`VOLUNTARY`, or `PAYOUT`. `PAYOUT` computes and stores the amount from the organization's current
+payout rate (commercial rounding, BR-003/D-028) and tracks `payoutStatus`
+(`OPEN`/`APPROVED`/`PAID`, ADMIN-only to advance) plus a manual "Unterschrift erhalten" note
+(timestamp and confirming staff member) in place of a digital signature, per D-041 point 8. The
+Attendance admin view exposes this as a per-signup "Nachträgliche Zuordnung" control next to
+completed entries; public pages remain unchanged. Coordination-time tracking, the season-end report,
+and the Kiosk fixed-assignment module (Phases 5-6) remain planned per D-041 but not yet implemented.
 
 **Goal**
 
@@ -664,7 +671,8 @@ High (multi-phase).
   original design note) so `confirm()` never has to re-derive a season from sheet-tab text.
 - `shift.shift_type`/`assignment_mode`/`menu_type`/`crew_suggestion_overridden` (Phase 3,
   implemented).
-- `work_record` (Phase 4), `payment`, `coordination_time_entry` (Phase 5) - all planned.
+- `work_record` (Phase 4A, implemented; see `docs/DATA_MODEL.md` for the exact field set and
+  invariants). A dedicated `payment` table and `coordination_time_entry` (Phase 5) remain planned.
 
 **API impact**
 
@@ -677,6 +685,10 @@ High (multi-phase).
   (Phase 2, implemented, ADMIN-only).
 - `GET /api/admin/{org}/events/{event_id}/shift-suggestion` (Phase 3, implemented, read-only,
   ADMIN-or-KOORDINATION per the existing planning guard).
+- `GET/PATCH /api/admin/{org}/signups/{signup_id}/work-record` (Phase 4A, implemented,
+  ADMIN-or-KOORDINATION) and `PATCH .../work-record/payout-status` (Phase 4A, implemented,
+  ADMIN-only). `GET /api/admin/{org}/families/children` (Phase 4A, implemented,
+  ADMIN-or-KOORDINATION) lists active `CHILD` family members for the assignment control.
 
 **UI impact**
 
@@ -691,6 +703,11 @@ High (multi-phase).
 - Shift-creation crew-size suggestion wiring (Phase 3, implemented): "Crew-Vorschlag übernehmen"
   pre-fills menu/required-griller-count, fully editable before submit; a menu-type badge appears
   on shift cards once set.
+- Retroactive assignment/classification control on the Attendance admin view (Phase 4A,
+  implemented): a per-signup "Nachträgliche Zuordnung" disclosure next to completed (`ATTENDED`)
+  entries offers compensation-type, child-assignment, and duration fields; `PAYOUT` shows the
+  computed amount and status, with an ADMIN-only control to advance `payoutStatus` and record the
+  manual signature-received note.
 
 ## Recommended Implementation Order
 

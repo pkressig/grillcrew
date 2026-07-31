@@ -164,7 +164,12 @@ export function AdminShell({
           ) : activeView === "import" ? (
             <ImportPanel org={org} />
           ) : (
-            <AttendancePanel org={org} timezone={organization.timezone} />
+            <AttendancePanel
+              org={org}
+              timezone={organization.timezone}
+              currency={organization.currency}
+              role={membership.role}
+            />
           )}
         </main>
       </div>

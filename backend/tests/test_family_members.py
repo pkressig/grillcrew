@@ -376,6 +376,69 @@ def test_rejects_child_and_foreign_missing_or_inactive_volunteer(
     assert missing_db.commits == 0 and missing_db.added == []
 
 
+class _ChildrenDb:
+    def __init__(self, rows: list[tuple[object, object]]) -> None:
+        self.rows = rows
+        self.statements: list[object] = []
+
+    def execute(self, statement: object) -> list[tuple[object, object]]:
+        self.statements.append(statement)
+        return self.rows
+
+
+def test_lists_only_active_children_ordered_by_family_and_name() -> None:
+    family = _family()
+    member = _helper(family.id)
+    member.member_type = FamilyMemberType.CHILD
+    db = _ChildrenDb([(member, family)])
+    result = FamilyService(cast(object, db), uuid4()).list_active_children()  # type: ignore[arg-type]
+    assert result == [(member, family)]
+    sql = str(db.statements[0])
+    assert "family.organization_id" in sql
+    assert "family.status" in sql
+    assert "family_member.member_type" in sql
+    assert "ORDER BY family.display_name" in sql
+
+
+def test_children_route_lists_across_families_and_rejects_foreign_slug(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    family = _family()
+    member = _helper(family.id)
+    member.member_type = FamilyMemberType.CHILD
+    member.first_name = "Mia"
+    member.last_name = "Muster"
+    family.display_name = "Familie Muster"
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def list_active_children(self) -> list[object]:
+            return [(member, family)]
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    try:
+        listed = client.get("/api/admin/tenant-a/families/children")
+        foreign = client.get("/api/admin/tenant-b/families/children")
+    finally:
+        app.dependency_overrides.clear()
+    assert listed.status_code == 200
+    assert listed.json() == [
+        {
+            "id": str(member.id),
+            "family_id": str(family.id),
+            "family_display_name": "Familie Muster",
+            "first_name": "Mia",
+            "last_name": "Muster",
+        }
+    ]
+    assert foreign.status_code == 403
+
+
 def test_rejects_missing_member_without_audit() -> None:
     family_id = uuid4()
     db = _LinkDb([_family(family_id), None])

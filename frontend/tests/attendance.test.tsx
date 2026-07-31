@@ -70,7 +70,21 @@ const futureShift = {
   status: "OPEN",
 };
 
-function attendanceFetch(options?: { empty?: boolean; fail?: boolean; mutationFails?: boolean }) {
+const child = {
+  id: "child-1",
+  family_id: "family-1",
+  family_display_name: "Familie Muster",
+  first_name: "Mia",
+  last_name: "Muster",
+};
+
+function attendanceFetch(options?: {
+  empty?: boolean;
+  fail?: boolean;
+  mutationFails?: boolean;
+  workRecord?: unknown;
+  workRecordFails?: boolean;
+}) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -81,18 +95,63 @@ function attendanceFetch(options?: { empty?: boolean; fail?: boolean; mutationFa
     if (url.endsWith("/seasons/season-1/events")) return Response.json([pastEvent, futureEvent]);
     if (url.endsWith("/events/event-past/shifts")) return Response.json([pastShift]);
     if (url.endsWith("/events/event-future/shifts")) return Response.json([futureShift]);
+    if (url.endsWith("/families/children")) return Response.json([child]);
     if (url.includes("/attendance") && method === "PATCH") {
       if (options?.mutationFails) return new Response(null, { status: 500 });
       const outcome = JSON.parse(String(init?.body)).outcome;
       return Response.json({ ...pastShift.signups[0], outcome });
     }
+    if (url.includes("/work-record/payout-status") && method === "PATCH") {
+      const body = JSON.parse(String(init?.body));
+      return Response.json({
+        id: "wr-1",
+        signup_id: "done-1",
+        volunteer_id: "vol-1",
+        credited_family_member_id: null,
+        compensation_type: "PAYOUT",
+        duration_minutes: 90,
+        payout_rate_minor_per_hour: 900,
+        payout_amount_minor: 1350,
+        payout_status: body.payout_status,
+        signature_received_at: body.mark_signature_received ? "2026-07-05T10:00:00Z" : null,
+        signature_confirmed_by_user_id: body.mark_signature_received ? "user-1" : null,
+        note: null,
+        created_at: "2026-07-01T10:00:00Z",
+        updated_at: "2026-07-01T10:00:00Z",
+      });
+    }
+    if (url.includes("/work-record") && method === "PATCH") {
+      if (options?.workRecordFails) return new Response(null, { status: 500 });
+      const body = JSON.parse(String(init?.body));
+      const isPayout = body.compensation_type === "PAYOUT";
+      return Response.json({
+        id: "wr-1",
+        signup_id: "done-1",
+        volunteer_id: "vol-1",
+        credited_family_member_id: body.credited_family_member_id,
+        compensation_type: body.compensation_type,
+        duration_minutes: body.duration_minutes,
+        payout_rate_minor_per_hour: isPayout ? 900 : null,
+        payout_amount_minor: isPayout ? Math.round((body.duration_minutes * 900) / 60) : null,
+        payout_status: isPayout ? "OPEN" : null,
+        signature_received_at: null,
+        signature_confirmed_by_user_id: null,
+        note: body.note,
+        created_at: "2026-07-01T10:00:00Z",
+        updated_at: "2026-07-01T10:00:00Z",
+      });
+    }
+    if (url.includes("/work-record") && method === "GET") {
+      if (options?.workRecord) return Response.json(options.workRecord);
+      return new Response(null, { status: 404 });
+    }
     return new Response(null, { status: 404 });
   });
 }
 
-function renderPanel(fetchMock = attendanceFetch()) {
+function renderPanel(fetchMock = attendanceFetch(), role = "KOORDINATION") {
   vi.stubGlobal("fetch", fetchMock);
-  render(<AttendancePanel org="example" timezone="Europe/Zurich" />);
+  render(<AttendancePanel org="example" timezone="Europe/Zurich" role={role} />);
   return fetchMock;
 }
 
@@ -257,5 +316,104 @@ describe("attendance admin", () => {
       "Anwesenheit konnte nicht gespeichert",
     );
     expect(controls[0]).toHaveValue("OPEN");
+  });
+
+  it("shows the retroactive assignment control only for attended signups", async () => {
+    renderPanel();
+    const actionRegion = await screen.findByRole("region", { name: "Handlungsbedarf" });
+    const completedRegion = await screen.findByRole("region", { name: "Abgeschlossene Einträge" });
+    expect(within(actionRegion).queryByText("Nachträgliche Zuordnung")).not.toBeInTheDocument();
+    expect(within(completedRegion).getAllByText("Nachträgliche Zuordnung").length).toBeGreaterThan(
+      0,
+    );
+  });
+
+  it("classifies an attended signup with a retroactive child assignment (WORK_HOURS)", async () => {
+    const fetchMock = renderPanel();
+    const completedRegion = await screen.findByRole("region", { name: "Abgeschlossene Einträge" });
+    const toggles = within(completedRegion).getAllByText("Nachträgliche Zuordnung");
+    fireEvent.click(toggles[0]!);
+
+    const compensationSelects = await screen.findAllByRole("combobox", {
+      name: "Vergütungsart für Leo Beispiel",
+    });
+    fireEvent.change(compensationSelects[0]!, { target: { value: "WORK_HOURS" } });
+    const childSelects = screen.getAllByRole("combobox", {
+      name: "Zugeordnetes Kind für Leo Beispiel",
+    });
+    fireEvent.change(childSelects[0]!, { target: { value: child.id } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Zuordnung speichern" })[0]!);
+
+    expect(await screen.findByText("Zuordnung wurde gespeichert.")).toBeInTheDocument();
+    const call = fetchMock.mock.calls.find(
+      ([url, init]) =>
+        String(url).includes("/work-record") &&
+        !String(url).includes("payout-status") &&
+        init?.method === "PATCH",
+    );
+    expect(call).toBeDefined();
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({
+      compensation_type: "WORK_HOURS",
+      credited_family_member_id: child.id,
+      duration_minutes: null,
+      note: null,
+    });
+  });
+
+  it("computes a commercial-rounded payout amount and lets ADMIN advance the payout status", async () => {
+    const fetchMock = renderPanel(attendanceFetch(), "ADMIN");
+    const completedRegion = await screen.findByRole("region", { name: "Abgeschlossene Einträge" });
+    const toggles = within(completedRegion).getAllByText("Nachträgliche Zuordnung");
+    fireEvent.click(toggles[0]!);
+
+    const compensationSelects = await screen.findAllByRole("combobox", {
+      name: "Vergütungsart für Leo Beispiel",
+    });
+    fireEvent.change(compensationSelects[0]!, { target: { value: "PAYOUT" } });
+    const durationInputs = screen.getAllByLabelText("Dauer (Minuten)");
+    fireEvent.change(durationInputs[0]!, { target: { value: "90" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Zuordnung speichern" })[0]!);
+
+    expect(await screen.findByText(/13\.50 CHF/)).toBeInTheDocument();
+    const approveButtons = await screen.findAllByRole("button", { name: "Freigegeben setzen" });
+    fireEvent.click(approveButtons[0]!);
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).includes("/work-record/payout-status") && init?.method === "PATCH",
+        ),
+      ).toBe(true),
+    );
+  });
+
+  it("hides the payout-status control for non-admin coordination", async () => {
+    renderPanel(attendanceFetch(), "KOORDINATION");
+    const completedRegion = await screen.findByRole("region", { name: "Abgeschlossene Einträge" });
+    const toggles = within(completedRegion).getAllByText("Nachträgliche Zuordnung");
+    fireEvent.click(toggles[0]!);
+
+    const compensationSelects = await screen.findAllByRole("combobox", {
+      name: "Vergütungsart für Leo Beispiel",
+    });
+    fireEvent.change(compensationSelects[0]!, { target: { value: "PAYOUT" } });
+    const durationInputs = screen.getAllByLabelText("Dauer (Minuten)");
+    fireEvent.change(durationInputs[0]!, { target: { value: "90" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Zuordnung speichern" })[0]!);
+
+    await screen.findByText(/13\.50 CHF/);
+    expect(screen.queryByRole("button", { name: "Freigegeben setzen" })).not.toBeInTheDocument();
+  });
+
+  it("shows an error and keeps the form editable when classification saving fails", async () => {
+    renderPanel(attendanceFetch({ workRecordFails: true }));
+    const completedRegion = await screen.findByRole("region", { name: "Abgeschlossene Einträge" });
+    const toggles = within(completedRegion).getAllByText("Nachträgliche Zuordnung");
+    fireEvent.click(toggles[0]!);
+    await screen.findAllByRole("combobox", { name: "Vergütungsart für Leo Beispiel" });
+    fireEvent.click(screen.getAllByRole("button", { name: "Zuordnung speichern" })[0]!);
+    expect(
+      await screen.findByText("Die Zuordnung konnte nicht gespeichert werden."),
+    ).toBeInTheDocument();
   });
 });

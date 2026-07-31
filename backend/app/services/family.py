@@ -91,6 +91,19 @@ class FamilyService:
         self.db.refresh(member)
         return member
 
+    def list_active_children(self) -> list[tuple[FamilyMember, Family]]:
+        statement = (
+            select(FamilyMember, Family)
+            .join(Family, FamilyMember.family_id == Family.id)
+            .where(
+                Family.organization_id == self.organization_id,
+                Family.status == FamilyStatus.ACTIVE,
+                FamilyMember.member_type == FamilyMemberType.CHILD,
+            )
+            .order_by(Family.display_name, FamilyMember.last_name, FamilyMember.first_name)
+        )
+        return [(member, family) for member, family in self.db.execute(statement)]
+
     def list_active_volunteers(self) -> list[Volunteer]:
         return list(
             self.db.scalars(

@@ -291,6 +291,12 @@ def test_event_shift_routes_are_registered_with_manage_guard() -> None:
         ("PATCH", "/api/admin/{organization_slug}/shifts/{shift_id}"),
         ("POST", "/api/admin/{organization_slug}/signups/{signup_id}/cancel"),
         ("PATCH", "/api/admin/{organization_slug}/signups/{signup_id}/attendance"),
+        ("GET", "/api/admin/{organization_slug}/signups/{signup_id}/work-record"),
+        ("PATCH", "/api/admin/{organization_slug}/signups/{signup_id}/work-record"),
+        (
+            "PATCH",
+            "/api/admin/{organization_slug}/signups/{signup_id}/work-record/payout-status",
+        ),
     }
     actual = {
         (method, getattr(route, "path", ""))

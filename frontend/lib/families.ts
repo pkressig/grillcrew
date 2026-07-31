@@ -36,6 +36,14 @@ export type FamilyVolunteer = {
   last_name: string;
 };
 
+export type FamilyChild = {
+  id: string;
+  family_id: string;
+  family_display_name: string;
+  first_name: string;
+  last_name: string;
+};
+
 async function request<T>(path: string, init?: RequestInit, errorMessage?: string): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, { credentials: "include", ...init });
   if (!response.ok) throw new Error(errorMessage ?? "Die Familien konnten nicht geladen werden.");
@@ -82,6 +90,13 @@ export const loadFamilyVolunteers = (org: string) =>
     `/api/admin/${encodeURIComponent(org)}/families/volunteers`,
     undefined,
     "Die Volunteers konnten nicht geladen werden.",
+  );
+
+export const loadFamilyChildren = (org: string) =>
+  request<FamilyChild[]>(
+    `/api/admin/${encodeURIComponent(org)}/families/children`,
+    undefined,
+    "Die Kinder konnten nicht geladen werden.",
   );
 
 export const updateFamilyMemberVolunteer = (

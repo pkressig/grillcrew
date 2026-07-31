@@ -13,6 +13,7 @@ from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.identity import StaffRole
 from app.schemas.family import (
+    FamilyChildResponse,
     FamilyCreate,
     FamilyListResponse,
     FamilyMemberCreate,
@@ -78,6 +79,24 @@ def list_family_volunteers(
     return [
         FamilyVolunteerResponse.model_validate(item)
         for item in _service(organization_slug, current, db).list_active_volunteers()
+    ]
+
+
+@router.get("/children", response_model=list[FamilyChildResponse])
+def list_family_children(
+    organization_slug: str,
+    current: CurrentStaffMembership = Depends(manage),
+    db: Session = Depends(get_db),
+) -> list[FamilyChildResponse]:
+    return [
+        FamilyChildResponse(
+            id=member.id,
+            family_id=family.id,
+            family_display_name=family.display_name,
+            first_name=member.first_name,
+            last_name=member.last_name,
+        )
+        for member, family in _service(organization_slug, current, db).list_active_children()
     ]
 
 

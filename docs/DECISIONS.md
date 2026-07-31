@@ -217,8 +217,17 @@ gegen echte Daten. Diese Verifikation deckte zwei reale Parser-Lücken auf, die 
 `docs/DATA_MODEL.md`s `ImportRow`-Abschnitt): `SpielTyp` wird jetzt per erkanntem Präfix statt exakter
 Gleichheit gematcht (der Verband hängt Turnier-Freitext an, z. B. "Turnier Junior*innen E-F-G / Brack
 play more football"), und "keine" wird wie "Ohne" als Spielnummer-Platzhalter erkannt (das Kiosk-
-Export-Format des Vereins nutzt diese abweichende Schreibweise). Phasen 4-6 (Einsatzabschluss/
-Kind-Zuordnung, Auszahlung/Koordinationszeit/Report, Kiosk-Modul) sind geplant, aber noch nicht
+Export-Format des Vereins nutzt diese abweichende Schreibweise). Phase 4A (rückwirkende
+Kind-Zuordnung und Vergütungsklassifikation pro Signup) ist lokal implementiert und getestet: die
+neue `WorkRecord`-Entität (`docs/DATA_MODEL.md`) erlaubt ADMIN/KOORDINATION, ein `ATTENDED`-Signup
+nachträglich einem `CHILD`-Familienmitglied zuzuordnen oder explizit unzugeordnet zu lassen, und es
+als `WORK_HOURS`, `VOLUNTARY` oder `PAYOUT` zu klassifizieren; `PAYOUT` berechnet den Betrag
+kaufmännisch gerundet (BR-003/D-028) aus dem aktuellen Auszahlungssatz und verfolgt einen
+`payoutStatus` (`OPEN`/`APPROVED`/`PAID`, nur ADMIN darf weiterschalten) sowie einen manuellen
+"Unterschrift erhalten"-Vermerk (Zeitstempel, bestätigende Person) statt einer digitalen
+Unterschrift, gemäss Punkt 8. Die Anwesenheits-Admin-Ansicht zeigt dies als "Nachträgliche
+Zuordnung" pro abgeschlossenem Eintrag; öffentliche Seiten bleiben unverändert. Phasen 5-6
+(Koordinationszeit/Auszahlungsfreigabe/Saisonreport, Kiosk-Modul) sind geplant, aber noch nicht
 umgesetzt.
 
 **Non-Goals (vorerst):** automatische Schichtverschiebung, digitale Unterschrift, KI-gestuetzte

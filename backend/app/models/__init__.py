@@ -45,10 +45,12 @@ from app.models.planning import (
     Volunteer,
     VolunteerStatus,
 )
+from app.models.work_record import CompensationType, PayoutStatus, WorkRecord
 
 __all__ = [
     "AuditEvent",
     "ClubYear",
+    "CompensationType",
     "CrewSizeRule",
     "Event",
     "EventStatus",
@@ -68,6 +70,7 @@ __all__ = [
     "Organization",
     "OrganizationSettings",
     "PasswordResetToken",
+    "PayoutStatus",
     "PlanningStatus",
     "PlatformRole",
     "RefreshToken",
@@ -89,4 +92,5 @@ __all__ = [
     "UserStatus",
     "Volunteer",
     "VolunteerStatus",
+    "WorkRecord",
 ]

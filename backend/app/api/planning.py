@@ -33,15 +33,27 @@ from app.schemas.planning import (
     ShiftUpdate,
     SignupAttendanceUpdate,
 )
+from app.schemas.work_record import (
+    WorkRecordClassify,
+    WorkRecordPayoutStatusUpdate,
+    WorkRecordResponse,
+)
 from app.services.planning import (
     PlanningConflictError,
     PlanningNotFoundError,
     PlanningService,
     PlanningValidationError,
 )
+from app.services.work_record import (
+    WorkRecordConflictError,
+    WorkRecordNotFoundError,
+    WorkRecordService,
+    WorkRecordValidationError,
+)
 
 router = APIRouter(prefix="/api/admin/{organization_slug}", tags=["planning"])
 manage = require_staff_role(StaffRole.KOORDINATION)
+admin_only = require_staff_role(StaffRole.ADMIN)
 
 
 def _admin_shift_response(shift: Shift) -> AdminShiftResponse:
@@ -90,6 +102,29 @@ def _translate(error: Exception) -> HTTPException:
     if isinstance(error, PlanningNotFoundError):
         return HTTPException(status_code=404, detail="planning record not found")
     if isinstance(error, PlanningConflictError):
+        return HTTPException(status_code=409, detail=str(error))
+    return HTTPException(status_code=422, detail=str(error))
+
+
+def _work_record_service(
+    organization_slug: str, current: CurrentStaffMembership, db: Session
+) -> WorkRecordService:
+    if current.organization.slug != organization_slug:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="not permitted")
+    return WorkRecordService(db, current.organization.id)
+
+
+def _write_work_record_service(
+    organization_slug: str, current: CurrentStaffMembership, db: Session, request: Request
+) -> WorkRecordService:
+    _ensure_origin_and_host(request, db, get_settings())
+    return _work_record_service(organization_slug, current, db)
+
+
+def _translate_work_record(error: Exception) -> HTTPException:
+    if isinstance(error, WorkRecordNotFoundError):
+        return HTTPException(status_code=404, detail="work record not found")
+    if isinstance(error, WorkRecordConflictError):
         return HTTPException(status_code=409, detail=str(error))
     return HTTPException(status_code=422, detail=str(error))
 
@@ -376,3 +411,59 @@ def update_signup_attendance(
         return _admin_signup_response(signup)
     except (PlanningNotFoundError, PlanningConflictError) as error:
         raise _translate(error) from None
+
+
+@router.get("/signups/{signup_id}/work-record", response_model=WorkRecordResponse)
+def get_work_record(
+    organization_slug: str,
+    signup_id: uuid.UUID,
+    current: CurrentStaffMembership = Depends(manage),
+    db: Session = Depends(get_db),
+) -> WorkRecordResponse:
+    try:
+        record = _work_record_service(organization_slug, current, db).get_for_signup(signup_id)
+        return WorkRecordResponse.model_validate(record)
+    except WorkRecordNotFoundError as error:
+        raise _translate_work_record(error) from None
+
+
+@router.patch("/signups/{signup_id}/work-record", response_model=WorkRecordResponse)
+def classify_work_record(
+    organization_slug: str,
+    signup_id: uuid.UUID,
+    payload: WorkRecordClassify,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> WorkRecordResponse:
+    try:
+        record = _write_work_record_service(organization_slug, current, db, request).classify(
+            signup_id, payload, current.user.id
+        )
+        return WorkRecordResponse.model_validate(record)
+    except (
+        WorkRecordNotFoundError,
+        WorkRecordConflictError,
+        WorkRecordValidationError,
+    ) as error:
+        raise _translate_work_record(error) from None
+
+
+@router.patch("/signups/{signup_id}/work-record/payout-status", response_model=WorkRecordResponse)
+def update_work_record_payout_status(
+    organization_slug: str,
+    signup_id: uuid.UUID,
+    payload: WorkRecordPayoutStatusUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(admin_only),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> WorkRecordResponse:
+    try:
+        record = _write_work_record_service(
+            organization_slug, current, db, request
+        ).update_payout_status(signup_id, payload, current.user.id)
+        return WorkRecordResponse.model_validate(record)
+    except (WorkRecordNotFoundError, WorkRecordConflictError) as error:
+        raise _translate_work_record(error) from None

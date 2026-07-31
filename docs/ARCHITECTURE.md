@@ -142,6 +142,29 @@ automatic `Event` write — the coordinator reviews and acts manually, since a r
 contacting already-signed-up helpers outside the app. Confirming is idempotent-guarded: a batch can
 only be confirmed once (`ImportBatchStatus.STAGED -> CONFIRMED`).
 
+Retroactive child assignment and compensation classification (F015 Phase 4A, D-041 points 6 and 8)
+uses `/api/admin/{organization_slug}/signups/{signup_id}/work-record`:
+`GET`/`PATCH` (ADMIN-or-KOORDINATION, the existing planning guard) and
+`PATCH .../work-record/payout-status` (ADMIN-only, matching `docs/PERMISSIONS.md`'s "Auszahlungen
+freigeben oder als bezahlt markieren" row). Both live in `app.api.planning` alongside the attendance
+endpoint since they operate on the same `Signup` resource; `app.services.work_record.WorkRecordService`
+resolves the signup through the same `Shift → Event → Season → ClubYear → Organization` tenant chain
+as `PlanningService`. `PATCH .../work-record` requires the signup to be `status = ACTIVE` and
+`outcome = ATTENDED`, validates an optional `credited_family_member_id` against a `CHILD`-type
+`FamilyMember` in the same organization (`GET /api/admin/{organization_slug}/families/children` in
+`app.api.families` lists candidates), and is idempotent (a repeat with unchanged fields does not
+commit or audit). For `compensation_type = PAYOUT` it snapshots the current
+`OrganizationSettings.payout_rate_minor_per_hour`, computes the amount with commercial rounding
+(BR-003/D-028), and defaults `payout_status` to `OPEN`; classification is rejected once
+`payout_status` has advanced past `OPEN`, so further changes go through the ADMIN-only endpoint.
+`PATCH .../work-record/payout-status` only allows the forward transitions `OPEN → APPROVED → PAID`
+and optionally records the D-041 point 8 manual "Unterschrift erhalten" note (`signature_received_at`,
+`signature_confirmed_by_user_id`) instead of a digital signature. Both endpoints write one
+same-transaction tenant-scoped `AuditEvent` (`WORK_RECORD_CLASSIFIED` /
+`WORK_RECORD_PAYOUT_STATUS_CHANGED`) per real change. Public plan, public signup, and attendance
+outcome responses are unchanged; work-record data never appears outside these authenticated admin
+endpoints.
+
 Shift crew-size suggestion (F015 Phase 3, D-041) uses
 `GET /api/admin/{organization_slug}/events/{event_id}/shift-suggestion`, gated by the existing
 KOORDINATION-or-ADMIN planning guard (read-only, no write). `SettingsService.suggest_crew_size`

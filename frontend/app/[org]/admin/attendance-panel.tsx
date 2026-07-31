@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,15 @@ import {
   type SignupOutcome,
 } from "@/lib/planning";
 import { loadAdminPlanningData } from "@/lib/admin-planning-data";
+import { loadFamilyChildren, type FamilyChild } from "@/lib/families";
+import {
+  classifyWorkRecord,
+  loadWorkRecord,
+  updateWorkRecordPayoutStatus,
+  type CompensationType,
+  type PayoutStatus,
+  type WorkRecord,
+} from "@/lib/work-records";
 
 const outcomes: readonly SignupOutcome[] = [
   "OPEN",
@@ -41,6 +50,24 @@ const outcomeVariants: Record<SignupOutcome, BadgeProps["variant"]> = {
   SUBSTITUTE_ORGANIZED: "success",
 };
 
+const compensationTypeLabels: Record<CompensationType, string> = {
+  WORK_HOURS: "Sollstunden",
+  VOLUNTARY: "Unentgeltlich",
+  PAYOUT: "Auszahlung",
+};
+
+const payoutStatusLabels: Record<PayoutStatus, string> = {
+  OPEN: "Offen",
+  APPROVED: "Freigegeben",
+  PAID: "Ausbezahlt",
+};
+
+const nextPayoutStatus: Record<PayoutStatus, PayoutStatus | null> = {
+  OPEN: "APPROVED",
+  APPROVED: "PAID",
+  PAID: null,
+};
+
 type AttendanceRecord = {
   event: PlanningEvent;
   shift: Shift;
@@ -60,7 +87,12 @@ function formatDateTime(value: string, timezone: string) {
   }).format(new Date(value));
 }
 
-export function AttendancePanel({ org, timezone }: Readonly<{ org: string; timezone: string }>) {
+export function AttendancePanel({
+  org,
+  timezone,
+  currency = "CHF",
+  role,
+}: Readonly<{ org: string; timezone: string; currency?: string; role?: string }>) {
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,8 +101,24 @@ export function AttendancePanel({ org, timezone }: Readonly<{ org: string; timez
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
   const [pendingNoShow, setPendingNoShow] = useState<AttendanceRecord | null>(null);
+  const [children, setChildren] = useState<FamilyChild[]>([]);
   const requestId = useRef(0);
   const confirmationTrigger = useRef<HTMLElement | null>(null);
+  const isAdmin = role === "ADMIN";
+
+  useEffect(() => {
+    let cancelled = false;
+    loadFamilyChildren(org)
+      .then((loaded) => {
+        if (!cancelled) setChildren(loaded);
+      })
+      .catch(() => {
+        // The child dropdown is a convenience; classification still works without it.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [org]);
 
   const refresh = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -309,6 +357,10 @@ export function AttendancePanel({ org, timezone }: Readonly<{ org: string; timez
                     timezone={timezone}
                     busyId={busyId}
                     onChange={requestOutcomeChange}
+                    org={org}
+                    currency={currency}
+                    isAdmin={isAdmin}
+                    familyChildren={children}
                   />
                 )}
               </section>
@@ -393,11 +445,19 @@ function AttendanceList({
   timezone,
   busyId,
   onChange,
+  org,
+  currency,
+  isAdmin,
+  familyChildren,
 }: Readonly<{
   records: AttendanceRecord[];
   timezone: string;
   busyId: string | null;
   onChange: (record: AttendanceRecord, outcome: SignupOutcome) => void;
+  org: string;
+  currency: string;
+  isAdmin: boolean;
+  familyChildren: FamilyChild[];
 }>) {
   const outcomeControl = (record: AttendanceRecord, compact = false) => (
     <select
@@ -452,7 +512,18 @@ function AttendanceList({
                     {outcomeLabels[record.signup.outcome]}
                   </Badge>
                 </td>
-                <td className="px-4 py-3">{outcomeControl(record)}</td>
+                <td className="px-4 py-3">
+                  {outcomeControl(record)}
+                  {record.signup.outcome === "ATTENDED" ? (
+                    <WorkRecordClassifier
+                      org={org}
+                      signup={record.signup}
+                      currency={currency}
+                      isAdmin={isAdmin}
+                      familyChildren={familyChildren}
+                    />
+                  ) : null}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -474,9 +545,254 @@ function AttendanceList({
               </Badge>
             </div>
             {outcomeControl(record, true)}
+            {record.signup.outcome === "ATTENDED" ? (
+              <WorkRecordClassifier
+                org={org}
+                signup={record.signup}
+                currency={currency}
+                isAdmin={isAdmin}
+                familyChildren={familyChildren}
+              />
+            ) : null}
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+function formatAmount(minor: number, currency: string) {
+  return `${(minor / 100).toFixed(2)} ${currency}`;
+}
+
+function WorkRecordClassifier({
+  org,
+  signup,
+  currency,
+  isAdmin,
+  familyChildren,
+}: Readonly<{
+  org: string;
+  signup: AdminSignup;
+  currency: string;
+  isAdmin: boolean;
+  familyChildren: FamilyChild[];
+}>) {
+  const [opened, setOpened] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [record, setRecord] = useState<WorkRecord | null>(null);
+  const [compensationType, setCompensationType] = useState<CompensationType>("VOLUNTARY");
+  const [familyMemberId, setFamilyMemberId] = useState("");
+  const [durationMinutes, setDurationMinutes] = useState("");
+  const [note, setNote] = useState("");
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const existing = await loadWorkRecord(org, signup.id);
+      setRecord(existing);
+      setCompensationType(existing?.compensation_type ?? "VOLUNTARY");
+      setFamilyMemberId(existing?.credited_family_member_id ?? "");
+      setDurationMinutes(existing?.duration_minutes ? String(existing.duration_minutes) : "");
+      setNote(existing?.note ?? "");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Die Zuordnung konnte nicht geladen werden.",
+      );
+    } finally {
+      setLoading(false);
+      setHasLoaded(true);
+    }
+  }
+
+  async function save(formEvent: FormEvent<HTMLFormElement>) {
+    formEvent.preventDefault();
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const updated = await classifyWorkRecord(org, signup.id, {
+        compensation_type: compensationType,
+        credited_family_member_id: familyMemberId || null,
+        duration_minutes: compensationType === "PAYOUT" ? Number(durationMinutes) : null,
+        note: note.trim() || null,
+      });
+      setRecord(updated);
+      setSuccess("Zuordnung wurde gespeichert.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Die Zuordnung konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function advancePayoutStatus(nextStatus: PayoutStatus, markSignatureReceived: boolean) {
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const updated = await updateWorkRecordPayoutStatus(org, signup.id, {
+        payout_status: nextStatus,
+        mark_signature_received: markSignatureReceived,
+      });
+      setRecord(updated);
+      setSuccess("Auszahlungsstatus wurde aktualisiert.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Der Auszahlungsstatus konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const locked = record?.payout_status === "APPROVED" || record?.payout_status === "PAID";
+  const next = record?.payout_status ? nextPayoutStatus[record.payout_status] : null;
+
+  return (
+    <details
+      className="mt-2 rounded-md border border-border/70 bg-muted/20 p-3"
+      onToggle={(toggleEvent) => {
+        const isOpen = toggleEvent.currentTarget.open;
+        setOpened(isOpen);
+        if (isOpen && !hasLoaded) void load();
+      }}
+    >
+      <summary className="min-h-11 cursor-pointer text-xs font-medium">
+        Nachträgliche Zuordnung
+        {record ? ` – ${compensationTypeLabels[record.compensation_type]}` : ""}
+      </summary>
+      {!opened ? null : loading ? (
+        <p className="mt-2 text-xs text-muted-foreground" role="status">
+          Wird geladen …
+        </p>
+      ) : (
+        <div className="mt-2 grid gap-2">
+          {error ? (
+            <p className="text-xs text-status-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {success ? (
+            <p className="text-xs text-status-success" role="status">
+              {success}
+            </p>
+          ) : null}
+          <form
+            className="grid gap-2 sm:grid-cols-2"
+            onSubmit={(formEvent) => void save(formEvent)}
+          >
+            <label className="grid gap-1 text-xs font-medium">
+              Vergütungsart
+              <select
+                className={control}
+                aria-label={`Vergütungsart für ${signup.public_name}`}
+                value={compensationType}
+                disabled={saving || locked}
+                onChange={(changeEvent) =>
+                  setCompensationType(changeEvent.target.value as CompensationType)
+                }
+              >
+                {(Object.keys(compensationTypeLabels) as CompensationType[]).map((type) => (
+                  <option key={type} value={type}>
+                    {compensationTypeLabels[type]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-medium">
+              Zugeordnetes Kind
+              <select
+                className={control}
+                aria-label={`Zugeordnetes Kind für ${signup.public_name}`}
+                value={familyMemberId}
+                disabled={saving || locked}
+                onChange={(changeEvent) => setFamilyMemberId(changeEvent.target.value)}
+              >
+                <option value="">Nicht zugeordnet</option>
+                {familyChildren.map((child) => (
+                  <option key={child.id} value={child.id}>
+                    {child.first_name} {child.last_name} ({child.family_display_name})
+                  </option>
+                ))}
+              </select>
+            </label>
+            {compensationType === "PAYOUT" ? (
+              <label className="grid gap-1 text-xs font-medium">
+                Dauer (Minuten)
+                <input
+                  className={control}
+                  type="number"
+                  min={1}
+                  required
+                  value={durationMinutes}
+                  disabled={saving || locked}
+                  onChange={(changeEvent) => setDurationMinutes(changeEvent.target.value)}
+                />
+              </label>
+            ) : null}
+            <label className="grid gap-1 text-xs font-medium sm:col-span-2">
+              Notiz
+              <textarea
+                className={control}
+                value={note}
+                disabled={saving || locked}
+                onChange={(changeEvent) => setNote(changeEvent.target.value)}
+              />
+            </label>
+            <Button className="sm:self-end" disabled={saving || locked} size="sm" type="submit">
+              Zuordnung speichern
+            </Button>
+          </form>
+          {record?.compensation_type === "PAYOUT" && record.payout_amount_minor !== null ? (
+            <div className="rounded-md border border-border/70 bg-background p-2 text-xs">
+              <p>
+                Betrag: <strong>{formatAmount(record.payout_amount_minor, currency)}</strong> ·
+                Status: {record.payout_status ? payoutStatusLabels[record.payout_status] : "–"}
+              </p>
+              {record.signature_received_at ? (
+                <p className="mt-1 text-muted-foreground">
+                  Unterschrift erhalten am{" "}
+                  {new Date(record.signature_received_at).toLocaleDateString("de-CH")}.
+                </p>
+              ) : null}
+              {isAdmin && next ? (
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <Button
+                    disabled={saving}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void advancePayoutStatus(next, false)}
+                  >
+                    {payoutStatusLabels[next]} setzen
+                  </Button>
+                  {next === "PAID" ? (
+                    <Button
+                      disabled={saving}
+                      size="sm"
+                      type="button"
+                      variant="secondary"
+                      onClick={() => void advancePayoutStatus(next, true)}
+                    >
+                      Ausbezahlt + Unterschrift erhalten
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </details>
   );
 }

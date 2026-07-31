@@ -391,20 +391,40 @@ Excel export. Needs its own decision record and contract before implementation (
 
 ### WorkRecord
 
+Phase 4A (F015, D-041 points 6 and 8) implements retroactive child assignment and per-signup
+compensation classification only. `actualStart`/`actualEnd`/`breakMinutes`/`submittedByVolunteerAt`/
+`confirmedByAdminAt`/`source` from the full future F010 work-record submission workflow are not part
+of this table yet and can extend it later without breaking Phase 4A; `shiftId` is available through
+`signupId` and is not duplicated on the row.
+
 - id
-- signupId
-- shiftId
-- volunteerId
-- actualStart
-- actualEnd
-- breakMinutes
-- durationMinutes
-- finalCompensationType
-- creditedFamilyId nullable
-- submittedByVolunteerAt
-- confirmedByAdminAt
-- source: DIGITAL | PAPER | IMPORT
-- note
+- organizationId (denormalized for tenant-scoped queries)
+- signupId, unique (one classification per signup; requires the signup's `status = ACTIVE` and
+  `outcome = ATTENDED` to create or change)
+- volunteerId (copied from the signup at classification time)
+- creditedFamilyMemberId nullable (FK `FamilyMember`; must resolve to a `CHILD`-type member in the
+  same organization; explicit `null` means "left unassigned", distinct from no `WorkRecord` row
+  existing yet, i.e. "not yet classified")
+- compensationType: `WORK_HOURS` | `VOLUNTARY` | `PAYOUT` (BR-002)
+- durationMinutes nullable (optional for `WORK_HOURS`/`VOLUNTARY`; required and `> 0` for `PAYOUT`)
+- payoutRateMinorPerHour nullable (snapshot of `OrganizationSettings.payoutRateMinorPerHour` at
+  classification time; only set for `PAYOUT`)
+- payoutAmountMinor nullable (`round(durationMinutes * payoutRateMinorPerHour / 60)`, commercial
+  rounding per BR-003/D-028; only set for `PAYOUT`)
+- payoutStatus nullable: `OPEN` | `APPROVED` | `PAID`; only set for `PAYOUT`. Classification
+  (assignment/compensation type/duration/note) is KOORDINATION-or-ADMIN and blocked once this leaves
+  `OPEN`; advancing `OPEN` → `APPROVED` → `PAID` is ADMIN-only, matching
+  `docs/PERMISSIONS.md`'s "Auszahlungen freigeben oder als bezahlt markieren" row
+- signatureReceivedAt nullable, signatureConfirmedByUserId nullable (FK `User`): D-041 point 8's
+  manual "Unterschrift erhalten" note (timestamp, confirming staff member) for the papers-based
+  payout signature; only set alongside `payoutStatus` (never on a non-`PAYOUT` record)
+- note nullable
+- createdAt, updatedAt
+
+Database constraints enforce: `durationMinutes` non-negative; the `PAYOUT`⇄payout-field fields
+(`payoutRateMinorPerHour`, `payoutAmountMinor`, `payoutStatus`, plus a positive `durationMinutes`)
+are present if and only if `compensationType = PAYOUT`; and the signature fields are only set when
+`payoutStatus` is set (i.e. only for `PAYOUT`).
 
 ### Payment
 
