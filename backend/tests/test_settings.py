@@ -379,6 +379,66 @@ def test_reorder_crew_size_rules_assigns_sequential_sort_order() -> None:
     assert result == [rule_b, rule_a, catchall]
 
 
+# -- Service: crew-size suggestion ----------------------------------------------
+
+
+def _rule(**overrides: object) -> CrewSizeRule:
+    defaults: dict[str, object] = {
+        "id": uuid4(),
+        "organization_id": uuid4(),
+        "sort_order": 0,
+        "pattern": "Junioren",
+        "menu_type": MenuType.FRIES_NUGGETS,
+        "required_griller_count": 1,
+        "min_games_per_shift": 1,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return CrewSizeRule(**defaults)
+
+
+def test_suggest_crew_size_matches_pattern_case_insensitively() -> None:
+    rule = _rule(pattern="Junioren")
+    catchall = _rule(id=uuid4(), pattern=None, required_griller_count=2)
+    db = _FakeDb(scalars_results=[[rule, catchall]])
+    service = SettingsService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    result = service.suggest_crew_size("CBS JUNIOREN D-9c 2. Stkl.")
+    assert result is rule
+
+
+def test_suggest_crew_size_falls_back_to_catchall() -> None:
+    rule = _rule(pattern="Junioren")
+    catchall = _rule(id=uuid4(), pattern=None, required_griller_count=2)
+    db = _FakeDb(scalars_results=[[rule, catchall]])
+    service = SettingsService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    result = service.suggest_crew_size("FC Thusis/Cazis 1 - FC Lusitanos 1")
+    assert result is catchall
+
+
+def test_suggest_crew_size_skips_inactive_rules() -> None:
+    rule = _rule(pattern="Junioren", is_active=False)
+    catchall = _rule(id=uuid4(), pattern=None, required_griller_count=2)
+    db = _FakeDb(scalars_results=[[rule, catchall]])
+    service = SettingsService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    result = service.suggest_crew_size("Junioren D-9c")
+    assert result is catchall
+
+
+def test_suggest_crew_size_respects_min_games_per_shift_threshold() -> None:
+    rule = _rule(pattern="Junioren", min_games_per_shift=2)
+    catchall = _rule(id=uuid4(), pattern=None, required_griller_count=2)
+    db = _FakeDb(scalars_results=[[rule, catchall]])
+    service = SettingsService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    result = service.suggest_crew_size("Junioren D-9c", concurrent_games=1)
+    assert result is catchall
+
+
+def test_suggest_crew_size_returns_none_without_any_rule() -> None:
+    db = _FakeDb(scalars_results=[[]])
+    service = SettingsService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    assert service.suggest_crew_size("Junioren D-9c") is None
+
+
 # -- API: tenant isolation -------------------------------------------------------
 
 

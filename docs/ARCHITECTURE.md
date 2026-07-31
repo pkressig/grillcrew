@@ -142,6 +142,20 @@ automatic `Event` write — the coordinator reviews and acts manually, since a r
 contacting already-signed-up helpers outside the app. Confirming is idempotent-guarded: a batch can
 only be confirmed once (`ImportBatchStatus.STAGED -> CONFIRMED`).
 
+Shift crew-size suggestion (F015 Phase 3, D-041) uses
+`GET /api/admin/{organization_slug}/events/{event_id}/shift-suggestion`, gated by the existing
+KOORDINATION-or-ADMIN planning guard (read-only, no write). `SettingsService.suggest_crew_size`
+evaluates the organization's active `CrewSizeRule` rows in `_ordered_rules()` order (the
+non-deletable default rule always last, regardless of stored `sort_order`) against the event's
+team text, first match wins. `PlanningService.create_shift`/`update_shift` independently
+recompute the same suggestion server-side and set `Shift.crew_suggestion_overridden` by comparing
+it against the submitted `menu_type`/`required_volunteers` — this is bookkeeping only, never a
+different write path or a rejected submission; the coordinator's chosen values always win. `Shift`
+also gained `shift_type` (`GRILL`/`KIOSK`) and `assignment_mode` (`OPEN_SIGNUP`/`FIXED_ASSIGNMENT`),
+both defaulted for the existing Grill/open-signup behavior and otherwise unused until the Kiosk
+module (F015 Phase 6) is built — added now rather than later to avoid a second migration and
+backfill once Phase 4/5 code already depends on `Shift`.
+
 ## Permissions
 
 Permissions are organization-local. A user may be Admin in one organization and have no access to another. Role checks must combine:

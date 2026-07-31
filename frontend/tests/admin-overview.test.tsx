@@ -68,6 +68,10 @@ function shift(
     internal_note: null,
     status: "OPEN",
     sort_order: 0,
+    shift_type: "GRILL",
+    assignment_mode: "OPEN_SIGNUP",
+    menu_type: null,
+    crew_suggestion_overridden: false,
     signups: signupOpen
       ? [
           {

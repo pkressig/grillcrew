@@ -11,6 +11,7 @@ import {
   createEvent,
   createSeason,
   createShift,
+  loadShiftCrewSuggestion,
   updateEventStatus,
   updateSeasonStatus,
   updateShiftStatus,
@@ -18,11 +19,13 @@ import {
   type AdminSignup,
   type ClubYear,
   type EventStatus,
+  type MenuType,
   type PlanningEvent,
   type PlanningStatus,
   type Season,
   type SeasonType,
   type Shift,
+  type ShiftCrewSuggestion,
   type ShiftStatus,
   type SignupOutcome,
 } from "@/lib/planning";
@@ -56,6 +59,10 @@ const eventStatusLabels: Record<EventStatus, string> = {
   POSTPONED: "Verschoben",
   CANCELLED: "Abgesagt",
   COMPLETED: "Erledigt",
+};
+const menuTypeLabels: Record<MenuType, string> = {
+  FRIES_NUGGETS: "Pommes/Chicken Nuggets",
+  FRIES_NUGGETS_BURGER: "Pommes/Chicken Nuggets + Burger",
 };
 const shiftStatusLabels: Record<ShiftStatus, string> = {
   OPEN: "Offen",
@@ -378,10 +385,11 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     if (created) form.reset();
   }
 
-  async function submitShift(event: FormEvent<HTMLFormElement>, eventId: string) {
+  async function submitShift(event: FormEvent<HTMLFormElement>, eventId: string): Promise<boolean> {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const menuType = String(data.get("menu_type") ?? "");
     const created = await run(
       () =>
         createShift(org, eventId, {
@@ -392,10 +400,14 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
           internal_note: String(data.get("internal_note")) || null,
           status: "OPEN",
           sort_order: 0,
+          shift_type: "GRILL",
+          assignment_mode: "OPEN_SIGNUP",
+          menu_type: menuType ? (menuType as MenuType) : null,
         }),
       "Einsatz wurde erstellt.",
     );
     if (created) form.reset();
+    return created;
   }
 
   function updateStatus(season: Season, next: PlanningStatus) {
@@ -895,10 +907,17 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                       {formatDateTime(shift.starts_at, timezone)} –{" "}
                                                       {formatDateTime(shift.ends_at, timezone)}
                                                     </p>
-                                                    <Badge className="mt-2" variant="neutral">
-                                                      {shift.occupied_volunteers} von{" "}
-                                                      {shift.required_volunteers} belegt
-                                                    </Badge>
+                                                    <div className="mt-2 flex flex-wrap gap-2">
+                                                      <Badge variant="neutral">
+                                                        {shift.occupied_volunteers} von{" "}
+                                                        {shift.required_volunteers} belegt
+                                                      </Badge>
+                                                      {shift.menu_type ? (
+                                                        <Badge variant="success">
+                                                          {menuTypeLabels[shift.menu_type]}
+                                                        </Badge>
+                                                      ) : null}
+                                                    </div>
                                                     <p className="text-sm text-muted-foreground">
                                                       {shift.open_places === 0
                                                         ? "Vollständig besetzt"
@@ -1038,75 +1057,14 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                         ))}
                                       </ul>
                                     )}
-                                    <details className="rounded-lg border p-4">
-                                      <summary className="min-h-11 cursor-pointer font-medium">
-                                        Einsatz erstellen
-                                      </summary>
-                                      <form
-                                        className="mt-3 grid gap-3 sm:grid-cols-2"
-                                        onSubmit={(formEvent) =>
-                                          submitShift(formEvent, planningEvent.id)
-                                        }
-                                      >
-                                        <label htmlFor={`shift-${planningEvent.id}-starts-at`}>
-                                          Beginn
-                                          <input
-                                            className={control}
-                                            id={`shift-${planningEvent.id}-starts-at`}
-                                            name="starts_at"
-                                            type="datetime-local"
-                                            required
-                                          />
-                                        </label>
-                                        <label htmlFor={`shift-${planningEvent.id}-ends-at`}>
-                                          Ende
-                                          <input
-                                            className={control}
-                                            id={`shift-${planningEvent.id}-ends-at`}
-                                            name="ends_at"
-                                            type="datetime-local"
-                                            required
-                                          />
-                                        </label>
-                                        <label
-                                          htmlFor={`shift-${planningEvent.id}-required-volunteers`}
-                                        >
-                                          Benötigte Helfende
-                                          <input
-                                            className={control}
-                                            id={`shift-${planningEvent.id}-required-volunteers`}
-                                            min="1"
-                                            name="required_volunteers"
-                                            type="number"
-                                            required
-                                          />
-                                        </label>
-                                        <label htmlFor={`shift-${planningEvent.id}-public-note`}>
-                                          Öffentliche Notiz
-                                          <textarea
-                                            className={control}
-                                            id={`shift-${planningEvent.id}-public-note`}
-                                            name="public_note"
-                                          />
-                                        </label>
-                                        <label htmlFor={`shift-${planningEvent.id}-internal-note`}>
-                                          Interne Notiz
-                                          <textarea
-                                            className={control}
-                                            id={`shift-${planningEvent.id}-internal-note`}
-                                            name="internal_note"
-                                          />
-                                        </label>
-                                        <Button
-                                          className="sm:self-end"
-                                          disabled={busy}
-                                          aria-label={`Einsatz für ${planningEvent.title} erstellen`}
-                                          type="submit"
-                                        >
-                                          Einsatz erstellen
-                                        </Button>
-                                      </form>
-                                    </details>
+                                    <ShiftCreateForm
+                                      org={org}
+                                      eventId={planningEvent.id}
+                                      eventTitle={planningEvent.title}
+                                      control={control}
+                                      busy={busy}
+                                      onSubmit={submitShift}
+                                    />
                                   </div>
                                 </div>
                               </details>
@@ -1294,5 +1252,165 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
         </aside>
       </div>
     </section>
+  );
+}
+
+function ShiftCreateForm({
+  org,
+  eventId,
+  eventTitle,
+  control,
+  busy,
+  onSubmit,
+}: Readonly<{
+  org: string;
+  eventId: string;
+  eventTitle: string;
+  control: string;
+  busy: boolean;
+  onSubmit: (event: FormEvent<HTMLFormElement>, eventId: string) => Promise<boolean>;
+}>) {
+  const [suggestion, setSuggestion] = useState<ShiftCrewSuggestion | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
+  const [menuType, setMenuType] = useState<MenuType | "">("");
+  const [requiredVolunteers, setRequiredVolunteers] = useState("");
+
+  async function applySuggestion() {
+    setSuggestionLoading(true);
+    setSuggestionError(null);
+    try {
+      const result = await loadShiftCrewSuggestion(org, eventId);
+      setSuggestion(result);
+      if (result.menu_type) setMenuType(result.menu_type);
+      if (result.required_volunteers) setRequiredVolunteers(String(result.required_volunteers));
+    } catch (caught) {
+      setSuggestionError(
+        caught instanceof Error
+          ? caught.message
+          : "Der Crew-Vorschlag konnte nicht geladen werden.",
+      );
+    } finally {
+      setSuggestionLoading(false);
+    }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    const created = await onSubmit(event, eventId);
+    if (created) {
+      setSuggestion(null);
+      setMenuType("");
+      setRequiredVolunteers("");
+    }
+  }
+
+  return (
+    <details className="rounded-lg border p-4">
+      <summary className="min-h-11 cursor-pointer font-medium">Einsatz erstellen</summary>
+      <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={(e) => void handleSubmit(e)}>
+        <label htmlFor={`shift-${eventId}-starts-at`}>
+          Beginn
+          <input
+            className={control}
+            id={`shift-${eventId}-starts-at`}
+            name="starts_at"
+            type="datetime-local"
+            required
+          />
+        </label>
+        <label htmlFor={`shift-${eventId}-ends-at`}>
+          Ende
+          <input
+            className={control}
+            id={`shift-${eventId}-ends-at`}
+            name="ends_at"
+            type="datetime-local"
+            required
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-3 rounded-md border border-dashed border-primary/30 bg-primary/5 p-3 sm:col-span-2">
+          <Button
+            disabled={suggestionLoading}
+            onClick={() => void applySuggestion()}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            {suggestionLoading ? "Wird geladen …" : "Crew-Vorschlag übernehmen"}
+          </Button>
+          {suggestion ? (
+            suggestion.menu_type && suggestion.required_volunteers ? (
+              <span className="text-sm">
+                Vorschlag: {menuTypeLabels[suggestion.menu_type]} · {suggestion.required_volunteers}{" "}
+                Griller — bleibt änderbar
+              </span>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                Keine passende Crew-Regel gefunden — bitte manuell erfassen.
+              </span>
+            )
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              Vorschlag basiert auf den Crew-Regeln in den Einstellungen.
+            </span>
+          )}
+        </div>
+        {suggestionError ? (
+          <p className="text-sm text-status-error sm:col-span-2" role="alert">
+            {suggestionError}
+          </p>
+        ) : null}
+        <label htmlFor={`shift-${eventId}-menu-type`}>
+          Menü
+          <select
+            className={control}
+            id={`shift-${eventId}-menu-type`}
+            name="menu_type"
+            value={menuType}
+            onChange={(e) => setMenuType(e.target.value as MenuType | "")}
+          >
+            <option value="">Kein Menü</option>
+            {Object.entries(menuTypeLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label htmlFor={`shift-${eventId}-required-volunteers`}>
+          Benötigte Helfende
+          <input
+            className={control}
+            id={`shift-${eventId}-required-volunteers`}
+            min="1"
+            name="required_volunteers"
+            type="number"
+            value={requiredVolunteers}
+            onChange={(e) => setRequiredVolunteers(e.target.value)}
+            required
+          />
+        </label>
+        <label htmlFor={`shift-${eventId}-public-note`}>
+          Öffentliche Notiz
+          <textarea className={control} id={`shift-${eventId}-public-note`} name="public_note" />
+        </label>
+        <label htmlFor={`shift-${eventId}-internal-note`}>
+          Interne Notiz
+          <textarea
+            className={control}
+            id={`shift-${eventId}-internal-note`}
+            name="internal_note"
+          />
+        </label>
+        <Button
+          className="sm:self-end"
+          disabled={busy}
+          aria-label={`Einsatz für ${eventTitle} erstellen`}
+          type="submit"
+        >
+          Einsatz erstellen
+        </Button>
+      </form>
+    </details>
   );
 }

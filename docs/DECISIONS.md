@@ -203,12 +203,23 @@ mit dem Grill-Kernworkflow; Kiosk wird architektonisch vorbereitet, aber separat
 11. Die Rundung des Auszahlungsbetrags folgt der bereits ratifizierten Regel BR-003/D-028
     (kaufmaennisch auf 1 Rappen); keine neue Rundungsregel noetig.
 
-**Umsetzungsstand:** Phase 1 (Settings-Fundament: Heimplatz-Allowlist, Crew-Regeln,
-Organisationseinstellungen editierbar, ADMIN-only Einstellungen-Navigation) ist gemerged (Commit
-`b1599202940a2898aa299651fcbebcf16b47063b`). Phase 2 (Spielplan-Import: Staging, 5-Wege-Diff-Vorschau,
-Heimplatz-/Typ-Filterung, ADMIN-only Import-Navigation) ist lokal implementiert und getestet (siehe
-`docs/FEATURES.md` F015). Phasen 3-6 (Schichterzeugung mit Crew-Vorschlag, Einsatzabschluss/
-Kind-Zuordnung, Auszahlung/Koordinationszeit/Report, Kiosk) sind geplant, aber noch nicht umgesetzt.
+**Umsetzungsstand:** Phase 1 (Settings-Fundament) und Phase 2 (Spielplan-Import) sind gemerged
+(Commits `b1599202940a2898aa299651fcbebcf16b47063b` und
+`3757d1cf11c93e96772bbaa064a803032b30f36b`). Phase 3 (Crew-Vorschlag in der Schichterstellung,
+`Shift.shift_type`/`assignment_mode`/`menu_type`/`crew_suggestion_overridden`, Kiosk-Vorbereitung)
+ist lokal implementiert und getestet (siehe `docs/FEATURES.md` F015) — ab dieser Phase kann die
+Saison vollständig ohne VolunteerSignup laufen (Import → Schicht mit Crew-Vorschlag → bestehendes
+offenes Signup). Phasen 1-3 wurden zusätzlich end-to-end gegen eine lokale PostgreSQL-Instanz und im
+echten Browser gegen den realen Verbandsexport `Spielbetrieb - Kiosk.xlsx` (Saison 2026/27) verifiziert:
+Login, Übersicht, Planung, Familien, Anwesenheit, Einstellungen (Heimplätze/Crew-Regeln), Import
+(171 Zeilen, 123 als `Event` übernommen) und die Crew-Vorschlag-Schichterstellung funktionieren alle
+gegen echte Daten. Diese Verifikation deckte zwei reale Parser-Lücken auf, die behoben wurden (siehe
+`docs/DATA_MODEL.md`s `ImportRow`-Abschnitt): `SpielTyp` wird jetzt per erkanntem Präfix statt exakter
+Gleichheit gematcht (der Verband hängt Turnier-Freitext an, z. B. "Turnier Junior*innen E-F-G / Brack
+play more football"), und "keine" wird wie "Ohne" als Spielnummer-Platzhalter erkannt (das Kiosk-
+Export-Format des Vereins nutzt diese abweichende Schreibweise). Phasen 4-6 (Einsatzabschluss/
+Kind-Zuordnung, Auszahlung/Koordinationszeit/Report, Kiosk-Modul) sind geplant, aber noch nicht
+umgesetzt.
 
 **Non-Goals (vorerst):** automatische Schichtverschiebung, digitale Unterschrift, KI-gestuetzte
 Besetzungsvorschlaege (Gemini), WhatsApp-Versandintegration, Sollstunden-Materialisierung

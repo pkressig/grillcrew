@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { StatSummary } from "@/components/ui/stat-summary";
 import { loadFamilies } from "@/lib/families";
 import { loadAdminPlanningData, type AdminEventWithShifts } from "@/lib/admin-planning-data";
 
@@ -141,18 +142,18 @@ export function OverviewPanel({ org, timezone }: Readonly<{ org: string; timezon
       />
 
       <dl className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Organisationsübersicht">
-        <Summary
+        <StatSummary
           label="Bevorstehende Anlässe"
           value={allUpcomingEvents.length}
           icon={<CalendarDays aria-hidden="true" />}
         />
-        <Summary
+        <StatSummary
           label="Bevorstehende Einsätze"
           value={allUpcomingShifts.length}
           icon={<CalendarDays aria-hidden="true" />}
         />
-        <Summary label="Offene Plätze" value={openPlaces} icon={<Users aria-hidden="true" />} />
-        <Summary
+        <StatSummary label="Offene Plätze" value={openPlaces} icon={<Users aria-hidden="true" />} />
+        <StatSummary
           label="Aktive Familien"
           value={data?.families ?? 0}
           icon={<Users aria-hidden="true" />}
@@ -237,22 +238,6 @@ export function OverviewPanel({ org, timezone }: Readonly<{ org: string; timezon
         </div>
       </div>
     </section>
-  );
-}
-
-function Summary({
-  icon,
-  label,
-  value,
-}: Readonly<{ icon: ReactNode; label: string; value: number }>) {
-  return (
-    <div className="rounded-md border bg-background p-5 shadow-card">
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="mt-1 flex items-center justify-between gap-4 text-3xl font-bold">
-        {value}
-        <span className="text-primary">{icon}</span>
-      </dd>
-    </div>
   );
 }
 

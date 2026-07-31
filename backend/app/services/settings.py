@@ -241,3 +241,22 @@ class SettingsService:
                 .order_by(CrewSizeRule.pattern.is_(None), CrewSizeRule.sort_order)
             )
         )
+
+    def suggest_crew_size(self, team_text: str, concurrent_games: int = 1) -> CrewSizeRule | None:
+        """Return the first active rule whose pattern matches `team_text`.
+
+        Rules are evaluated in `_ordered_rules()` order (catch-all always last, regardless of
+        stored `sort_order`), first match wins. A rule only matches when `concurrent_games` meets
+        its `min_games_per_shift` threshold; since a `Shift` belongs to exactly one `Event` today,
+        callers always pass `concurrent_games=1`, so rules requiring more than one concurrent game
+        never match yet (multi-game shift consolidation is a future, undecided contract).
+        """
+        normalized_text = team_text.casefold()
+        for rule in self._ordered_rules():
+            if not rule.is_active:
+                continue
+            if concurrent_games < rule.min_games_per_shift:
+                continue
+            if rule.pattern is None or rule.pattern.casefold() in normalized_text:
+                return rule
+        return None

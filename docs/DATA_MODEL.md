@@ -247,9 +247,13 @@ or `UNVERAENDERT` rows — see `docs/ARCHITECTURE.md` for the exact per-classifi
 - importBatchId (FK ImportBatch, CASCADE)
 - seasonId (FK Season, RESTRICT)
 - sheetTab
-- spielTyp: MEISTERSCHAFT | CUP | TESTSPIEL | TURNIER
+- spielTyp: MEISTERSCHAFT | CUP | TESTSPIEL | TURNIER (matched by recognized-prefix, not exact
+  equality, since a real export includes free-text tournament names appended to "Turnier", e.g.
+  "Turnier Junior*innen E-F-G / Brack play more football")
 - bezeichnung nullable
-- spielnummer nullable (association's game number; `NULL` when the source says "Ohne")
+- spielnummer nullable (association's game number; `NULL` when the source says "Ohne" or "keine" —
+  verified against a real 2026/27 export where the club's own Kiosk/Grillplan variant of the file
+  uses "keine" for the same placeholder meaning)
 - weekdayShort nullable
 - gameDate
 - gameTime nullable
@@ -274,7 +278,8 @@ Events inherit organization scope through their season and club year. Season/dat
 
 ### Shift
 
-Implemented in F003 Step 3.
+Implemented in F003 Step 3. `shiftType`, `assignmentMode`, `menuType`, and
+`crewSuggestionOverridden` were added in F015 Phase 3.
 
 - id
 - eventId
@@ -285,10 +290,24 @@ Implemented in F003 Step 3.
 - internalNote
 - status: OPEN | CLOSED | CANCELLED
 - sortOrder
+- shiftType: GRILL | KIOSK (default GRILL; KIOSK is Kiosk-module preparation, unused until F015
+  Phase 6)
+- assignmentMode: OPEN_SIGNUP | FIXED_ASSIGNMENT (default OPEN_SIGNUP; FIXED_ASSIGNMENT is
+  Kiosk-module preparation, unused until F015 Phase 6)
+- menuType nullable (`FRIES_NUGGETS` | `FRIES_NUGGETS_BURGER`; drives the crew-size suggestion)
+- crewSuggestionOverridden (server-computed bookkeeping flag: did the submitted `menuType`/
+  `requiredVolunteers` differ from what the crew-size rule engine suggested at save time; never
+  client-settable)
 - createdAt
 - updatedAt
 
 Shifts inherit organization scope through their event. Event/order/time lookup is indexed; database checks and service validation enforce a positive volunteer count and ordered times, while the service also keeps both timestamps on the event date.
+
+The crew-size suggestion (`GET /api/admin/{org}/events/{event_id}/shift-suggestion`) evaluates the
+organization's `CrewSizeRule` rows against the event's team text (`publicDescription` or `title`)
+with `concurrent_games=1`, since a `Shift` belongs to exactly one `Event` today — rules requiring
+more than one concurrent game never match yet; multi-game shift consolidation is a future, undecided
+contract. The suggestion is always a pre-fill, never silently applied.
 
 ### Volunteer
 

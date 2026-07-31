@@ -70,6 +70,19 @@ def test_email_defaults_use_in_memory_sender_path() -> None:
     assert settings.email_from_address
 
 
+@pytest.mark.parametrize("smtp_host", ["", "   \t"])
+def test_blank_smtp_host_is_normalized_to_none(smtp_host: str) -> None:
+    settings = Settings(app_env=AppEnv.DEVELOPMENT, smtp_host=smtp_host)
+
+    assert settings.smtp_host is None
+
+
+def test_configured_smtp_host_is_preserved() -> None:
+    settings = Settings(app_env=AppEnv.DEVELOPMENT, smtp_host="smtp.example.test")
+
+    assert settings.smtp_host == "smtp.example.test"
+
+
 def test_frontend_public_url_is_normalized_and_restricted_to_an_origin() -> None:
     assert Settings(frontend_public_url="https://crew.example.test/").frontend_public_url == (
         "https://crew.example.test"

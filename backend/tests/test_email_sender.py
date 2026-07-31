@@ -82,6 +82,15 @@ def test_factory_returns_in_memory_sender_in_test_without_smtp_host() -> None:
     assert isinstance(sender, InMemoryEmailSender)
 
 
+@pytest.mark.parametrize("smtp_host", ["", "   \t"])
+def test_factory_returns_in_memory_sender_for_blank_smtp_host(smtp_host: str) -> None:
+    settings = Settings(app_env=AppEnv.DEVELOPMENT, smtp_host=smtp_host)
+
+    sender = build_email_sender(settings)
+
+    assert isinstance(sender, InMemoryEmailSender)
+
+
 def test_factory_raises_in_production_without_smtp_host() -> None:
     settings = Settings(
         app_env=AppEnv.PRODUCTION,

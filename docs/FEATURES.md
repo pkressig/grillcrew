@@ -592,26 +592,38 @@ High.
 
 **Status**
 
-Phase 1 (Settings foundation) is merged on `main` (commit `b1599202940a2898aa299651fcbebcf16b47063b`):
-organization-scoped `HomeVenue` allowlist (soft-deactivatable, no hard delete), `CrewSizeRule`
-ordered rule table with a non-deletable default rule, and an editable `OrganizationSettings`
-surface (payout rate, signup rate limits, coordination contact label) behind a new ADMIN-only
-"Einstellungen" admin view.
+Phase 1 (Settings foundation) and Phase 2 (game-plan import) are merged on `main` (commits
+`b1599202940a2898aa299651fcbebcf16b47063b` and `3757d1cf11c93e96772bbaa064a803032b30f36b`):
+organization-scoped `HomeVenue` allowlist, ordered `CrewSizeRule` table, editable
+`OrganizationSettings`, `ImportBatch`/`ImportRow` staging with a 5-way diff engine
+(neu/geändert/verschoben/entfernt/unverändert), and the ADMIN-only "Einstellungen"/
+"Spielplan-Import" admin views.
 
-Phase 2 (game-plan import) is implemented locally and passes full checks, but is not yet
-committed/merged: `ImportBatch`/`ImportRow` staging tables, a pure xlsx parser for the
-association's Heimspielplan export (`app/services/game_plan_parser.py`), a 5-way diff engine
-(neu/geändert/verschoben/entfernt/unverändert) matched via `Spielnummer` or a team+date fallback
-key, venue filtering against the Phase 1 `HomeVenue` allowlist with per-row manual override, and a
-new ADMIN-only "Spielplan-Import" admin view (upload, grouped diff review, per-row include/grill-
-shift decisions, confirm). Confirming only ever writes `Event` rows for `NEU`/`GEAENDERT`
-rows — `VERSCHOBEN`/`ENTFERNT` rows are surfaced for manual follow-up and never auto-applied. See
-D-041 for the ratified product direction and `ai/incoming/claude-latest.md` for the implementation
-report.
+Phase 3 (shift crew-size suggestion) is implemented locally and passes full checks, but is not yet
+committed/merged: `Shift` gained `shift_type` (`GRILL`/`KIOSK`), `assignment_mode`
+(`OPEN_SIGNUP`/`FIXED_ASSIGNMENT`, both Kiosk-module preparation), `menu_type`, and
+`crew_suggestion_overridden`. `SettingsService.suggest_crew_size` evaluates the organization's
+crew-size rules against an event's team text; a new read-only
+`GET /events/{event_id}/shift-suggestion` endpoint lets the Planning shift-creation form offer a
+"Crew-Vorschlag übernehmen" pre-fill (menu + required griller count) that stays fully editable
+before submit, matching the "never silently applied" decision. `create_shift`/`update_shift`
+independently recompute the suggestion server-side to set `crew_suggestion_overridden` as
+bookkeeping. **This is the point at which VolunteerSignup becomes fully replaceable** — import,
+shift creation with a crew suggestion, and the existing open public signup flow now cover a full
+season end to end. See D-041 for the ratified product direction and `ai/incoming/claude-latest.md`
+for the implementation report.
 
-Phases 3-6 (shift generation wired to the crew-size suggestion engine, deferred
-work-record/child-assignment reconciliation, payout/coordination-time tracking and season-end
-export, Kiosk fixed-assignment module) are planned per D-041 but not yet implemented.
+All three phases were subsequently verified end-to-end against a local PostgreSQL instance and a
+real browser session using the association's actual `Spielbetrieb - Kiosk.xlsx` export (season
+2026/27, 171 rows): login, every admin surface, the settings/home-venue/crew-rule forms, the full
+import → diff → confirm flow (123 `Event` rows created), and crew-suggestion shift creation all work
+against real data. This verification surfaced and fixed two real-world parser gaps — `SpielTyp`
+prefix matching for verbose tournament labels, and "keine" as an additional Spielnummer placeholder
+alongside "Ohne" — documented in `docs/DATA_MODEL.md`'s `ImportRow` section.
+
+Phases 4-6 (deferred work-record/child-assignment reconciliation, payout/coordination-time
+tracking and season-end export, Kiosk fixed-assignment module) are planned per D-041 but not yet
+implemented.
 
 **Goal**
 
@@ -650,7 +662,8 @@ High (multi-phase).
 - `import_batch`, `import_row`, `event.kickoff_time`/`external_game_number`/`import_match_key`
   (Phase 2, implemented). `import_row.season_id` was added during implementation (not in the
   original design note) so `confirm()` never has to re-derive a season from sheet-tab text.
-- `shift.shift_type`/`assignment_mode`/`menu_type`/`crew_suggestion_overridden` (Phase 3, planned).
+- `shift.shift_type`/`assignment_mode`/`menu_type`/`crew_suggestion_overridden` (Phase 3,
+  implemented).
 - `work_record` (Phase 4), `payment`, `coordination_time_entry` (Phase 5) - all planned.
 
 **API impact**
@@ -662,7 +675,8 @@ High (multi-phase).
 - `POST /api/admin/{org}/imports` (multipart upload), `GET /api/admin/{org}/imports/{id}/rows`,
   `PATCH /api/admin/{org}/imports/{id}/rows/{row_id}`, `POST /api/admin/{org}/imports/{id}/confirm`
   (Phase 2, implemented, ADMIN-only).
-- Shift-generation crew-size suggestion endpoints (Phase 3, planned).
+- `GET /api/admin/{org}/events/{event_id}/shift-suggestion` (Phase 3, implemented, read-only,
+  ADMIN-or-KOORDINATION per the existing planning guard).
 
 **UI impact**
 
@@ -672,8 +686,11 @@ High (multi-phase).
 - New ADMIN-only "Spielplan-Import" admin view (implemented): club-year-scoped file upload, diff
   review grouped by classification (unchanged rows collapsed behind a disclosure), per-row
   include/grill-shift controls, verschoben-acknowledgement action, and a confirmation-gated
-  "Import übernehmen" action.
-- Shift-creation crew-size suggestion wiring (Phase 3, planned).
+  "Import übernehmen" action. Import review adds a classification-count stat row (reusing the new
+  shared `StatSummary` component, extracted from the Overview dashboard).
+- Shift-creation crew-size suggestion wiring (Phase 3, implemented): "Crew-Vorschlag übernehmen"
+  pre-fills menu/required-griller-count, fully editable before submit; a menu-type badge appears
+  on shift cards once set.
 
 ## Recommended Implementation Order
 

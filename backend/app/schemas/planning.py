@@ -9,11 +9,14 @@ from datetime import time as time_type
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.models.organization import MenuType
 from app.models.planning import (
     EventStatus,
     PlanningStatus,
     SeasonType,
+    ShiftAssignmentMode,
     ShiftStatus,
+    ShiftType,
     SignupOutcome,
     SignupStatus,
 )
@@ -151,6 +154,9 @@ class ShiftCreate(BaseModel):  # type: ignore[explicit-any]
     internal_note: str | None = None
     status: ShiftStatus = ShiftStatus.OPEN
     sort_order: int = 0
+    shift_type: ShiftType = ShiftType.GRILL
+    assignment_mode: ShiftAssignmentMode = ShiftAssignmentMode.OPEN_SIGNUP
+    menu_type: MenuType | None = None
 
     @model_validator(mode="after")
     def validate_time_range(self) -> ShiftCreate:
@@ -168,10 +174,21 @@ class ShiftUpdate(BaseModel):  # type: ignore[explicit-any]
     internal_note: str | None = None
     status: ShiftStatus | None = None
     sort_order: int | None = None
+    shift_type: ShiftType | None = None
+    assignment_mode: ShiftAssignmentMode | None = None
+    menu_type: MenuType | None = None
 
     @model_validator(mode="after")
     def reject_null_required_fields(self) -> ShiftUpdate:
-        required = {"starts_at", "ends_at", "required_volunteers", "status", "sort_order"}
+        required = {
+            "starts_at",
+            "ends_at",
+            "required_volunteers",
+            "status",
+            "sort_order",
+            "shift_type",
+            "assignment_mode",
+        }
         if any(name in self.model_fields_set and getattr(self, name) is None for name in required):
             raise ValueError("required shift fields cannot be null")
         return self
@@ -188,8 +205,18 @@ class ShiftResponse(BaseModel):  # type: ignore[explicit-any]
     internal_note: str | None
     status: ShiftStatus
     sort_order: int
+    shift_type: ShiftType
+    assignment_mode: ShiftAssignmentMode
+    menu_type: MenuType | None
+    crew_suggestion_overridden: bool
     created_at: datetime
     updated_at: datetime
+
+
+class ShiftCrewSuggestion(BaseModel):  # type: ignore[explicit-any]
+    menu_type: MenuType | None
+    required_volunteers: int | None
+    matched_rule_id: uuid.UUID | None
 
 
 class AdminSignupResponse(BaseModel):  # type: ignore[explicit-any]

@@ -26,6 +26,27 @@ SPIEL_TYP_MAP: dict[str, SpielTyp] = {
     "turnier": SpielTyp.TURNIER,
 }
 
+# The association's export sometimes appends a free-text tournament name to "Turnier"
+# (e.g. "Turnier Junior*innen E-F-G / Brack play more football"), so matching only the
+# known prefix (not the full cell text) keeps those rows importable instead of aborting
+# the whole batch on an otherwise-recognized SpielTyp.
+_SPIEL_TYP_PREFIX_PATTERN = re.compile(
+    r"^(" + "|".join(re.escape(key) for key in SPIEL_TYP_MAP) + r")(?=$|[^a-zA-ZäöüÄÖÜß])",
+    re.IGNORECASE,
+)
+
+
+def _resolve_spiel_typ(raw: str) -> SpielTyp | None:
+    match = _SPIEL_TYP_PREFIX_PATTERN.match(raw.strip())
+    if match is None:
+        return None
+    return SPIEL_TYP_MAP[match.group(1).casefold()]
+
+
+# The association's export uses "Ohne" for games without an official number, but the
+# club's own Kiosk/Grillplan variant of the same export uses "keine" for the same meaning.
+_NO_SPIELNUMMER_PLACEHOLDERS = {"ohne", "keine"}
+
 SHEET_ROUND_PATTERN = re.compile(r"^\s*(HR|RR)\b", re.IGNORECASE)
 SHEET_ROUND_SEASON_TYPE: dict[str, SeasonType] = {"HR": SeasonType.AUTUMN, "RR": SeasonType.SPRING}
 
@@ -126,7 +147,7 @@ def _parse_row(sheet_tab: str, columns: dict[str, int], row: object) -> ParsedRo
         return None
 
     spiel_typ_raw = str(value("SpielTyp") or "").strip()
-    spiel_typ = SPIEL_TYP_MAP.get(spiel_typ_raw.casefold())
+    spiel_typ = _resolve_spiel_typ(spiel_typ_raw)
     if spiel_typ is None:
         raise GamePlanParseError(f"unbekannter SpielTyp '{spiel_typ_raw}' in Blatt '{sheet_tab}'")
 
@@ -141,7 +162,7 @@ def _parse_row(sheet_tab: str, columns: dict[str, int], row: object) -> ParsedRo
     spielnummer: str | None = None
     if raw_number is not None:
         text_number = str(raw_number).strip()
-        if text_number and text_number.casefold() != "ohne":
+        if text_number and text_number.casefold() not in _NO_SPIELNUMMER_PLACEHOLDERS:
             spielnummer = text_number
 
     teams = str(value("Teams") or "").strip()

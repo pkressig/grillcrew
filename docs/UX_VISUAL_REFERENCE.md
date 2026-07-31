@@ -43,7 +43,7 @@ Below cards: next events, attendance handlungsbedarf, and one clear planning act
 
 Reference: `docs/design-reference/admin-planning.png`
 
-Agenda-first layout. Attendance handlungsbedarf appears above the agenda. Events are compact cards with date tile, title, location, status badge, occupancy summary, and native disclosure. Planungsperioden occupy the secondary desktop column and stack below on mobile.
+Agenda-first layout. Attendance handlungsbedarf appears above the agenda. Events are compact cards with date tile, title, location, status badge, occupancy summary, and native disclosure. Planungsperioden occupy the secondary desktop column and stack below on mobile. The shift-creation form (D-041 Phase 3) offers a "Crew-Vorschlag übernehmen" action that pre-fills menu/required-griller-count from the organization's crew-size rules — always a suggestion, never silently applied — and shift cards show a menu-type badge once set.
 
 ### 3. Familien — implemented
 
@@ -84,6 +84,9 @@ Reference: D-041. A dedicated `/{org}/admin/settings` route, visible in navigati
 - PageHeader: title, description, action.
 - Card: surface, border, elevation, optional header/body.
 - Badge: success/warning/error/neutral with visible text.
+- StatSummary (`components/ui/stat-summary.tsx`): bordered stat tile — icon (primary-colored),
+  label, bold number. Shared between the Overview dashboard and the Import review's
+  classification-count row; only ever backed by real counts from already-loaded data.
 - DateTile: decorative date plus accessible full date in parent label.
 - EmptyState: explain what is empty and give one next action.
 - FeedbackMessage: alert/status with token-driven styling.

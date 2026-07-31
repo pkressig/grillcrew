@@ -861,10 +861,73 @@ describe("planning admin", () => {
             internal_note: null,
             status: "OPEN",
             sort_order: 0,
+            shift_type: "GRILL",
+            assignment_mode: "OPEN_SIGNUP",
+            menu_type: null,
           }),
         }),
       ),
     );
+  });
+
+  it("applies a crew-size suggestion and still allows editing it before submit", async () => {
+    document.cookie = "gc_csrf=shift-token";
+    const baseFetch = planningFetch("KOORDINATION", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shift-suggestion"))
+        return Response.json({
+          menu_type: "FRIES_NUGGETS_BURGER",
+          required_volunteers: 2,
+          matched_rule_id: "rule-1",
+        });
+      return baseFetch(input, init);
+    });
+    renderAdmin("KOORDINATION", fetchMock);
+    await screen.findByText("Sommerfest");
+    openShiftForm("Sommerfest");
+
+    fireEvent.click(screen.getByRole("button", { name: "Crew-Vorschlag übernehmen" }));
+    await screen.findByText(/Pommes\/Chicken Nuggets \+ Burger · 2 Griller/);
+    expect(screen.getByLabelText("Menü")).toHaveValue("FRIES_NUGGETS_BURGER");
+    expect(screen.getByLabelText("Benötigte Helfende")).toHaveValue(2);
+
+    fireEvent.change(screen.getByLabelText("Benötigte Helfende"), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText("Beginn"), {
+      target: { value: "2026-09-12T18:00" },
+    });
+    fireEvent.change(screen.getByLabelText("Ende"), {
+      target: { value: "2026-09-12T20:00" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Einsatz für Sommerfest erstellen" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/events\/event-1\/shifts$/),
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining(`"menu_type":"FRIES_NUGGETS_BURGER"`),
+        }),
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/events\/event-1\/shifts$/),
+      expect.objectContaining({ body: expect.stringContaining(`"required_volunteers":5`) }),
+    );
+  });
+
+  it("shows a message when no crew-size rule matches the suggestion request", async () => {
+    const baseFetch = planningFetch("KOORDINATION", false, [season], true);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-1/shift-suggestion"))
+        return Response.json({ menu_type: null, required_volunteers: null, matched_rule_id: null });
+      return baseFetch(input, init);
+    });
+    renderAdmin("KOORDINATION", fetchMock);
+    await screen.findByText("Sommerfest");
+    openShiftForm("Sommerfest");
+
+    fireEvent.click(screen.getByRole("button", { name: "Crew-Vorschlag übernehmen" }));
+    await screen.findByText("Keine passende Crew-Regel gefunden — bitte manuell erfassen.");
   });
 
   it("preserves event form input after a failed submission", async () => {

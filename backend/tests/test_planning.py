@@ -16,7 +16,7 @@ from app.core.security.csrf import CSRF_HEADER_NAME, derive_csrf_secret, generat
 from app.db.session import get_db
 from app.main import app
 from app.models.identity import AuditEvent
-from app.models.organization import Organization
+from app.models.organization import CrewSizeRule, MenuType, Organization
 from app.models.planning import (
     ClubYear,
     Event,
@@ -25,7 +25,9 @@ from app.models.planning import (
     Season,
     SeasonType,
     Shift,
+    ShiftAssignmentMode,
     ShiftStatus,
+    ShiftType,
     SignupOutcome,
     SignupStatus,
 )
@@ -475,6 +477,10 @@ def test_admin_shift_response_includes_only_active_contact_details_in_stable_ord
             internal_note=None,
             status=ShiftStatus.OPEN,
             sort_order=0,
+            shift_type=ShiftType.GRILL,
+            assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
+            menu_type=None,
+            crew_suggestion_overridden=False,
             created_at=now,
             updated_at=now,
             signups=[active_signups[0], cancelled, active_signups[1]],
@@ -602,3 +608,112 @@ class _SignupDb:
 
     def refresh(self, _item: object) -> None:
         self.refreshes += 1
+
+
+# -- Crew-size suggestion --------------------------------------------------------
+
+
+class _EventAndRulesDb:
+    def __init__(self, event: Event | None, rules: list[CrewSizeRule]) -> None:
+        self.event = event
+        self.rules = rules
+
+    def scalar(self, _statement: object) -> Event | None:
+        return self.event
+
+    def scalars(self, _statement: object) -> list[CrewSizeRule]:
+        return self.rules
+
+
+def _crew_rule(**overrides: object) -> CrewSizeRule:
+    defaults: dict[str, object] = {
+        "id": uuid4(),
+        "organization_id": uuid4(),
+        "sort_order": 0,
+        "pattern": "Junioren",
+        "menu_type": MenuType.FRIES_NUGGETS,
+        "required_griller_count": 1,
+        "min_games_per_shift": 1,
+        "is_active": True,
+    }
+    defaults.update(overrides)
+    return CrewSizeRule(**defaults)
+
+
+def _event(**overrides: object) -> Event:
+    defaults: dict[str, object] = {
+        "id": uuid4(),
+        "season_id": uuid4(),
+        "title": "FCTC Junioren D-9c",
+        "date": date(2026, 8, 15),
+        "location": "St. Martin, Cazis",
+        "event_type": "Meisterschaft",
+        "public_description": "Team Mittelbünden c - FC Orion Chur a",
+        "status": EventStatus.DRAFT,
+    }
+    defaults.update(overrides)
+    return Event(**defaults)
+
+
+def test_is_crew_suggestion_overridden_false_when_matches_suggestion() -> None:
+    rule = _crew_rule(pattern="Junioren", required_griller_count=1)
+    db = _EventAndRulesDb(None, [rule])
+    service = PlanningService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    event = _event(public_description="Junioren D-9c Team A - Team B")
+    overridden = service._is_crew_suggestion_overridden(event, MenuType.FRIES_NUGGETS, 1)
+    assert overridden is False
+
+
+def test_is_crew_suggestion_overridden_true_when_count_differs() -> None:
+    rule = _crew_rule(pattern="Junioren", required_griller_count=1)
+    db = _EventAndRulesDb(None, [rule])
+    service = PlanningService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    event = _event(public_description="Junioren D-9c Team A - Team B")
+    overridden = service._is_crew_suggestion_overridden(event, MenuType.FRIES_NUGGETS, 2)
+    assert overridden is True
+
+
+def test_is_crew_suggestion_overridden_true_when_menu_type_set_without_a_suggestion() -> None:
+    db = _EventAndRulesDb(None, [])
+    service = PlanningService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    event = _event()
+    overridden = service._is_crew_suggestion_overridden(event, MenuType.FRIES_NUGGETS, 2)
+    assert overridden is True
+
+
+def test_is_crew_suggestion_overridden_false_without_suggestion_or_menu_type() -> None:
+    db = _EventAndRulesDb(None, [])
+    service = PlanningService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    event = _event()
+    overridden = service._is_crew_suggestion_overridden(event, None, 2)
+    assert overridden is False
+
+
+def test_suggest_shift_crew_returns_matched_rule() -> None:
+    rule = _crew_rule(pattern="Junioren")
+    event = _event(public_description="Junioren D-9c Team A - Team B")
+    db = _EventAndRulesDb(event, [rule])
+    service = PlanningService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    assert service.suggest_shift_crew(event.id) is rule
+
+
+def test_suggest_shift_crew_raises_not_found_for_missing_event() -> None:
+    db = _EventAndRulesDb(None, [])
+    service = PlanningService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    with pytest.raises(PlanningNotFoundError):
+        service.suggest_shift_crew(uuid4())
+
+
+def test_shift_suggestion_route_is_forbidden_for_wrong_tenant_slug(client: TestClient) -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
+    current = cast(
+        CurrentStaffMembership,
+        SimpleNamespace(organization=organization, user=SimpleNamespace(id=uuid4())),
+    )
+    app.dependency_overrides[planning.manage] = lambda: current
+    app.dependency_overrides[get_db] = lambda: _ListDb()
+    try:
+        response = client.get(f"/api/admin/tenant-b/events/{uuid4()}/shift-suggestion")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 403

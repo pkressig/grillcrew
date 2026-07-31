@@ -22,6 +22,9 @@ export type ClubYearInput = Omit<ClubYear, "id">;
 export type SeasonInput = Omit<Season, "id" | "club_year_id">;
 export type EventStatus = "DRAFT" | "PUBLISHED" | "POSTPONED" | "CANCELLED" | "COMPLETED";
 export type ShiftStatus = "OPEN" | "CLOSED" | "CANCELLED";
+export type ShiftType = "GRILL" | "KIOSK";
+export type ShiftAssignmentMode = "OPEN_SIGNUP" | "FIXED_ASSIGNMENT";
+export type MenuType = "FRIES_NUGGETS" | "FRIES_NUGGETS_BURGER";
 export type SignupOutcome =
   "OPEN" | "ATTENDED" | "EXCUSED_CANCELLED" | "LATE_CANCELLED" | "NO_SHOW" | "SUBSTITUTE_ORGANIZED";
 export type PlanningEvent = {
@@ -49,6 +52,15 @@ export type Shift = {
   internal_note: string | null;
   status: ShiftStatus;
   sort_order: number;
+  shift_type: ShiftType;
+  assignment_mode: ShiftAssignmentMode;
+  menu_type: MenuType | null;
+  crew_suggestion_overridden: boolean;
+};
+export type ShiftCrewSuggestion = {
+  menu_type: MenuType | null;
+  required_volunteers: number | null;
+  matched_rule_id: string | null;
 };
 export type AdminSignup = {
   id: string;
@@ -63,7 +75,12 @@ export type AdminSignup = {
 export type EventInput = Omit<PlanningEvent, "id" | "season_id" | "published_at">;
 export type ShiftInput = Omit<
   Shift,
-  "id" | "event_id" | "occupied_volunteers" | "open_places" | "signups"
+  | "id"
+  | "event_id"
+  | "occupied_volunteers"
+  | "open_places"
+  | "signups"
+  | "crew_suggestion_overridden"
 >;
 
 async function request<T>(
@@ -137,6 +154,12 @@ export const loadShifts = (org: string, eventId: string) =>
     `/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}/shifts`,
     undefined,
     "Die Einsätze konnten nicht geladen werden.",
+  );
+export const loadShiftCrewSuggestion = (org: string, eventId: string) =>
+  request<ShiftCrewSuggestion>(
+    `/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}/shift-suggestion`,
+    undefined,
+    "Der Crew-Vorschlag konnte nicht geladen werden.",
   );
 export const createShift = (org: string, eventId: string, payload: ShiftInput) =>
   request<Shift>(

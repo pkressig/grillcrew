@@ -1,10 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { CalendarClock, Pencil, PlusCircle, Trash2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { StatSummary } from "@/components/ui/stat-summary";
 import {
   confirmImportBatch,
   loadImportRows,
@@ -51,6 +53,19 @@ const CLASSIFICATION_ORDER: ImportRowClassification[] = [
   "ENTFERNT",
   "UNVERAENDERT",
 ];
+const CLASSIFICATION_STAT_ORDER: ImportRowClassification[] = [
+  "NEU",
+  "GEAENDERT",
+  "VERSCHOBEN",
+  "ENTFERNT",
+];
+const classificationIcons: Record<ImportRowClassification, ReactNode> = {
+  NEU: <PlusCircle aria-hidden="true" />,
+  GEAENDERT: <Pencil aria-hidden="true" />,
+  VERSCHOBEN: <CalendarClock aria-hidden="true" />,
+  ENTFERNT: <Trash2 aria-hidden="true" />,
+  UNVERAENDERT: <PlusCircle aria-hidden="true" />,
+};
 
 function isOverridden(row: ImportRow): boolean {
   const defaultDecision: ImportRowDecision = row.is_home_venue ? "INCLUDE" : "EXCLUDE";
@@ -272,6 +287,19 @@ function ImportReview({
           </div>
         </CardBody>
       </Card>
+      <dl
+        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+        aria-label="Übersicht nach Klassifikation"
+      >
+        {CLASSIFICATION_STAT_ORDER.map((classification) => (
+          <StatSummary
+            key={classification}
+            label={classificationLabels[classification]}
+            value={grouped.get(classification)?.length ?? 0}
+            icon={classificationIcons[classification]}
+          />
+        ))}
+      </dl>
       {error ? (
         <p
           className="rounded-md border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error"

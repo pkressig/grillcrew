@@ -8,6 +8,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
@@ -25,6 +26,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.organization import MenuType
 
 if TYPE_CHECKING:
     from app.models.identity import User
@@ -114,6 +116,16 @@ class GrillShiftDecision(StrEnum):
     PENDING = "PENDING"
     CREATE_SHIFT = "CREATE_SHIFT"
     NO_SHIFT = "NO_SHIFT"
+
+
+class ShiftType(StrEnum):
+    GRILL = "GRILL"
+    KIOSK = "KIOSK"
+
+
+class ShiftAssignmentMode(StrEnum):
+    OPEN_SIGNUP = "OPEN_SIGNUP"
+    FIXED_ASSIGNMENT = "FIXED_ASSIGNMENT"
 
 
 class ClubYear(Base):
@@ -250,6 +262,22 @@ class Shift(Base):
         server_default=ShiftStatus.OPEN.value,
     )
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    shift_type: Mapped[ShiftType] = mapped_column(
+        Enum(ShiftType, name="shift_type"),
+        nullable=False,
+        server_default=ShiftType.GRILL.value,
+    )
+    assignment_mode: Mapped[ShiftAssignmentMode] = mapped_column(
+        Enum(ShiftAssignmentMode, name="shift_assignment_mode"),
+        nullable=False,
+        server_default=ShiftAssignmentMode.OPEN_SIGNUP.value,
+    )
+    menu_type: Mapped[MenuType | None] = mapped_column(
+        Enum(MenuType, name="menu_type", create_type=False), nullable=True
+    )
+    crew_suggestion_overridden: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

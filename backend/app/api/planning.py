@@ -28,6 +28,7 @@ from app.schemas.planning import (
     SeasonResponse,
     SeasonUpdate,
     ShiftCreate,
+    ShiftCrewSuggestion,
     ShiftResponse,
     ShiftUpdate,
     SignupAttendanceUpdate,
@@ -268,6 +269,26 @@ def update_event(
         )
     except (PlanningNotFoundError, PlanningValidationError) as error:
         raise _translate(error) from None
+
+
+@router.get("/events/{event_id}/shift-suggestion", response_model=ShiftCrewSuggestion)
+def get_shift_crew_suggestion(
+    organization_slug: str,
+    event_id: uuid.UUID,
+    current: CurrentStaffMembership = Depends(manage),
+    db: Session = Depends(get_db),
+) -> ShiftCrewSuggestion:
+    try:
+        rule = _service(organization_slug, current, db).suggest_shift_crew(event_id)
+    except PlanningNotFoundError as error:
+        raise _translate(error) from None
+    if rule is None:
+        return ShiftCrewSuggestion(menu_type=None, required_volunteers=None, matched_rule_id=None)
+    return ShiftCrewSuggestion(
+        menu_type=rule.menu_type,
+        required_volunteers=rule.required_griller_count,
+        matched_rule_id=rule.id,
+    )
 
 
 @router.get("/events/{event_id}/shifts", response_model=list[AdminShiftResponse])

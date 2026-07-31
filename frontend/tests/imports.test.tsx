@@ -195,6 +195,10 @@ describe("import upload and diff review", () => {
     expect(screen.getByText("Neu (1)")).toBeInTheDocument();
     expect(screen.getByText("Verschoben (1)")).toBeInTheDocument();
     expect(screen.getAllByText(/FC Thusis\/Cazis 1 - FC Lusitanos/).length).toBeGreaterThan(0);
+
+    const statSummary = screen.getByLabelText("Übersicht nach Klassifikation");
+    expect(within(statSummary).getByText("Neu")).toBeInTheDocument();
+    expect(within(statSummary).getByText("Entfernt")).toBeInTheDocument();
   });
 
   it("marks a verschoben row as acknowledged", async () => {

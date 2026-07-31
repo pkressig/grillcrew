@@ -119,6 +119,50 @@ def test_trainingsspiele_maps_to_testspiel() -> None:
     assert rows[0].spiel_typ == SpielTyp.TESTSPIEL
 
 
+def test_turnier_with_free_text_suffix_maps_to_turnier() -> None:
+    content = _workbook(
+        {
+            "HR 2026 2027": [
+                [
+                    "Turnier Junior*innen E-F-G / Brack play more football",
+                    "Turnier",
+                    "Ohne",
+                    "Sa",
+                    date(2026, 8, 8),
+                    time(17, 0),
+                    "A - B",
+                    "St. Martin, Cazis",
+                    None,
+                ]
+            ]
+        }
+    )
+    rows = parse_game_plan(content)[0].rows
+    assert rows[0].spiel_typ == SpielTyp.TURNIER
+
+
+def test_spielnummer_keine_becomes_none() -> None:
+    content = _workbook(
+        {
+            "HR 2026 2027": [
+                [
+                    "Turnier",
+                    "Turnier",
+                    "keine",
+                    "So",
+                    date(2026, 4, 12),
+                    time(9, 0),
+                    "Organisator: FC Thusis/Cazis",
+                    "St. Martin, Cazis - Platz 1",
+                    None,
+                ]
+            ]
+        }
+    )
+    rows = parse_game_plan(content)[0].rows
+    assert rows[0].spielnummer is None
+
+
 def test_blank_row_without_date_is_skipped() -> None:
     content = _workbook(
         {

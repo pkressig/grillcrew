@@ -84,6 +84,14 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
             return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
 
+    @field_validator("smtp_host")
+    @classmethod
+    def normalize_smtp_host(cls, value: str | None) -> str | None:
+        """Treat blank environment values as an unconfigured SMTP host."""
+        if value is not None and not value.strip():
+            return None
+        return value
+
     @field_validator("frontend_public_url")
     @classmethod
     def validate_frontend_public_url(cls, value: str) -> str:

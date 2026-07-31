@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.identity import AuditEvent
+from app.models.organization import CrewSizeRule, MenuType
 from app.models.planning import (
     ClubYear,
     Event,
@@ -28,6 +29,7 @@ from app.schemas.planning import (
     ShiftCreate,
     ShiftUpdate,
 )
+from app.services.settings import SettingsService
 
 TRANSITIONS = {
     PlanningStatus.DRAFT: {PlanningStatus.ACTIVE, PlanningStatus.CLOSED, PlanningStatus.ARCHIVED},
@@ -226,6 +228,9 @@ class PlanningService:
         event = self._get_event(event_id)
         self._validate_shift_times(payload.starts_at, payload.ends_at, event.date)
         item = Shift(event_id=event.id, **payload.model_dump())
+        item.crew_suggestion_overridden = self._is_crew_suggestion_overridden(
+            event, item.menu_type, item.required_volunteers
+        )
         self.db.add(item)
         self.db.commit()
         self.db.refresh(item)
@@ -239,9 +244,31 @@ class PlanningService:
         self._validate_shift_times(starts_at, ends_at, item.event.date)
         for key, value in values.items():
             setattr(item, key, value)
+        if "menu_type" in values or "required_volunteers" in values:
+            item.crew_suggestion_overridden = self._is_crew_suggestion_overridden(
+                item.event, item.menu_type, item.required_volunteers
+            )
         self.db.commit()
         self.db.refresh(item)
         return item
+
+    def suggest_shift_crew(self, event_id: uuid.UUID) -> CrewSizeRule | None:
+        """Return the matched crew-size rule for the event's team text, or `None`."""
+        event = self._get_event(event_id)
+        team_text = event.public_description or event.title
+        return SettingsService(self.db, self.organization_id).suggest_crew_size(team_text)
+
+    def _is_crew_suggestion_overridden(
+        self, event: Event, menu_type: MenuType | None, required_volunteers: int
+    ) -> bool:
+        team_text = event.public_description or event.title
+        suggestion = SettingsService(self.db, self.organization_id).suggest_crew_size(team_text)
+        if suggestion is None:
+            return menu_type is not None
+        return (
+            menu_type != suggestion.menu_type
+            or required_volunteers != suggestion.required_griller_count
+        )
 
     def cancel_signup(self, signup_id: uuid.UUID, now: datetime | None = None) -> Shift:
         signup = self.db.scalar(
