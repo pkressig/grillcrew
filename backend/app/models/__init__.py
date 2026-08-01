@@ -1,5 +1,6 @@
 """Alle ORM-Modelle importieren, damit Alembic sie in Base.metadata findet."""
 
+from app.models.coordination_time import CoordinationTimeRecord
 from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStatus
 from app.models.identity import (
     AuditEvent,
@@ -51,6 +52,7 @@ __all__ = [
     "AuditEvent",
     "ClubYear",
     "CompensationType",
+    "CoordinationTimeRecord",
     "CrewSizeRule",
     "Event",
     "EventStatus",

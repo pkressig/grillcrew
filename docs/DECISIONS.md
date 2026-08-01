@@ -226,9 +226,15 @@ kaufmännisch gerundet (BR-003/D-028) aus dem aktuellen Auszahlungssatz und verf
 `payoutStatus` (`OPEN`/`APPROVED`/`PAID`, nur ADMIN darf weiterschalten) sowie einen manuellen
 "Unterschrift erhalten"-Vermerk (Zeitstempel, bestätigende Person) statt einer digitalen
 Unterschrift, gemäss Punkt 8. Die Anwesenheits-Admin-Ansicht zeigt dies als "Nachträgliche
-Zuordnung" pro abgeschlossenem Eintrag; öffentliche Seiten bleiben unverändert. Phasen 5-6
-(Koordinationszeit/Auszahlungsfreigabe/Saisonreport, Kiosk-Modul) sind geplant, aber noch nicht
-umgesetzt.
+Zuordnung" pro abgeschlossenem Eintrag; öffentliche Seiten bleiben unverändert. Phase 4B
+(Koordinationszeit) ist lokal implementiert. Saisonreport und Kiosk-Modul bleiben spaetere Phasen.
+
+Phase 4B ergaenzt Koordinationszeit als separaten, privaten ADMIN-Datensatz ohne Bezug zu Signup,
+Shift, Volunteer oder WorkRecord. Datum, positive Dauer, eigener Stundensatz in Rappen und Notiz
+werden waehrend `OPEN` gepflegt. Der berechnete Betrag wird pro Datensatz kaufmaennisch auf einen
+Rappen gerundet; der eingegebene Satz ist der persistierte Snapshot und wird zusammen mit den
+Finanzfeldern ab `APPROVED` unveraenderlich. Status folgen `OPEN -> APPROVED -> PAID`. Die
+Papierunterschrift wird nur als manueller Empfangsvermerk mit optionaler Notiz dokumentiert.
 
 **Non-Goals (vorerst):** automatische Schichtverschiebung, digitale Unterschrift, KI-gestuetzte
 Besetzungsvorschlaege (Gemini), WhatsApp-Versandintegration, Sollstunden-Materialisierung

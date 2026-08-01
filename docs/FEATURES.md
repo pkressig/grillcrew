@@ -728,3 +728,11 @@ High (multi-phase).
 15. F015 Grill Game-Plan Import and Crew-Size Configuration
 
 F001 comes first because every future feature depends on a trustworthy organization context, database-driven branding, and tenant-safe data model. Authentication starts only after the tenant boundary exists.
+# F015 Phase 4B - Koordinationszeit
+
+- ADMIN kann private Koordinationszeit in den Einstellungen erfassen, bearbeiten und auf
+  `OPEN`, `APPROVED`, `PAID` fortschalten.
+- Der eigene Stundensatz und der pro Eintrag gerundete Betrag bleiben getrennt von Helfer-
+  WorkRecords, Anmeldungen, Kiosk-Zuteilungen und oeffentlichen Kennzahlen.
+- Schreibzugriffe sind tenant-gebunden und durch ADMIN-Rolle, Origin/Host-Pruefung und CSRF
+  geschuetzt; unveraenderte Wiederholungen erzeugen weder Commit noch Audit-Ereignis.

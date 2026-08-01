@@ -75,6 +75,22 @@ function settingsFetch(role: StaffRole) {
     const method = init?.method ?? "GET";
     if (url.endsWith("/api/auth/me")) return Response.json(session(role));
     if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "csrf-memory" });
+    if (url.endsWith("/coordination-time-records") && method === "GET") return Response.json([]);
+    if (url.endsWith("/coordination-time-records") && method === "POST")
+      return Response.json(
+        {
+          id: "coord-1",
+          payout_amount_minor: 1500,
+          payout_status: "OPEN",
+          signature_received_at: null,
+          signature_received_by_user_id: null,
+          signature_note: null,
+          created_at: "2026-08-01T10:00:00Z",
+          updated_at: "2026-08-01T10:00:00Z",
+          ...JSON.parse(String(init?.body)),
+        },
+        { status: 201 },
+      );
     if (url.endsWith("/settings/organization-settings") && method === "GET")
       return Response.json(organizationSettings);
     if (url.endsWith("/settings/organization-settings") && method === "PATCH")
@@ -170,6 +186,28 @@ describe("organization settings form", () => {
     expect(
       await screen.findByText("Organisationseinstellungen wurden gespeichert."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("coordination time", () => {
+  it("shows an honest empty state and creates a separate ADMIN record", async () => {
+    const fetchMock = renderAdmin("ADMIN");
+    expect(await screen.findByText("Noch keine Koordinationszeiten erfasst.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Datum"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("Dauer (Minuten)"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("Eigener Stundensatz (Rappen)"), {
+      target: { value: "900" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Koordinationszeit erfassen" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith("/coordination-time-records") &&
+            (init as RequestInit | undefined)?.method === "POST",
+        ),
+      ).toBe(true),
+    );
   });
 });
 

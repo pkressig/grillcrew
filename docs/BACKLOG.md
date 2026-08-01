@@ -59,3 +59,8 @@
   256-bit random value (`secrets.token_urlsafe(32)`), making brute-force guessing infeasible regardless
   of rate limiting, and D-038's ratified wording names "password-reset request," not submission, as the
   action requiring its own limit. Add a `password_reset_submit_per_ip` limit if this needs revisiting.
+# Nach Phase 4B
+
+- Saisonend-Export/Report fuer Koordinationszeit und Helferarbeit bleibt eine eigene spaetere Phase.
+- Digitale Unterschriften bleiben ausgeschlossen; Phase 4B speichert nur einen manuellen
+  Papier-Unterschrift-erhalten-Vermerk.

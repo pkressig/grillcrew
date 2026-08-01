@@ -21,6 +21,13 @@ import {
   type OrganizationSettings,
 } from "@/lib/settings";
 import { cn } from "@/lib/utils";
+import {
+  createCoordinationTime,
+  loadCoordinationTime,
+  updateCoordinationTime,
+  updateCoordinationTimeStatus,
+  type CoordinationTimeRecord,
+} from "@/lib/coordination-time";
 
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
 const menuTypeLabels: Record<MenuType, string> = {
@@ -37,9 +44,233 @@ export function SettingsPanel({ org }: Readonly<{ org: string }>) {
         description="Heimplätze, Crew-Regeln und Organisationseinstellungen verwalten."
       />
       <OrganizationSettingsSection org={org} />
+      <CoordinationTimeSection org={org} />
       <HomeVenuesSection org={org} />
       <CrewSizeRulesSection org={org} />
     </section>
+  );
+}
+
+const payoutLabels = { OPEN: "Offen", APPROVED: "Freigegeben", PAID: "Ausbezahlt" } as const;
+
+function CoordinationTimeSection({ org }: Readonly<{ org: string }>) {
+  const [records, setRecords] = useState<CoordinationTimeRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const refresh = useCallback(async () => {
+    try {
+      setRecords(await loadCoordinationTime(org));
+      setError(null);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Die Koordinationszeiten konnten nicht geladen werden.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [org]);
+  useEffect(() => void refresh(), [refresh]);
+
+  async function save(event: FormEvent<HTMLFormElement>, record?: CoordinationTimeRecord) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const payload = {
+      work_date: String(data.get("work_date")),
+      duration_minutes: Number(data.get("duration_minutes")),
+      hourly_rate_minor: Number(data.get("hourly_rate_minor")),
+      note: String(data.get("note") ?? "").trim() || null,
+    };
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      if (record) await updateCoordinationTime(org, record.id, payload);
+      else {
+        await createCoordinationTime(org, payload);
+        form.reset();
+      }
+      setSuccess(
+        record ? "Koordinationszeit wurde aktualisiert." : "Koordinationszeit wurde erfasst.",
+      );
+      await refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Die Koordinationszeit konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function advance(record: CoordinationTimeRecord, form: HTMLFormElement) {
+    const next = record.payout_status === "OPEN" ? "APPROVED" : "PAID";
+    const data = new FormData(form);
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await updateCoordinationTimeStatus(org, record.id, {
+        payout_status: next,
+        mark_signature_received: Boolean(data.get("signature_received")),
+        signature_note: String(data.get("signature_note") ?? "").trim() || null,
+      });
+      setSuccess("Auszahlungsstatus wurde aktualisiert.");
+      await refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Der Status konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const fields = (record?: CoordinationTimeRecord) => (
+    <>
+      <label className="grid gap-1" htmlFor={`coord-date-${record?.id ?? "new"}`}>
+        Datum
+        <input
+          className={control}
+          id={`coord-date-${record?.id ?? "new"}`}
+          name="work_date"
+          type="date"
+          required
+          disabled={busy || (record && record.payout_status !== "OPEN")}
+          defaultValue={record?.work_date}
+        />
+      </label>
+      <label className="grid gap-1" htmlFor={`coord-duration-${record?.id ?? "new"}`}>
+        Dauer (Minuten)
+        <input
+          className={control}
+          id={`coord-duration-${record?.id ?? "new"}`}
+          name="duration_minutes"
+          type="number"
+          min={1}
+          max={1440}
+          required
+          disabled={busy || (record && record.payout_status !== "OPEN")}
+          defaultValue={record?.duration_minutes}
+        />
+      </label>
+      <label className="grid gap-1" htmlFor={`coord-rate-${record?.id ?? "new"}`}>
+        Eigener Stundensatz (Rappen)
+        <input
+          className={control}
+          id={`coord-rate-${record?.id ?? "new"}`}
+          name="hourly_rate_minor"
+          type="number"
+          min={0}
+          required
+          disabled={busy || (record && record.payout_status !== "OPEN")}
+          defaultValue={record?.hourly_rate_minor}
+        />
+      </label>
+      <label className="grid gap-1 sm:col-span-3" htmlFor={`coord-note-${record?.id ?? "new"}`}>
+        Notiz
+        <textarea
+          className={control}
+          id={`coord-note-${record?.id ?? "new"}`}
+          name="note"
+          maxLength={2000}
+          disabled={busy || (record && record.payout_status !== "OPEN")}
+          defaultValue={record?.note ?? ""}
+        />
+      </label>
+    </>
+  );
+
+  return (
+    <Card className="border-border/80" aria-labelledby="coordination-time-heading">
+      <CardBody className="grid gap-4">
+        <div>
+          <h2 id="coordination-time-heading" className="text-xl font-semibold">
+            Koordinationszeit
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Private ADMIN-Erfassung, getrennt von Helfereinsätzen und Anmeldungen. Beträge werden
+            kaufmännisch auf Rappen gerundet; der eingegebene Satz wird gespeichert und ab Freigabe
+            gesperrt.
+          </p>
+        </div>
+        <form className="grid gap-3 sm:grid-cols-3" onSubmit={(event) => void save(event)}>
+          {fields()}
+          <Button type="submit" disabled={busy}>
+            {busy ? "Wird gespeichert …" : "Koordinationszeit erfassen"}
+          </Button>
+        </form>
+        {loading ? (
+          <p role="status">Koordinationszeiten werden geladen …</p>
+        ) : records.length === 0 ? (
+          <p>Noch keine Koordinationszeiten erfasst.</p>
+        ) : (
+          <ul className="grid gap-3" aria-label="Koordinationszeiten">
+            {records.map((record) => (
+              <li key={record.id} className="rounded-md border p-3">
+                <form
+                  className="grid gap-3 sm:grid-cols-3"
+                  onSubmit={(event) => void save(event, record)}
+                >
+                  {fields(record)}
+                  <div className="sm:col-span-3 flex flex-wrap items-center gap-3">
+                    <Badge variant={record.payout_status === "PAID" ? "success" : "neutral"}>
+                      {payoutLabels[record.payout_status]}
+                    </Badge>
+                    <span>{(record.payout_amount_minor / 100).toFixed(2)} CHF</span>
+                    {record.payout_status === "OPEN" ? (
+                      <Button type="submit" variant="secondary" disabled={busy}>
+                        Änderungen speichern
+                      </Button>
+                    ) : null}
+                  </div>
+                </form>
+                <form
+                  className="mt-3 grid gap-3 sm:grid-cols-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void advance(record, event.currentTarget);
+                  }}
+                >
+                  <label className="flex min-h-11 items-center gap-2">
+                    <input
+                      type="checkbox"
+                      name="signature_received"
+                      disabled={busy || Boolean(record.signature_received_at)}
+                      defaultChecked={Boolean(record.signature_received_at)}
+                    />
+                    Unterschrift erhalten
+                  </label>
+                  <label className="grid gap-1" htmlFor={`signature-note-${record.id}`}>
+                    Unterschriftsnotiz
+                    <input
+                      className={control}
+                      id={`signature-note-${record.id}`}
+                      name="signature_note"
+                      maxLength={2000}
+                      defaultValue={record.signature_note ?? ""}
+                      disabled={busy}
+                    />
+                  </label>
+                  {record.payout_status !== "PAID" ? (
+                    <Button type="submit" disabled={busy}>
+                      {record.payout_status === "OPEN" ? "Freigeben" : "Als ausbezahlt markieren"}
+                    </Button>
+                  ) : null}
+                </form>
+              </li>
+            ))}
+          </ul>
+        )}
+        <FeedbackMessages error={error} success={success} />
+      </CardBody>
+    </Card>
   );
 }
 

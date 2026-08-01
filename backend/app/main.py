@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.admin import router as admin_router
 from app.api.auth import router as auth_router
+from app.api.coordination_time import router as coordination_time_router
 from app.api.families import router as families_router
 from app.api.health import router as health_router
 from app.api.imports import router as imports_router
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     application.include_router(families_router)
     application.include_router(planning_router)
     application.include_router(settings_router)
+    application.include_router(coordination_time_router)
     application.include_router(imports_router)
     if settings.app_env != AppEnv.PRODUCTION:
         application.include_router(internal_router)

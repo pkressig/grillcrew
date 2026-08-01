@@ -245,3 +245,11 @@ The current deployment target remains:
 - Database: Render PostgreSQL
 
 Deployment configuration must stay customer-neutral. Environment variables may point to service URLs, but customer-specific names, colors, or settings belong in the database.
+# Private Koordinationszeit
+
+Die Route `/api/admin/{organization_slug}/coordination-time-records` ist ein eigener ADMIN-only
+Trust Boundary. Jeder Read und Write wird serverseitig auf die aktuelle Organisation begrenzt;
+fremde IDs werden nicht aufgeloest. Writes verlangen zusaetzlich CSRF sowie gueltigen Origin/Host.
+Das Modul besitzt Model, Schema, Service und API getrennt vom Signup-/Planning-Modul und wird von
+keiner oeffentlichen Route oder Helfer-API importiert. Audit-Ereignisse werden in derselben
+Transaktion wie die fachliche Aenderung geschrieben.

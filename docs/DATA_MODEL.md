@@ -502,3 +502,14 @@ The fallback is forbidden in production.
 - Duration is stored in integer minutes and may not be negative.
 - Amounts are stored in integer minor units.
 - Public APIs must not expose contact data, child data, internal notes, or cross-organization identifiers.
+# CoordinationTimeRecord (D-041 Phase 4B)
+
+`CoordinationTimeRecord` ist organisationsgebundene, private ADMIN-Koordinationsarbeit. Die
+Entitaet hat absichtlich keinen Fremdschluessel zu `Signup`, `Shift`, `Volunteer` oder `WorkRecord`.
+Sie speichert `workDate`, positive `durationMinutes`, `hourlyRateMinor`, den serverseitig
+kaufmaennisch gerundeten `payoutAmountMinor`, `payoutStatus`, eine Notiz sowie den manuellen
+Unterschrift-erhalten-Vermerk (`signatureReceivedAt`, bestaetigender User, optionale Notiz).
+Zusammengesetzte Indizes `(organizationId, workDate)` und `(organizationId, payoutStatus)` halten
+Listen und Auszahlungsabfragen tenant-lokal. Der Satz ist ein eigener, expliziter Snapshot und nicht
+der Helfer-Auszahlungssatz aus `OrganizationSettings`; Aenderungen berechnen den Betrag nur in
+`OPEN` neu, ab `APPROVED` sind die Arbeits- und Finanzfelder gesperrt.
