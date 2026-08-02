@@ -61,8 +61,22 @@ export type ImportRowUpdateInput = Partial<{
 }>;
 
 async function request<T>(path: string, init?: RequestInit, errorMessage?: string): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { credentials: "include", ...init });
-  if (!response.ok) throw new Error(errorMessage ?? "Der Import konnte nicht verarbeitet werden.");
+  const fallbackMessage = errorMessage ?? "Der Import konnte nicht verarbeitet werden.";
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, { credentials: "include", ...init });
+  } catch {
+    throw new Error(fallbackMessage);
+  }
+  if (!response.ok) {
+    let detail: unknown;
+    try {
+      ({ detail } = (await response.json()) as { detail?: unknown });
+    } catch {
+      // The operation-specific fallback is used for non-JSON error responses.
+    }
+    throw new Error(typeof detail === "string" && detail.trim() ? detail : fallbackMessage);
+  }
   return (await response.json()) as T;
 }
 
