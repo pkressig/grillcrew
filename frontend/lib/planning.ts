@@ -38,6 +38,10 @@ export type PlanningEvent = {
   internal_note: string | null;
   status: EventStatus;
   published_at: string | null;
+  source_import_id?: string | null;
+  kickoff_time?: string | null;
+  external_game_number?: string | null;
+  import_match_key?: string | null;
 };
 export type Shift = {
   id: string;
@@ -72,7 +76,15 @@ export type AdminSignup = {
   outcome: SignupOutcome;
   created_at: string;
 };
-export type EventInput = Omit<PlanningEvent, "id" | "season_id" | "published_at">;
+export type EventInput = Omit<
+  PlanningEvent,
+  | "id"
+  | "season_id"
+  | "published_at"
+  | "source_import_id"
+  | "external_game_number"
+  | "import_match_key"
+>;
 export type ShiftInput = Omit<
   Shift,
   | "id"

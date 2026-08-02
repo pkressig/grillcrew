@@ -7,19 +7,19 @@ const content = {
     title: "Kiosk",
     description: "Eigener Planungsbereich für feste Kiosk-Zuteilungen.",
     message:
-      "Die Kiosk-Planung ist vorgesehen, aber noch nicht umgesetzt. Hier werden noch keine Einsätze oder Zuteilungen angezeigt.",
+      "Der Kioskplan ist eine separate Quelle. Die Koordination hat diese Quelldaten noch nicht bereitgestellt; deshalb werden hier keine Einsätze oder Zuteilungen erfunden.",
   },
   grill: {
     title: "Grill",
     description: "Eigener Planungsbereich für Grill-Einsätze.",
     message:
-      "Die separate Grill-Planung ist vorgesehen, aber noch nicht umgesetzt. Grill-Einsätze werden weiterhin im Spielplan verwaltet.",
+      "Der Grillplan ist eine separate Quelle. Die Koordination hat diese Quelldaten noch nicht bereitgestellt; deshalb werden hier keine Einsätze oder Zuteilungen erfunden.",
   },
 } as const;
 
 export function PlanningPlaceholderPanel({
   section,
-}: Readonly<{ section: Exclude<PlanningSection, "schedule" | "periods"> }>) {
+}: Readonly<{ section: Exclude<PlanningSection, "schedule" | "periods" | "archive"> }>) {
   const panel = content[section];
   return (
     <section className="grid gap-6" aria-labelledby={`${section}-title`}>

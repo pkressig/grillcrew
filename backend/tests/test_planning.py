@@ -140,6 +140,26 @@ def test_delete_season_removes_only_requested_unused_draft() -> None:
     assert db.commits == 1
 
 
+def test_delete_dependency_free_archived_season() -> None:
+    target = SimpleNamespace(id=uuid4(), status=PlanningStatus.ARCHIVED, name="Historical")
+    db = _DeleteDb(target, [0, 0])
+
+    PlanningService(cast(object, db), uuid4()).delete_season(target.id, uuid4())  # type: ignore[arg-type]
+
+    assert db.deleted == [target]
+    assert db.commits == 1
+
+
+def test_delete_dependency_free_archived_club_year() -> None:
+    target = SimpleNamespace(id=uuid4(), status=PlanningStatus.ARCHIVED, label="2024/25")
+    db = _DeleteDb(target, [0, 0, 0])
+
+    PlanningService(cast(object, db), uuid4()).delete_club_year(target.id, uuid4())  # type: ignore[arg-type]
+
+    assert db.deleted == [target]
+    assert db.commits == 1
+
+
 @pytest.mark.parametrize(
     ("counts", "reason"),
     [([1, 0], "Anlass"), ([0, 2], "Importzeile")],

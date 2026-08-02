@@ -186,7 +186,7 @@ afterEach(() => {
 });
 
 describe("planning admin", () => {
-  it("shows exactly four accessible planning destinations", async () => {
+  it("shows the five accessible planning destinations including archive", async () => {
     renderAdmin("ADMIN");
     await screen.findByRole("heading", { level: 1, name: "Planung" });
     const navigation = screen.getByRole("navigation", { name: "Planung" });
@@ -194,7 +194,7 @@ describe("planning admin", () => {
       within(navigation)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Spielplan", "Kiosk", "Grill", "Vereinsjahr/Saisonverwaltung"]);
+    ).toEqual(["Spielplan", "Kiosk", "Grill", "Archiv", "Vereinsjahr/Saisonverwaltung"]);
     expect(within(navigation).getByRole("link", { name: "Spielplan" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -219,10 +219,28 @@ describe("planning admin", () => {
         name: section === "kiosk" ? "Kiosk" : "Grill",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/vorgesehen, aber noch nicht umgesetzt/);
+    expect(screen.getByRole("status")).toHaveTextContent(/separate Quelle/);
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /keine Einsätze oder Zuteilungen erfunden/,
+    );
     expect(
       screen.getByRole("link", { name: section === "kiosk" ? "Kiosk" : "Grill" }),
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("shows derived Spielbetrieb filters, daily summary, and provenance without IDs", async () => {
+    renderAdmin("ADMIN", planningFetch("ADMIN", false, [season], true, true));
+
+    await screen.findByText("Sommerfest");
+    expect(screen.getByRole("heading", { name: "Spielbetrieb filtern" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Spielort")).toBeInTheDocument();
+    expect(screen.getByLabelText("Suche")).toHaveAttribute(
+      "placeholder",
+      "Teams, Titel oder Bemerkung",
+    );
+    expect(screen.getByLabelText("Tagesübersichten")).toHaveTextContent("1 Spiel · 1 Ort");
+    expect(screen.getByText("Manuell")).toBeInTheDocument();
+    expect(screen.queryByText("event-1")).not.toBeInTheDocument();
   });
   it("renders the ordered accessible reference-aligned workspace and responsive desktop grid", async () => {
     renderAdmin("ADMIN");

@@ -20,13 +20,14 @@ import { FamiliesPanel } from "./families-panel";
 import { AttendancePanel } from "./attendance-panel";
 import { ImportPanel } from "./import-panel";
 import { PlanningPanel } from "./planning-panel";
+import { PlanningArchivePanel } from "./planning-archive-panel";
 import { PlanningPlaceholderPanel } from "./planning-placeholder-panel";
 import { PeriodManagementPanel } from "./period-management-panel";
 import { OverviewPanel } from "./overview-panel";
 import { SettingsPanel } from "./settings-panel";
 
 export type AdminView = "overview" | "planning" | "families" | "attendance" | "settings" | "import";
-export type PlanningSection = "schedule" | "kiosk" | "grill" | "periods";
+export type PlanningSection = "schedule" | "kiosk" | "grill" | "periods" | "archive";
 
 const roleLabels = {
   ADMIN: "Administration",
@@ -171,6 +172,8 @@ export function AdminShell({
                 <PlanningPanel org={org} timezone={organization.timezone} />
               ) : planningSection === "periods" ? (
                 <PeriodManagementPanel org={org} />
+              ) : planningSection === "archive" ? (
+                <PlanningArchivePanel org={org} />
               ) : (
                 <PlanningPlaceholderPanel section={planningSection} />
               )}
@@ -199,6 +202,7 @@ const PLANNING_ITEMS: ReadonlyArray<{ section: PlanningSection; label: string; p
   { section: "schedule", label: "Spielplan", path: "/planning" },
   { section: "kiosk", label: "Kiosk", path: "/planning/kiosk" },
   { section: "grill", label: "Grill", path: "/planning/grill" },
+  { section: "archive", label: "Archiv", path: "/planning/archive" },
   {
     section: "periods",
     label: "Vereinsjahr/Saisonverwaltung",

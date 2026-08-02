@@ -245,7 +245,7 @@ class PlanningService:
 
     def delete_season(self, season_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
         item = self._get_season(season_id)
-        if item.status != PlanningStatus.DRAFT:
+        if item.status not in {PlanningStatus.DRAFT, PlanningStatus.ARCHIVED}:
             raise PlanningConflictError(
                 "Nur unbenutzte Saison-Entwürfe können gelöscht werden; "
                 "diese Saison muss geschlossen oder archiviert bleiben."
@@ -272,7 +272,7 @@ class PlanningService:
 
     def delete_club_year(self, club_year_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
         item = self.get_club_year(club_year_id)
-        if item.status != PlanningStatus.DRAFT:
+        if item.status not in {PlanningStatus.DRAFT, PlanningStatus.ARCHIVED}:
             raise PlanningConflictError(
                 "Nur unbenutzte Vereinsjahr-Entwürfe können gelöscht werden; "
                 "dieses Vereinsjahr muss geschlossen oder archiviert bleiben."

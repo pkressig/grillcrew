@@ -200,17 +200,66 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   const [success, setSuccess] = useState<string | null>(null);
   const [eventView, setEventView] = useState<"agenda" | "calendar">("agenda");
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [seasonFilter, setSeasonFilter] = useState("");
+  const [venueFilter, setVenueFilter] = useState("");
+  const [typeFilter, setTypeFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
   const requestId = useRef(0);
   const selectedCalendarWeek = useRef<HTMLHeadingElement | null>(null);
 
+  const activeSeasons = useMemo(
+    () => seasons.filter((season) => season.status !== "CLOSED" && season.status !== "ARCHIVED"),
+    [seasons],
+  );
+  const filteredEvents = useMemo(() => {
+    const activeIds = new Set(activeSeasons.map((season) => season.id));
+    const query = search.trim().toLocaleLowerCase("de-CH");
+    return events.filter((event) => {
+      const haystack = [event.title, event.public_description, event.internal_note]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase("de-CH");
+      return (
+        activeIds.has(event.season_id) &&
+        (!dateFrom || event.date >= dateFrom) &&
+        (!dateTo || event.date <= dateTo) &&
+        (!seasonFilter || event.season_id === seasonFilter) &&
+        (!venueFilter || event.location === venueFilter) &&
+        (!typeFilter || event.event_type === typeFilter) &&
+        (!statusFilter || event.status === statusFilter) &&
+        (!query || haystack.includes(query))
+      );
+    });
+  }, [
+    activeSeasons,
+    dateFrom,
+    dateTo,
+    events,
+    search,
+    seasonFilter,
+    statusFilter,
+    typeFilter,
+    venueFilter,
+  ]);
+  const dailySummaries = useMemo(() => {
+    const groups = new Map<string, PlanningEvent[]>();
+    filteredEvents.forEach((event) =>
+      groups.set(event.date, [...(groups.get(event.date) ?? []), event]),
+    );
+    return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
+  }, [filteredEvents]);
+
   const loadedWeeks = useMemo(() => {
     const weeks = new Map<string, ReturnType<typeof calendarWeek>>();
-    events.forEach((event) => {
+    filteredEvents.forEach((event) => {
       const week = calendarWeek(event.date);
       weeks.set(week.key, week);
     });
     return [...weeks.values()].sort((left, right) => left.key.localeCompare(right.key));
-  }, [events]);
+  }, [filteredEvents]);
 
   useEffect(() => {
     if (loadedWeeks.length === 0) {
@@ -297,6 +346,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
           event_type: String(data.get("event_type")),
           public_description: String(data.get("public_description")) || null,
           internal_note: String(data.get("internal_note")) || null,
+          ...(String(data.get("kickoff_time"))
+            ? { kickoff_time: String(data.get("kickoff_time")) }
+            : {}),
           status: "DRAFT",
         }),
       "Anlass wurde erstellt.",
@@ -409,7 +461,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
       <PageHeader
         headingId="planning-title"
         title="Planung"
-        description="Anlässe und Einsätze planen."
+        description="Spiele, Einsätze und freie Plätze aus den vorhandenen Planungsdaten steuern."
       />
       {error ? (
         <p role="alert" className="rounded-md border border-status-error p-3 text-status-error">
@@ -532,6 +584,175 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
               </Button>
             </div>
           </div>
+          <section
+            className="grid gap-3 rounded-lg border border-border/80 bg-background p-4"
+            aria-labelledby="spielbetrieb-filter-title"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 id="spielbetrieb-filter-title" className="font-semibold">
+                Spielbetrieb filtern
+              </h3>
+              <p className="text-sm text-muted-foreground" aria-live="polite">
+                {filteredEvents.length} Spiele
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <label>
+                Von
+                <input
+                  className={control}
+                  type="date"
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                />
+              </label>
+              <label>
+                Bis
+                <input
+                  className={control}
+                  type="date"
+                  value={dateTo}
+                  onChange={(event) => setDateTo(event.target.value)}
+                />
+              </label>
+              <label>
+                Saison
+                <select
+                  className={control}
+                  value={seasonFilter}
+                  onChange={(event) => setSeasonFilter(event.target.value)}
+                >
+                  <option value="">Alle</option>
+                  {activeSeasons.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Spielort
+                <select
+                  className={control}
+                  value={venueFilter}
+                  onChange={(event) => setVenueFilter(event.target.value)}
+                >
+                  <option value="">Alle</option>
+                  {[
+                    ...new Set(
+                      filteredEvents
+                        .concat(
+                          events.filter((item) =>
+                            activeSeasons.some((season) => season.id === item.season_id),
+                          ),
+                        )
+                        .map((item) => item.location),
+                    ),
+                  ]
+                    .sort()
+                    .map((item) => (
+                      <option key={item}>{item}</option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                SpielTyp
+                <select
+                  className={control}
+                  value={typeFilter}
+                  onChange={(event) => setTypeFilter(event.target.value)}
+                >
+                  <option value="">Alle</option>
+                  {[
+                    ...new Set(
+                      events
+                        .filter((item) =>
+                          activeSeasons.some((season) => season.id === item.season_id),
+                        )
+                        .map((item) => item.event_type),
+                    ),
+                  ]
+                    .sort()
+                    .map((item) => (
+                      <option key={item}>{item}</option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                Status
+                <select
+                  className={control}
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                >
+                  <option value="">Alle</option>
+                  {Object.entries(eventStatusLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      Status: {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="sm:col-span-2">
+                Suche
+                <input
+                  className={control}
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Teams, Titel oder Bemerkung"
+                />
+              </label>
+            </div>
+            <Button
+              className="w-fit"
+              variant="secondary"
+              type="button"
+              onClick={() => {
+                setDateFrom("");
+                setDateTo("");
+                setSeasonFilter("");
+                setVenueFilter("");
+                setTypeFilter("");
+                setStatusFilter("");
+                setSearch("");
+              }}
+            >
+              Filter zurücksetzen
+            </Button>
+          </section>
+          {dailySummaries.length ? (
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label="Tagesübersichten">
+              {dailySummaries.map(([date, dayEvents]) => {
+                const dayShifts = shifts.filter((shift) =>
+                  dayEvents.some((event) => event.id === shift.event_id),
+                );
+                const venues = new Set(dayEvents.map((event) => event.location));
+                const open = dayShifts.some((shift) => shift.status === "OPEN");
+                return (
+                  <Card key={date}>
+                    <CardBody>
+                      <h3 className="font-semibold">{formatDate(date)}</h3>
+                      <p className="mt-1 text-sm">
+                        {dayEvents.length} {dayEvents.length === 1 ? "Spiel" : "Spiele"} ·{" "}
+                        {venues.size} {venues.size === 1 ? "Ort" : "Orte"}
+                      </p>
+                      <Badge className="mt-2" variant={open ? "success" : "neutral"}>
+                        {dayShifts.length === 0
+                          ? "Keine Einsätze"
+                          : open
+                            ? "Tagesstatus: Offen"
+                            : "Tagesstatus: Geschlossen"}
+                      </Badge>
+                    </CardBody>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="rounded-md border p-4 text-muted-foreground">
+              Keine Spiele entsprechen den gewählten Filtern.
+            </p>
+          )}
           {loadedWeeks.length > 0 ? (
             <nav
               className="flex w-full flex-col gap-2 rounded-lg border border-border/80 bg-background p-2 sm:flex-row sm:items-center sm:justify-between"
@@ -589,7 +810,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   disabled={seasons.length === 0}
                 >
                   <option value="">Bitte wählen</option>
-                  {seasons.map((season) => (
+                  {activeSeasons.map((season) => (
                     <option
                       key={season.id}
                       value={season.id}
@@ -623,6 +844,15 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                 Ort
                 <input className={control} id="create-event-location" name="location" required />
               </label>
+              <label htmlFor="create-event-kickoff-time">
+                Anspielzeit
+                <input
+                  className={control}
+                  id="create-event-kickoff-time"
+                  name="kickoff_time"
+                  type="time"
+                />
+              </label>
               <label htmlFor="create-event-type">
                 Anlassart
                 <input
@@ -654,13 +884,13 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
               </Button>
             </form>
           </details>
-          {seasons.length === 0 ? (
+          {activeSeasons.length === 0 ? (
             <p className="text-muted-foreground">
               Erstellen Sie zuerst eine Saison, bevor Sie Anlässe planen.
             </p>
           ) : (
-            seasons.map((season) => {
-              const seasonEvents = events
+            activeSeasons.map((season) => {
+              const seasonEvents = filteredEvents
                 .map((item, index) => ({ item, index }))
                 .filter(({ item }) => item.season_id === season.id)
                 .sort(
@@ -754,9 +984,22 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                       <div className="min-w-0">
                                         <p className="font-semibold">{planningEvent.title}</p>
                                         <p className="mt-1 text-sm">
-                                          {formatDate(planningEvent.date)} ·{" "}
-                                          {planningEvent.location}
+                                          {formatDate(planningEvent.date)}
+                                          {planningEvent.kickoff_time
+                                            ? ` · ${planningEvent.kickoff_time.slice(0, 5)}`
+                                            : ""}{" "}
+                                          · {planningEvent.location}
                                         </p>
+                                        <Badge
+                                          className="mt-2 mr-2"
+                                          variant={
+                                            planningEvent.source_import_id ? "warning" : "neutral"
+                                          }
+                                        >
+                                          {planningEvent.source_import_id
+                                            ? "Importiert"
+                                            : "Manuell"}
+                                        </Badge>
                                         <Badge className="mt-2" variant="neutral">
                                           {eventShifts.length}{" "}
                                           {eventShifts.length === 1 ? "Einsatz" : "Einsätze"} ·{" "}
@@ -785,6 +1028,11 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                   {planningEvent.public_description ? (
                                     <p className="mt-2 text-sm">
                                       {planningEvent.public_description}
+                                    </p>
+                                  ) : null}
+                                  {planningEvent.internal_note ? (
+                                    <p className="mt-2 text-sm">
+                                      Bemerkung: {planningEvent.internal_note}
                                     </p>
                                   ) : null}
                                   {eventActions[planningEvent.status].length ? (
