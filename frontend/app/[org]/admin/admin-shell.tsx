@@ -20,10 +20,13 @@ import { FamiliesPanel } from "./families-panel";
 import { AttendancePanel } from "./attendance-panel";
 import { ImportPanel } from "./import-panel";
 import { PlanningPanel } from "./planning-panel";
+import { PlanningPlaceholderPanel } from "./planning-placeholder-panel";
+import { PeriodManagementPanel } from "./period-management-panel";
 import { OverviewPanel } from "./overview-panel";
 import { SettingsPanel } from "./settings-panel";
 
 export type AdminView = "overview" | "planning" | "families" | "attendance" | "settings" | "import";
+export type PlanningSection = "schedule" | "kiosk" | "grill" | "periods";
 
 const roleLabels = {
   ADMIN: "Administration",
@@ -89,7 +92,13 @@ export function AdminShell({
   org,
   organization,
   activeView,
-}: Readonly<{ org: string; organization: PublicOrganization; activeView: AdminView }>) {
+  planningSection = "schedule",
+}: Readonly<{
+  org: string;
+  organization: PublicOrganization;
+  activeView: AdminView;
+  planningSection?: PlanningSection;
+}>) {
   const auth = useAuth();
   if (auth.isLoading)
     return <State title="Sitzung wird geladen" text="Bitte warten Sie einen Moment." />;
@@ -156,7 +165,16 @@ export function AdminShell({
           ) : activeView === "overview" ? (
             <OverviewPanel org={org} timezone={organization.timezone} />
           ) : activeView === "planning" ? (
-            <PlanningPanel org={org} timezone={organization.timezone} />
+            <div className="grid gap-6">
+              <PlanningNavigation activeSection={planningSection} org={org} />
+              {planningSection === "schedule" ? (
+                <PlanningPanel org={org} timezone={organization.timezone} />
+              ) : planningSection === "periods" ? (
+                <PeriodManagementPanel org={org} />
+              ) : (
+                <PlanningPlaceholderPanel section={planningSection} />
+              )}
+            </div>
           ) : activeView === "families" ? (
             <FamiliesPanel org={org} />
           ) : activeView === "settings" ? (
@@ -174,6 +192,44 @@ export function AdminShell({
         </main>
       </div>
     </div>
+  );
+}
+
+const PLANNING_ITEMS: ReadonlyArray<{ section: PlanningSection; label: string; path: string }> = [
+  { section: "schedule", label: "Spielplan", path: "/planning" },
+  { section: "kiosk", label: "Kiosk", path: "/planning/kiosk" },
+  { section: "grill", label: "Grill", path: "/planning/grill" },
+  {
+    section: "periods",
+    label: "Vereinsjahr/Saisonverwaltung",
+    path: "/planning/periods",
+  },
+];
+
+function PlanningNavigation({
+  activeSection,
+  org,
+}: Readonly<{ activeSection: PlanningSection; org: string }>) {
+  return (
+    <nav aria-label="Planung">
+      <ul className="flex flex-wrap gap-2">
+        {PLANNING_ITEMS.map((item) => (
+          <li key={item.section}>
+            <Link
+              aria-current={activeSection === item.section ? "page" : undefined}
+              className={`inline-flex min-h-11 items-center rounded-md border px-3.5 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                activeSection === item.section
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-foreground hover:bg-muted"
+              }`}
+              href={`/${org}/admin${item.path}`}
+            >
+              {item.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 

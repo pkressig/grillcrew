@@ -117,6 +117,7 @@ function planningFetch(
     if (url.endsWith("/events/event-1/shifts") && method === "GET")
       return Response.json(includeShifts ? [shift] : []);
     if (url.endsWith("/events/event-2/shifts") && method === "GET") return Response.json([]);
+    if (method === "DELETE") return new Response(null, { status: 204 });
     if (method === "POST" || method === "PATCH")
       return Response.json(method === "PATCH" ? { ...season, status: "ACTIVE" } : year, {
         status: method === "POST" ? 201 : 200,
@@ -137,6 +138,21 @@ function renderAdmin(
         activeView="planning"
         org="example"
         organization={{ ...platformFallbackOrganization, timezone }}
+      />
+    </AuthProvider>,
+  );
+  return fetchMock;
+}
+
+function renderPeriodAdmin(role: Parameters<typeof session>[0], fetchMock = planningFetch(role)) {
+  vi.stubGlobal("fetch", fetchMock);
+  render(
+    <AuthProvider>
+      <AdminShell
+        activeView="planning"
+        planningSection="periods"
+        org="example"
+        organization={platformFallbackOrganization}
       />
     </AuthProvider>,
   );
@@ -170,26 +186,60 @@ afterEach(() => {
 });
 
 describe("planning admin", () => {
+  it("shows exactly four accessible planning destinations", async () => {
+    renderAdmin("ADMIN");
+    await screen.findByRole("heading", { level: 1, name: "Planung" });
+    const navigation = screen.getByRole("navigation", { name: "Planung" });
+    expect(
+      within(navigation)
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Spielplan", "Kiosk", "Grill", "Vereinsjahr/Saisonverwaltung"]);
+    expect(within(navigation).getByRole("link", { name: "Spielplan" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+  });
+
+  it.each(["kiosk", "grill"] as const)("shows an honest %s planned state", async (section) => {
+    vi.stubGlobal("fetch", planningFetch("ADMIN"));
+    render(
+      <AuthProvider>
+        <AdminShell
+          activeView="planning"
+          planningSection={section}
+          org="example"
+          organization={platformFallbackOrganization}
+        />
+      </AuthProvider>,
+    );
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: section === "kiosk" ? "Kiosk" : "Grill",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/vorgesehen, aber noch nicht umgesetzt/);
+    expect(
+      screen.getByRole("link", { name: section === "kiosk" ? "Kiosk" : "Grill" }),
+    ).toHaveAttribute("aria-current", "page");
+  });
   it("renders the ordered accessible reference-aligned workspace and responsive desktop grid", async () => {
     renderAdmin("ADMIN");
     await screen.findByRole("heading", { level: 1, name: "Planung" });
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
     const attendance = screen.getByRole("heading", { name: /Handlungsbedarf Anwesenheit/ });
     const agenda = screen.getByRole("heading", { name: "Agenda" });
-    const periods = screen.getByRole("heading", { name: "Planungsperioden" });
+    const periodsLink = screen.getByRole("link", { name: "Vereinsjahr/Saisonverwaltung" });
     expect(document.querySelector("#attendance")).toContainElement(attendance);
     expect(
       attendance.compareDocumentPosition(agenda) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(agenda.compareDocumentPosition(periods) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(periodsLink).toHaveAttribute("href", "/example/admin/planning/periods");
     expect(agenda.closest("section")?.parentElement).toHaveClass(
       "lg:grid-cols-[minmax(0,1fr)_22rem]",
     );
-    expect(periods.closest("aside")).toHaveClass("lg:sticky", "lg:top-8");
-    expect(screen.getByRole("region", { name: "Aktuelle Saison" })).toHaveClass(
-      "border-primary/20",
-      "bg-primary/5",
-    );
+    expect(screen.queryByRole("button", { name: /Saison .* aktivieren/ })).not.toBeInTheDocument();
   });
 
   it("orders agenda events chronologically with stable equal-date ordering", async () => {
@@ -416,7 +466,7 @@ describe("planning admin", () => {
   });
 
   it("keeps creation form values when its native disclosure is closed and reopened", async () => {
-    renderAdmin("ADMIN");
+    renderPeriodAdmin("ADMIN");
     await screen.findAllByText("2026/27");
     const summary = screen.getByText("Vereinsjahr erstellen", { selector: "summary" });
     fireEvent.click(summary);
@@ -426,13 +476,16 @@ describe("planning admin", () => {
     expect(screen.getByLabelText("Label")).toHaveValue("2027/28");
   });
 
-  it.each(["ADMIN", "KOORDINATION"] as const)("shows management controls for %s", async (role) => {
+  it.each(["ADMIN", "KOORDINATION"] as const)("links to period management for %s", async (role) => {
     const fetchMock = renderAdmin(role);
     expect(await screen.findByRole("heading", { name: "Planung" })).toBeInTheDocument();
     expect(document.querySelector("#attendance")).toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/families"))).toBe(false);
-    expect(screen.getByRole("button", { name: "Vereinsjahr erstellen" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Saison erstellen" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Vereinsjahr/Saisonverwaltung" })).toHaveAttribute(
+      "href",
+      "/example/admin/planning/periods",
+    );
+    expect(screen.queryByRole("button", { name: "Vereinsjahr erstellen" })).not.toBeInTheDocument();
     expect(screen.getByText("Anlass erstellen", { selector: "summary" })).toBeInTheDocument();
   });
 
@@ -452,7 +505,7 @@ describe("planning admin", () => {
   );
 
   it("renders fetched records, associations, and German enum labels", async () => {
-    renderAdmin("ADMIN");
+    renderPeriodAdmin("ADMIN");
     expect(await screen.findAllByText("2026/27")).toHaveLength(2);
     expect(screen.getAllByText("Herbstrunde").length).toBeGreaterThan(0);
     expect(screen.getByText(/1 Saisons/)).toBeInTheDocument();
@@ -462,13 +515,10 @@ describe("planning admin", () => {
   });
 
   it("renders planning empty states", async () => {
-    renderAdmin("ADMIN", planningFetch("ADMIN", true));
+    renderPeriodAdmin("ADMIN", planningFetch("ADMIN", true));
     expect(await screen.findByText("Noch keine Vereinsjahre vorhanden.")).toBeInTheDocument();
     expect(screen.getByText("Noch keine Saisons vorhanden.")).toBeInTheDocument();
     expect(screen.getByText("Derzeit ist keine Saison aktiv.")).toBeInTheDocument();
-    expect(
-      screen.getByText("Erstellen Sie zuerst eine Saison, bevor Sie Anlässe planen."),
-    ).toBeInTheDocument();
   });
 
   it("renders events and shifts with human-readable status labels", async () => {
@@ -705,7 +755,7 @@ describe("planning admin", () => {
 
   it("creates a club year with credentials and a CSRF header", async () => {
     document.cookie = "gc_csrf=test-token";
-    const fetchMock = renderAdmin("ADMIN");
+    const fetchMock = renderPeriodAdmin("ADMIN");
     await screen.findAllByText("2026/27");
     openCreateForm("Vereinsjahr erstellen");
     const form = screen.getByLabelText("Label").closest("form")!;
@@ -734,7 +784,7 @@ describe("planning admin", () => {
   });
 
   it("uses the hydrated CSRF token when the API cookie is not readable", async () => {
-    const fetchMock = renderAdmin("ADMIN");
+    const fetchMock = renderPeriodAdmin("ADMIN");
     await screen.findAllByText("2026/27");
     openCreateForm("Vereinsjahr erstellen");
     const form = screen.getByLabelText("Label").closest("form")!;
@@ -757,7 +807,7 @@ describe("planning admin", () => {
   });
 
   it("creates a season in the selected club year", async () => {
-    const fetchMock = renderAdmin("KOORDINATION");
+    const fetchMock = renderPeriodAdmin("KOORDINATION");
     await screen.findAllByText("2026/27");
     openCreateForm("Saison erstellen");
     const form = screen.getByLabelText("Name").closest("form")!;
@@ -991,7 +1041,7 @@ describe("planning admin", () => {
   });
 
   it("patches a season status and refreshes the lists", async () => {
-    const fetchMock = renderAdmin("ADMIN");
+    const fetchMock = renderPeriodAdmin("ADMIN");
     await screen.findAllByText("Herbstrunde");
     fireEvent.click(screen.getByRole("button", { name: "Saison Herbstrunde aktivieren" }));
     await waitFor(() =>
@@ -1011,10 +1061,70 @@ describe("planning admin", () => {
     );
   });
 
+  it("deletes an unused draft season through the management UI and refreshes", async () => {
+    const confirmMock = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirmMock);
+    const fetchMock = renderPeriodAdmin("ADMIN");
+    await screen.findAllByText("Herbstrunde");
+
+    fireEvent.click(screen.getByRole("button", { name: "Saison Herbstrunde löschen" }));
+
+    expect(confirmMock).toHaveBeenCalledWith(
+      'Saison "Herbstrunde" endgültig löschen? Dies ist nur bei einem unbenutzten Entwurf möglich.',
+    );
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/seasons\/season-1$/),
+        expect.objectContaining({ method: "DELETE", credentials: "include" }),
+      ),
+    );
+    expect(await screen.findByText("Saison wurde gelöscht.")).toBeInTheDocument();
+  });
+
+  it("deletes an unused draft club year through the management UI", async () => {
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
+    const fetchMock = renderPeriodAdmin("ADMIN", planningFetch("ADMIN", false, []));
+    await screen.findAllByText("2026/27");
+
+    fireEvent.click(screen.getByRole("button", { name: "Vereinsjahr 2026/27 löschen" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/club-years\/year-1$/),
+        expect.objectContaining({ method: "DELETE" }),
+      ),
+    );
+  });
+
+  it("shows the concrete dependency conflict returned by safe delete", async () => {
+    vi.stubGlobal(
+      "confirm",
+      vi.fn(() => true),
+    );
+    const base = planningFetch("ADMIN");
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === "DELETE")
+        return Response.json(
+          { detail: "Diese Saison kann nicht gelöscht werden: abhängig ist 1 Anlass." },
+          { status: 409 },
+        );
+      return base(input, init);
+    });
+    renderPeriodAdmin("ADMIN", fetchMock);
+    await screen.findAllByText("Herbstrunde");
+
+    fireEvent.click(screen.getByRole("button", { name: "Saison Herbstrunde löschen" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("abhängig ist 1 Anlass");
+  });
+
   it("does not close a season when confirmation is cancelled", async () => {
     const confirmMock = vi.fn(() => false);
     vi.stubGlobal("confirm", confirmMock);
-    const fetchMock = renderAdmin("ADMIN");
+    const fetchMock = renderPeriodAdmin("ADMIN");
     await screen.findAllByText("Herbstrunde");
 
     fireEvent.click(screen.getByRole("button", { name: "Saison Herbstrunde schliessen" }));
@@ -1028,7 +1138,7 @@ describe("planning admin", () => {
   it("archives a season after confirmation", async () => {
     const confirmMock = vi.fn(() => true);
     vi.stubGlobal("confirm", confirmMock);
-    const fetchMock = renderAdmin("ADMIN");
+    const fetchMock = renderPeriodAdmin("ADMIN");
     await screen.findAllByText("Herbstrunde");
 
     fireEvent.click(screen.getByRole("button", { name: "Saison Herbstrunde archivieren" }));
@@ -1048,7 +1158,7 @@ describe("planning admin", () => {
   });
 
   it("gives repeated lifecycle buttons unique accessible names", async () => {
-    renderAdmin("ADMIN", planningFetch("ADMIN", false, [season, secondSeason]));
+    renderPeriodAdmin("ADMIN", planningFetch("ADMIN", false, [season, secondSeason]));
 
     expect(
       await screen.findByRole("button", { name: "Saison Herbstrunde schliessen" }),

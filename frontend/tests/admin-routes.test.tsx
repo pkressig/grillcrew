@@ -9,6 +9,8 @@ vi.mock("@/lib/organization", async (importOriginal) => ({
 
 import AdminPage from "@/app/[org]/admin/page";
 import SettingsAdminPage from "@/app/[org]/admin/settings/page";
+import KioskPlanningPage from "@/app/[org]/admin/planning/kiosk/page";
+import PeriodPlanningPage from "@/app/[org]/admin/planning/periods/page";
 
 describe("admin routes", () => {
   it("composes the organization-scoped overview instead of redirecting", async () => {
@@ -31,6 +33,19 @@ describe("admin routes", () => {
       activeView: "settings",
       org: "example",
       organization: platformFallbackOrganization,
+    });
+  });
+
+  it.each([
+    [KioskPlanningPage, "kiosk"],
+    [PeriodPlanningPage, "periods"],
+  ] as const)("preserves the planning deep link for %s", async (Page, planningSection) => {
+    fetchPublicOrganization.mockResolvedValue(platformFallbackOrganization);
+    const result = await Page({ params: Promise.resolve({ org: "example" }) });
+    expect(result.props.children.props).toMatchObject({
+      activeView: "planning",
+      planningSection,
+      org: "example",
     });
   });
 });

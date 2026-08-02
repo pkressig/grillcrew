@@ -78,9 +78,11 @@ Rules:
 ### HomeVenue
 
 Implemented for the Grill-workflow game-plan import (D-041). A configurable, organization-scoped
-allowlist of venues that count as a catering home venue; only games at an active home venue are
-proposed for inclusion during import. Soft-deactivated via `isActive`, never hard-deleted, so
-historical imports and events keep a valid reference.
+allowlist of venues that count as a catering home venue. A name without `*` matches the normalized
+source venue exactly; `*` is an explicit wildcard for prefix, suffix, or contained text and all other
+characters are treated literally. Matching is case-insensitive and whitespace-normalized. Only games
+at an active home venue are proposed for inclusion during import. Soft-deactivated via `isActive`,
+never hard-deleted, so historical imports and events keep a valid reference.
 
 - id
 - organizationId

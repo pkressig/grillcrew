@@ -6,28 +6,18 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import {
-  createClubYear,
-  deleteClubYear,
-  deleteSeason,
   cancelSignup,
   createEvent,
-  createSeason,
   createShift,
   loadShiftCrewSuggestion,
   updateEventStatus,
-  updateClubYear,
-  updateSeason,
-  updateSeasonStatus,
   updateShiftStatus,
   updateSignupAttendance,
   type AdminSignup,
-  type ClubYear,
   type EventStatus,
   type MenuType,
   type PlanningEvent,
-  type PlanningStatus,
   type Season,
-  type SeasonType,
   type Shift,
   type ShiftCrewSuggestion,
   type ShiftStatus,
@@ -35,28 +25,6 @@ import {
 } from "@/lib/planning";
 import { loadAdminPlanningData } from "@/lib/admin-planning-data";
 
-const statusLabels: Record<PlanningStatus, string> = {
-  DRAFT: "Entwurf",
-  ACTIVE: "Aktiv",
-  CLOSED: "Geschlossen",
-  ARCHIVED: "Archiviert",
-};
-const typeLabels: Record<SeasonType, string> = {
-  AUTUMN: "Herbst",
-  SPRING: "Frühling",
-  OTHER: "Andere",
-};
-const actions: Record<PlanningStatus, PlanningStatus[]> = {
-  DRAFT: ["ACTIVE", "CLOSED", "ARCHIVED"],
-  ACTIVE: ["CLOSED"],
-  CLOSED: ["ARCHIVED"],
-  ARCHIVED: [],
-};
-const actionLabels: Partial<Record<PlanningStatus, string>> = {
-  ACTIVE: "Aktivieren",
-  CLOSED: "Schliessen",
-  ARCHIVED: "Archivieren",
-};
 const eventStatusLabels: Record<EventStatus, string> = {
   DRAFT: "Entwurf",
   PUBLISHED: "Veröffentlicht",
@@ -89,12 +57,6 @@ const attendanceOutcomes: readonly SignupOutcome[] = [
   "NO_SHOW",
   "SUBSTITUTE_ORGANIZED",
 ];
-const planningStatusVariants: Record<PlanningStatus, BadgeProps["variant"]> = {
-  DRAFT: "neutral",
-  ACTIVE: "success",
-  CLOSED: "warning",
-  ARCHIVED: "neutral",
-};
 const eventStatusVariants: Record<EventStatus, BadgeProps["variant"]> = {
   DRAFT: "neutral",
   PUBLISHED: "success",
@@ -131,12 +93,6 @@ const shiftActionLabels: Record<ShiftStatus, string> = {
   CANCELLED: "Absagen",
 };
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
-
-function dateRange(start: string, end: string) {
-  const format = (value: string) =>
-    new Intl.DateTimeFormat("de-CH").format(new Date(`${value}T00:00:00`));
-  return `${format(start)} – ${format(end)}`;
-}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" }).format(
@@ -235,9 +191,7 @@ function organizationDateTimeToIso(value: string, timezone: string) {
 }
 
 export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezone: string }>) {
-  const [clubYears, setClubYears] = useState<ClubYear[]>([]);
   const [seasons, setSeasons] = useState<Season[]>([]);
-  const [currentSeason, setCurrentSeason] = useState<Season | null>(null);
   const [events, setEvents] = useState<PlanningEvent[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
   const [loading, setLoading] = useState(true);
@@ -283,9 +237,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     try {
       const data = await loadAdminPlanningData(org, (planning) => {
         if (currentRequest !== requestId.current) return;
-        setClubYears(planning.clubYears);
         setSeasons(planning.seasons);
-        setCurrentSeason(planning.currentSeason);
       });
       if (currentRequest !== requestId.current) return;
       setEvents(data.events);
@@ -304,9 +256,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
 
   useEffect(() => {
     setLoading(true);
-    setClubYears([]);
     setSeasons([]);
-    setCurrentSeason(null);
     setEvents([]);
     setShifts([]);
     void refresh();
@@ -332,41 +282,6 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     } finally {
       setBusy(false);
     }
-  }
-
-  async function submitClubYear(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const created = await run(
-      () =>
-        createClubYear(org, {
-          label: String(data.get("label")),
-          start_date: String(data.get("start_date")),
-          end_date: String(data.get("end_date")),
-          status: "DRAFT",
-        }),
-      "Vereinsjahr wurde erstellt.",
-    );
-    if (created) form.reset();
-  }
-
-  async function submitSeason(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const data = new FormData(form);
-    const created = await run(
-      () =>
-        createSeason(org, String(data.get("club_year_id")), {
-          type: data.get("type") as SeasonType,
-          name: String(data.get("name")),
-          start_date: String(data.get("start_date")),
-          end_date: String(data.get("end_date")),
-          status: "DRAFT",
-        }),
-      "Saison wurde erstellt.",
-    );
-    if (created) form.reset();
   }
 
   async function submitEvent(event: FormEvent<HTMLFormElement>) {
@@ -412,65 +327,6 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     );
     if (created) form.reset();
     return created;
-  }
-
-  function updateStatus(season: Season, next: PlanningStatus) {
-    const confirmation =
-      next === "CLOSED"
-        ? `Saison "${season.name}" wirklich schliessen? Danach sind nur noch eingeschränkte Änderungen möglich.`
-        : next === "ARCHIVED"
-          ? `Saison "${season.name}" wirklich archivieren? Archivierte Saisons können nicht mehr bearbeitet werden.`
-          : null;
-
-    if (confirmation && !window.confirm(confirmation)) return;
-
-    void run(() => updateSeasonStatus(org, season.id, next), "Saisonstatus wurde aktualisiert.");
-  }
-
-  function editClubYear(year: ClubYear) {
-    const label = window.prompt("Label des Vereinsjahrs", year.label);
-    if (label === null) return;
-    const start = window.prompt("Startdatum (JJJJ-MM-TT)", year.start_date);
-    if (start === null) return;
-    const end = window.prompt("Enddatum (JJJJ-MM-TT)", year.end_date);
-    if (end === null) return;
-    void run(
-      () => updateClubYear(org, year.id, { label, start_date: start, end_date: end }),
-      "Vereinsjahr wurde aktualisiert.",
-    );
-  }
-
-  function editSeason(season: Season) {
-    const name = window.prompt("Name der Saison", season.name);
-    if (name === null) return;
-    const start = window.prompt("Startdatum (JJJJ-MM-TT)", season.start_date);
-    if (start === null) return;
-    const end = window.prompt("Enddatum (JJJJ-MM-TT)", season.end_date);
-    if (end === null) return;
-    void run(
-      () => updateSeason(org, season.id, { name, start_date: start, end_date: end }),
-      "Saison wurde aktualisiert.",
-    );
-  }
-
-  function removeClubYear(year: ClubYear) {
-    if (
-      !window.confirm(
-        `Vereinsjahr "${year.label}" endgültig löschen? Dies ist nur bei einem unbenutzten Entwurf möglich.`,
-      )
-    )
-      return;
-    void run(() => deleteClubYear(org, year.id), "Vereinsjahr wurde gelöscht.");
-  }
-
-  function removeSeason(season: Season) {
-    if (
-      !window.confirm(
-        `Saison "${season.name}" endgültig löschen? Dies ist nur bei einem unbenutzten Entwurf möglich.`,
-      )
-    )
-      return;
-    void run(() => deleteSeason(org, season.id), "Saison wurde gelöscht.");
   }
 
   function changeEventStatus(planningEvent: PlanningEvent, next: EventStatus) {
@@ -1138,256 +994,6 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
             })
           )}
         </section>
-        <aside className="grid min-w-0 gap-5 lg:sticky lg:top-8" aria-labelledby="periods-title">
-          <h2 id="periods-title" className="text-xl font-semibold">
-            Planungsperioden
-          </h2>
-          <Card
-            className="border-primary/20 bg-primary/5"
-            aria-labelledby="current-season-title"
-            role="region"
-          >
-            <CardBody>
-              <h3 id="current-season-title" className="font-semibold">
-                Aktuelle Saison
-              </h3>
-              {currentSeason ? (
-                <p className="mt-2 text-sm">
-                  <strong>{currentSeason.name}</strong> · {typeLabels[currentSeason.type]} ·{" "}
-                  {dateRange(currentSeason.start_date, currentSeason.end_date)}
-                </p>
-              ) : (
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Derzeit ist keine Saison aktiv.
-                </p>
-              )}
-            </CardBody>
-          </Card>
-          <section className="grid gap-3" aria-labelledby="club-years-title">
-            <h3 id="club-years-title" className="font-semibold">
-              Vereinsjahre
-            </h3>
-            {clubYears.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Noch keine Vereinsjahre vorhanden.</p>
-            ) : (
-              <ul className="grid gap-2">
-                {clubYears.map((year) => (
-                  <li key={year.id}>
-                    <Card className="border-border/80 shadow-sm">
-                      <CardBody className="p-3 text-sm">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <strong>{year.label}</strong>
-                          <Badge variant={planningStatusVariants[year.status]}>
-                            {statusLabels[year.status]}
-                          </Badge>
-                        </div>
-                        <p className="mt-1">
-                          {dateRange(year.start_date, year.end_date)} ·{" "}
-                          {seasons.filter((item) => item.club_year_id === year.id).length} Saisons
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {year.status !== "ARCHIVED" ? (
-                            <Button
-                              variant="secondary"
-                              disabled={busy}
-                              aria-label={`Vereinsjahr ${year.label} bearbeiten`}
-                              onClick={() => editClubYear(year)}
-                            >
-                              Bearbeiten
-                            </Button>
-                          ) : null}
-                          {year.status === "DRAFT" ? (
-                            <Button
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() =>
-                                void run(
-                                  () => updateClubYear(org, year.id, { status: "CLOSED" }),
-                                  "Vereinsjahr wurde geschlossen.",
-                                )
-                              }
-                            >
-                              Schliessen
-                            </Button>
-                          ) : null}
-                          {year.status === "DRAFT" || year.status === "CLOSED" ? (
-                            <Button
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() =>
-                                void run(
-                                  () => updateClubYear(org, year.id, { status: "ARCHIVED" }),
-                                  "Vereinsjahr wurde archiviert.",
-                                )
-                              }
-                            >
-                              Archivieren
-                            </Button>
-                          ) : null}
-                          {year.status === "DRAFT" ? (
-                            <Button
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() => removeClubYear(year)}
-                            >
-                              Löschen
-                            </Button>
-                          ) : null}
-                        </div>
-                      </CardBody>
-                    </Card>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <details className="rounded-lg border border-border/80 bg-background p-3 shadow-sm">
-              <summary className="min-h-11 cursor-pointer font-medium">
-                Vereinsjahr erstellen
-              </summary>
-              <form className="mt-3 grid gap-3" onSubmit={submitClubYear}>
-                <label>
-                  Label
-                  <input className={control} name="label" placeholder="2026/27" required />
-                </label>
-                <label>
-                  Startdatum
-                  <input className={control} name="start_date" type="date" required />
-                </label>
-                <label>
-                  Enddatum
-                  <input className={control} name="end_date" type="date" required />
-                </label>
-                <Button disabled={busy} type="submit">
-                  Vereinsjahr erstellen
-                </Button>
-              </form>
-            </details>
-          </section>
-          <section className="grid gap-3" aria-labelledby="seasons-title">
-            <h3 id="seasons-title" className="font-semibold">
-              Saisons
-            </h3>
-            {seasons.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Noch keine Saisons vorhanden.</p>
-            ) : (
-              <ul className="grid gap-2">
-                {seasons.map((season) => (
-                  <li key={season.id}>
-                    <Card className="border-border/80 shadow-sm">
-                      <CardBody className="p-3 text-sm">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <strong>{season.name}</strong>
-                          <Badge variant={planningStatusVariants[season.status]}>
-                            {statusLabels[season.status]}
-                          </Badge>
-                        </div>
-                        <p className="mt-1">
-                          {typeLabels[season.type]} ·{" "}
-                          {dateRange(season.start_date, season.end_date)}
-                          {currentSeason?.id === season.id ? " · Aktuelle Saison" : ""}
-                        </p>
-                        <p className="mt-1 text-muted-foreground">
-                          Vereinsjahr:{" "}
-                          {clubYears.find((year) => year.id === season.club_year_id)?.label ??
-                            "Nicht verfügbar"}
-                        </p>
-                        {actions[season.status].length ? (
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {actions[season.status].map((next) => (
-                              <Button
-                                variant="secondary"
-                                disabled={busy}
-                                key={next}
-                                aria-label={`Saison ${season.name} ${actionLabels[next]?.toLocaleLowerCase("de-CH")}`}
-                                onClick={() => updateStatus(season, next)}
-                              >
-                                {actionLabels[next]}
-                              </Button>
-                            ))}
-                          </div>
-                        ) : null}
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {season.status === "DRAFT" || season.status === "ACTIVE" ? (
-                            <Button
-                              variant="secondary"
-                              disabled={busy}
-                              aria-label={`Saison ${season.name} bearbeiten`}
-                              onClick={() => editSeason(season)}
-                            >
-                              Bearbeiten
-                            </Button>
-                          ) : null}
-                          {season.status === "DRAFT" ? (
-                            <Button
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() => removeSeason(season)}
-                            >
-                              Löschen
-                            </Button>
-                          ) : null}
-                        </div>
-                      </CardBody>
-                    </Card>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <details className="rounded-lg border border-border/80 bg-background p-3 shadow-sm">
-              <summary className="min-h-11 cursor-pointer font-medium">Saison erstellen</summary>
-              <form className="mt-3 grid gap-3" onSubmit={submitSeason}>
-                <label>
-                  Vereinsjahr
-                  <select
-                    className={control}
-                    name="club_year_id"
-                    required
-                    disabled={clubYears.length === 0}
-                  >
-                    <option value="">Bitte wählen</option>
-                    {clubYears.map((year) => (
-                      <option
-                        key={year.id}
-                        value={year.id}
-                        disabled={year.status === "CLOSED" || year.status === "ARCHIVED"}
-                      >
-                        {year.label}
-                        {year.status === "CLOSED"
-                          ? " (geschlossen)"
-                          : year.status === "ARCHIVED"
-                            ? " (archiviert)"
-                            : ""}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Typ
-                  <select className={control} name="type" defaultValue="AUTUMN">
-                    <option value="AUTUMN">Herbst</option>
-                    <option value="SPRING">Frühling</option>
-                    <option value="OTHER">Andere</option>
-                  </select>
-                </label>
-                <label>
-                  Name
-                  <input className={control} name="name" required />
-                </label>
-                <label>
-                  Startdatum
-                  <input className={control} name="start_date" type="date" required />
-                </label>
-                <label>
-                  Enddatum
-                  <input className={control} name="end_date" type="date" required />
-                </label>
-                <Button disabled={busy || clubYears.length === 0} type="submit">
-                  Saison erstellen
-                </Button>
-              </form>
-            </details>
-          </section>
-        </aside>
       </div>
     </section>
   );

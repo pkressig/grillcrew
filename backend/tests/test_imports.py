@@ -43,6 +43,7 @@ from app.services.imports import (
     ImportValidationError,
     _dated_note,
     _match_key,
+    _matches_home_venue,
 )
 
 HEADERS = [
@@ -230,6 +231,42 @@ def test_build_row_includes_when_venue_is_an_active_home_venue() -> None:
     )
     assert row.include_decision == ImportRowDecision.INCLUDE
     assert row.is_home_venue is True
+
+
+@pytest.mark.parametrize(
+    ("pattern", "venue"),
+    [
+        ("Cazis", "cazis"),
+        ("Cazis*", "Cazis Platz 1"),
+        ("*Cazis", "St. Martin, Cazis"),
+        ("*Cazis*", "St. Martin, Cazis - Platz 1"),
+        ("St.*Cazis*1", "St. Martin, Cazis - Platz 1"),
+        ("  *CAZIS*  ", "  St. Martin,   Cazis - Platz 1  "),
+    ],
+)
+def test_home_venue_patterns_match_exact_and_explicit_wildcards(pattern: str, venue: str) -> None:
+    assert _matches_home_venue(venue, {pattern}) is True
+
+
+@pytest.mark.parametrize(
+    ("pattern", "venue"),
+    [
+        ("Cazis", "St. Martin, Cazis - Platz 1"),
+        ("Cazis*", "St. Martin, Cazis"),
+        ("*Cazis", "Cazis - Platz 1"),
+        ("St.[Martin]", "St. M"),
+        ("", "Cazis"),
+        ("   ", "Cazis"),
+        ("*Cazis*", "Thusis"),
+    ],
+)
+def test_home_venue_patterns_do_not_fuzzily_or_regex_match(pattern: str, venue: str) -> None:
+    assert _matches_home_venue(venue, {pattern}) is False
+
+
+def test_home_venue_pattern_matching_ignores_invalid_entries_but_uses_valid_entries() -> None:
+    assert _matches_home_venue("Cazis", {"", "   ", "Cazis"}) is True
+    assert _matches_home_venue("", {"*"}) is False
 
 
 def test_build_row_classifies_verschoben_on_date_change() -> None:

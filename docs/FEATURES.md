@@ -135,6 +135,10 @@ Medium.
 - Season list and forms.
 - Season selector.
 - Visible event and shift admin cards and creation/status controls for `ADMIN` and `KOORDINATION`.
+- Planung has four explicit subsections: Spielplan, Kiosk, Grill, and
+  Vereinsjahr/Saisonverwaltung. The existing `/admin/planning` deep link remains the Spielplan;
+  period creation and lifecycle controls live in the dedicated management subsection. Kiosk and
+  Grill are labelled planned states until their own workflows are implemented.
 
 ## F004 Events
 
@@ -728,6 +732,7 @@ High (multi-phase).
 15. F015 Grill Game-Plan Import and Crew-Size Configuration
 
 F001 comes first because every future feature depends on a trustworthy organization context, database-driven branding, and tenant-safe data model. Authentication starts only after the tenant boundary exists.
+
 # F015 Phase 4B - Koordinationszeit
 
 - ADMIN kann private Koordinationszeit in den Einstellungen erfassen, bearbeiten und auf
@@ -736,6 +741,7 @@ F001 comes first because every future feature depends on a trustworthy organizat
   WorkRecords, Anmeldungen, Kiosk-Zuteilungen und oeffentlichen Kennzahlen.
 - Schreibzugriffe sind tenant-gebunden und durch ADMIN-Rolle, Origin/Host-Pruefung und CSRF
   geschuetzt; unveraenderte Wiederholungen erzeugen weder Commit noch Audit-Ereignis.
+
 ## Planning-period administration
 
 ADMIN and KOORDINATION can correct labels/names and date ranges, close or archive periods, and explicitly delete never-used drafts. Closed/archived periods stay visible and labelled in history but are disabled for imports and new planning records. Conflicts are reported in German without changing existing data.

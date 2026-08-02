@@ -107,7 +107,16 @@ async function remove(path: string): Promise<void> {
     credentials: "include",
     headers: csrfHeaders(),
   });
-  if (!response.ok) throw new Error("Der Planungszeitraum konnte nicht gelöscht werden.");
+  if (!response.ok) {
+    let detail: string | undefined;
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === "string") detail = body.detail;
+    } catch {
+      // Keep the stable fallback when an intermediary returns a non-JSON error.
+    }
+    throw new Error(detail ?? "Der Planungszeitraum konnte nicht gelöscht werden.");
+  }
 }
 
 export async function loadPlanning(org: string) {

@@ -246,16 +246,25 @@ class PlanningService:
     def delete_season(self, season_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
         item = self._get_season(season_id)
         if item.status != PlanningStatus.DRAFT:
-            raise PlanningConflictError("Nur unbenutzte Entwürfe können gelöscht werden.")
+            raise PlanningConflictError(
+                "Nur unbenutzte Saison-Entwürfe können gelöscht werden; "
+                "diese Saison muss geschlossen oder archiviert bleiben."
+            )
         event_count = self.db.scalar(
             select(func.count()).select_from(Event).where(Event.season_id == item.id)
         )
         import_count = self.db.scalar(
             select(func.count()).select_from(ImportRow).where(ImportRow.season_id == item.id)
         )
-        if event_count or import_count:
+        dependencies = []
+        if event_count:
+            dependencies.append(f"{event_count} Anlass/Anlässe")
+        if import_count:
+            dependencies.append(f"{import_count} Importzeile(n)")
+        if dependencies:
             raise PlanningConflictError(
-                "Diese Saison enthält historische Daten und kann nur archiviert werden."
+                "Diese Saison kann nicht gelöscht werden: abhängig sind "
+                f"{', '.join(dependencies)}. Bitte die Saison archivieren."
             )
         self._audit(actor_user_id, "SEASON_DELETED", "season", item.id, {"name": item.name})
         self.db.delete(item)
@@ -264,13 +273,33 @@ class PlanningService:
     def delete_club_year(self, club_year_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
         item = self.get_club_year(club_year_id)
         if item.status != PlanningStatus.DRAFT:
-            raise PlanningConflictError("Nur unbenutzte Entwürfe können gelöscht werden.")
+            raise PlanningConflictError(
+                "Nur unbenutzte Vereinsjahr-Entwürfe können gelöscht werden; "
+                "dieses Vereinsjahr muss geschlossen oder archiviert bleiben."
+            )
+        season_count = self.db.scalar(
+            select(func.count()).select_from(Season).where(Season.club_year_id == item.id)
+        )
+        event_count = self.db.scalar(
+            select(func.count())
+            .select_from(Event)
+            .join(Season)
+            .where(Season.club_year_id == item.id)
+        )
         import_count = self.db.scalar(
             select(func.count()).select_from(ImportBatch).where(ImportBatch.club_year_id == item.id)
         )
-        if item.seasons or import_count:
+        dependencies = []
+        if season_count:
+            dependencies.append(f"{season_count} Saison(s)")
+        if event_count:
+            dependencies.append(f"{event_count} Anlass/Anlässe")
+        if import_count:
+            dependencies.append(f"{import_count} Import(e)")
+        if dependencies:
             raise PlanningConflictError(
-                "Dieses Vereinsjahr enthält historische Daten und kann nur archiviert werden."
+                "Dieses Vereinsjahr kann nicht gelöscht werden: abhängig sind "
+                f"{', '.join(dependencies)}. Bitte das Vereinsjahr archivieren."
             )
         self._audit(actor_user_id, "CLUB_YEAR_DELETED", "club_year", item.id, {"label": item.label})
         self.db.delete(item)

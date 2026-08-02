@@ -144,6 +144,10 @@ def test_normalize_venue_name_collapses_whitespace_and_case() -> None:
     assert normalize_venue_name("CAZIS / ST. MARTIN") == normalize_venue_name("Cazis / St. Martin")
 
 
+def test_normalize_venue_name_preserves_explicit_wildcards() -> None:
+    assert normalize_venue_name("  * Cazis   Platz * ") == "* cazis platz *"
+
+
 # -- Service: organization settings --------------------------------------------
 
 

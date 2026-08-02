@@ -121,7 +121,9 @@ Authenticated organization settings administration (D-041) uses
 KOORDINATION), matching `docs/PERMISSIONS.md`'s "Organisationseinstellungen verwalten" row, and
 write endpoints validate CSRF and Origin/Host like every other admin mutation. Home venues are
 soft-deactivated (`is_active`), never hard-deleted, so historical import/event references stay
-valid. Crew-size rules always include one non-deletable default rule (`pattern = null`) evaluated
+valid. Import matching normalizes case and whitespace; venue names match exactly unless they contain
+an explicit `*` wildcard, and non-wildcard characters are always interpreted literally. Crew-size
+rules always include one non-deletable default rule (`pattern = null`) evaluated
 last regardless of stored `sort_order`, guaranteeing a crew-size suggestion always exists.
 
 Authenticated game-plan import (F015 Phase 2, D-041) uses `/api/admin/{organization_slug}/imports`:

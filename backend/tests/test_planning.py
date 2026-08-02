@@ -128,6 +128,55 @@ def test_closed_season_rejects_field_edits() -> None:
         service.update_season(season.id, SeasonUpdate(name="Changed"))
 
 
+def test_delete_season_removes_only_requested_unused_draft() -> None:
+    target = SimpleNamespace(id=uuid4(), status=PlanningStatus.DRAFT, name="Test", club_year=None)
+    unrelated = SimpleNamespace(id=uuid4(), status=PlanningStatus.DRAFT, name="Other")
+    db = _DeleteDb(target, [0, 0])
+
+    PlanningService(cast(object, db), uuid4()).delete_season(target.id, uuid4())  # type: ignore[arg-type]
+
+    assert db.deleted == [target]
+    assert unrelated not in db.deleted
+    assert db.commits == 1
+
+
+@pytest.mark.parametrize(
+    ("counts", "reason"),
+    [([1, 0], "Anlass"), ([0, 2], "Importzeile")],
+)
+def test_delete_season_reports_concrete_dependency(counts: list[int], reason: str) -> None:
+    target = SimpleNamespace(id=uuid4(), status=PlanningStatus.DRAFT, name="Historical")
+    db = _DeleteDb(target, counts)
+
+    with pytest.raises(PlanningConflictError, match=reason):
+        PlanningService(cast(object, db), uuid4()).delete_season(target.id, uuid4())  # type: ignore[arg-type]
+
+    assert db.deleted == []
+    assert db.commits == 0
+
+
+@pytest.mark.parametrize(
+    ("counts", "reason"),
+    [([1, 0, 0], "Saison"), ([0, 1, 0], "Anlass"), ([0, 0, 1], "Import")],
+)
+def test_delete_club_year_blocks_each_dependency(counts: list[int], reason: str) -> None:
+    target = SimpleNamespace(id=uuid4(), status=PlanningStatus.DRAFT, label="2026/27")
+    db = _DeleteDb(target, counts)
+
+    with pytest.raises(PlanningConflictError, match=reason):
+        PlanningService(cast(object, db), uuid4()).delete_club_year(target.id, uuid4())  # type: ignore[arg-type]
+
+    assert db.deleted == []
+
+
+def test_delete_lookups_remain_tenant_scoped() -> None:
+    service = PlanningService(cast(object, _MissingDb()), uuid4())  # type: ignore[arg-type]
+    with pytest.raises(PlanningNotFoundError):
+        service.delete_season(uuid4(), uuid4())
+    with pytest.raises(PlanningNotFoundError):
+        service.delete_club_year(uuid4(), uuid4())
+
+
 def test_client_payload_has_no_organization_id() -> None:
     payload = SeasonCreate(
         type=SeasonType.AUTUMN,
@@ -594,6 +643,30 @@ class _SeasonDb:
 class _MissingDb:
     def scalar(self, _statement: object) -> None:
         return None
+
+
+class _DeleteDb:
+    def __init__(self, item: object, counts: list[int]) -> None:
+        self.item = item
+        self.counts = iter(counts)
+        self.deleted: list[object] = []
+        self.added: list[object] = []
+        self.commits = 0
+
+    def scalar(self, statement: object) -> object:
+        # Entity lookups select a mapped model; dependency checks select count().
+        if "count(" not in str(statement).lower():
+            return self.item
+        return next(self.counts)
+
+    def add(self, item: object) -> None:
+        self.added.append(item)
+
+    def delete(self, item: object) -> None:
+        self.deleted.append(item)
+
+    def commit(self) -> None:
+        self.commits += 1
 
 
 class _SignupDb:

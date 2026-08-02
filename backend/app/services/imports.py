@@ -1,5 +1,6 @@
 """Tenant-safe game-plan import staging, diffing, and confirmation."""
 
+import re
 import uuid
 from collections.abc import Iterable
 from datetime import UTC, date, datetime
@@ -56,6 +57,23 @@ def _match_key(spielnummer: str | None, teams: str, game_date: date) -> str:
 
 def _dated_note(remark: str, now: datetime) -> str:
     return f"[Import {now.date().isoformat()}] Bemerkung: {remark}"
+
+
+def _matches_home_venue(venue_normalized: str, home_venue_patterns: set[str]) -> bool:
+    """Match normalized venue patterns, treating only ``*`` as a wildcard."""
+    normalized_venue = normalize_venue_name(venue_normalized)
+    if not normalized_venue:
+        return False
+
+    for pattern in sorted(home_venue_patterns):
+        normalized_pattern = normalize_venue_name(pattern)
+        if not normalized_pattern:
+            continue
+        literal_parts = (re.escape(part) for part in normalized_pattern.split("*"))
+        expression = ".*".join(literal_parts)
+        if re.fullmatch(expression, normalized_venue) is not None:
+            return True
+    return False
 
 
 class ImportService:
@@ -274,7 +292,7 @@ class ImportService:
         home_venue_names: set[str],
     ) -> ImportRow:
         venue_normalized = normalize_venue_name(parsed.venue)
-        is_home_venue = venue_normalized in home_venue_names
+        is_home_venue = _matches_home_venue(venue_normalized, home_venue_names)
         existing = existing_by_key.get(key)
 
         classification: ImportRowClassification
@@ -366,7 +384,7 @@ class ImportService:
                     venue=event.location,
                     venue_normalized=venue_normalized,
                     remark=None,
-                    is_home_venue=venue_normalized in home_venue_names,
+                    is_home_venue=_matches_home_venue(venue_normalized, home_venue_names),
                     classification=ImportRowClassification.ENTFERNT,
                     matched_event_id=event.id,
                     diff_details={
