@@ -736,3 +736,6 @@ F001 comes first because every future feature depends on a trustworthy organizat
   WorkRecords, Anmeldungen, Kiosk-Zuteilungen und oeffentlichen Kennzahlen.
 - Schreibzugriffe sind tenant-gebunden und durch ADMIN-Rolle, Origin/Host-Pruefung und CSRF
   geschuetzt; unveraenderte Wiederholungen erzeugen weder Commit noch Audit-Ereignis.
+## Planning-period administration
+
+ADMIN and KOORDINATION can correct labels/names and date ranges, close or archive periods, and explicitly delete never-used drafts. Closed/archived periods stay visible and labelled in history but are disabled for imports and new planning records. Conflicts are reported in German without changing existing data.

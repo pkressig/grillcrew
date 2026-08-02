@@ -253,3 +253,6 @@ fremde IDs werden nicht aufgeloest. Writes verlangen zusaetzlich CSRF sowie guel
 Das Modul besitzt Model, Schema, Service und API getrennt vom Signup-/Planning-Modul und wird von
 keiner oeffentlichen Route oder Helfer-API importiert. Audit-Ereignisse werden in derselben
 Transaktion wie die fachliche Aenderung geschrieben.
+## Planning lifecycle boundary
+
+Planning mutations remain behind staff-role, tenant, CSRF, and origin checks. The service layer validates transitions and dependencies atomically and writes audit events for update/delete lifecycle mutations. Import and creation services independently reject closed/archived targets, so UI filtering is not a security boundary.

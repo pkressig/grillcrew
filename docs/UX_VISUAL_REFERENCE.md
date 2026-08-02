@@ -120,3 +120,6 @@ Each visual phase must name exact files, preserve APIs, include responsive/acces
 **Scope:** Admin Planning presentation, accessible view switching, selected-week filtering or focus, responsive controls with 44px targets, and tests for the loaded data already returned by the existing APIs.
 
 **Non-goals:** No backend date contract, recurrence, drag/drop, timezone changes, inferred unavailable dates, month modes, collision rules, API/schema changes, or new event/shift mutations are introduced.
+## Planning-period controls
+
+Period cards show their lifecycle badge and expose 44px Edit, Schliessen, Archivieren, and (draft-only) Löschen controls as applicable. Destructive and lifecycle actions require explicit confirmation. Closed/archived options remain visible with German status labels in selectors but are disabled for new imports and creation.

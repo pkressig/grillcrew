@@ -3,7 +3,7 @@
 import uuid
 from datetime import UTC, date, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.identity import AuditEvent
@@ -12,6 +12,8 @@ from app.models.planning import (
     ClubYear,
     Event,
     EventStatus,
+    ImportBatch,
+    ImportRow,
     PlanningStatus,
     Season,
     Shift,
@@ -89,12 +91,24 @@ class PlanningService:
         self.db.refresh(item)
         return item
 
-    def update_club_year(self, club_year_id: uuid.UUID, payload: ClubYearUpdate) -> ClubYear:
+    def update_club_year(
+        self,
+        club_year_id: uuid.UUID,
+        payload: ClubYearUpdate,
+        actor_user_id: uuid.UUID | None = None,
+    ) -> ClubYear:
         item = self.get_club_year(club_year_id)
         values = payload.model_dump(exclude_unset=True)
         requested_status = values.get("status")
         if requested_status is not None:
             validate_transition(item.status, requested_status)
+            if requested_status in {PlanningStatus.CLOSED, PlanningStatus.ARCHIVED} and any(
+                season.status == PlanningStatus.ACTIVE for season in item.seasons
+            ):
+                raise PlanningConflictError(
+                    "Ein Vereinsjahr mit aktiver Saison kann nicht geschlossen oder "
+                    "archiviert werden."
+                )
         start = values.get("start_date", item.start_date)
         end = values.get("end_date", item.end_date)
         if start > end:
@@ -104,6 +118,7 @@ class PlanningService:
                 raise PlanningValidationError("club year must contain all seasons")
         for key, value in values.items():
             setattr(item, key, value)
+        self._audit(actor_user_id, "CLUB_YEAR_UPDATED", "club_year", item.id, values)
         self.db.commit()
         self.db.refresh(item)
         return item
@@ -120,6 +135,11 @@ class PlanningService:
 
     def create_season(self, club_year_id: uuid.UUID, payload: SeasonCreate) -> Season:
         club_year = self.get_club_year(club_year_id)
+        if club_year.status in {PlanningStatus.CLOSED, PlanningStatus.ARCHIVED}:
+            raise PlanningConflictError(
+                "In einem geschlossenen oder archivierten Vereinsjahr können keine Saisons "
+                "erstellt werden."
+            )
         self._validate_inside_club_year(payload.start_date, payload.end_date, club_year)
         item = Season(club_year_id=club_year.id, **payload.model_dump())
         self.db.add(item)
@@ -127,7 +147,9 @@ class PlanningService:
         self.db.refresh(item)
         return item
 
-    def update_season(self, season_id: uuid.UUID, payload: SeasonUpdate) -> Season:
+    def update_season(
+        self, season_id: uuid.UUID, payload: SeasonUpdate, actor_user_id: uuid.UUID | None = None
+    ) -> Season:
         item = self._get_season(season_id)
         values = payload.model_dump(exclude_unset=True)
         requested_status = values.get("status")
@@ -137,6 +159,22 @@ class PlanningService:
                 raise PlanningConflictError("closed or archived seasons cannot be edited")
         if requested_status is not None:
             validate_transition(item.status, requested_status)
+            if item.status == PlanningStatus.ACTIVE and requested_status == PlanningStatus.CLOSED:
+                other_active = self.db.scalar(
+                    select(func.count())
+                    .select_from(Season)
+                    .join(ClubYear)
+                    .where(
+                        ClubYear.organization_id == self.organization_id,
+                        Season.status == PlanningStatus.ACTIVE,
+                        Season.id != item.id,
+                    )
+                )
+                if not other_active:
+                    raise PlanningConflictError(
+                        "Die einzige aktive Saison kann nicht geschlossen werden. Bitte zuerst "
+                        "eine Ersatzsaison aktivieren."
+                    )
         start = values.get("start_date", item.start_date)
         end = values.get("end_date", item.end_date)
         if start > end:
@@ -144,6 +182,7 @@ class PlanningService:
         self._validate_inside_club_year(start, end, item.club_year)
         for key, value in values.items():
             setattr(item, key, value)
+        self._audit(actor_user_id, "SEASON_UPDATED", "season", item.id, values)
         self.db.commit()
         self.db.refresh(item)
         return item
@@ -192,12 +231,73 @@ class PlanningService:
 
     def create_event(self, season_id: uuid.UUID, payload: EventCreate) -> Event:
         season = self._get_season(season_id)
+        if season.status in {PlanningStatus.CLOSED, PlanningStatus.ARCHIVED}:
+            raise PlanningConflictError(
+                "In einer geschlossenen oder archivierten Saison können keine Anlässe "
+                "erstellt werden."
+            )
         self._validate_event_date(payload.date, season)
         item = Event(season_id=season.id, **payload.model_dump())
         self.db.add(item)
         self.db.commit()
         self.db.refresh(item)
         return item
+
+    def delete_season(self, season_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
+        item = self._get_season(season_id)
+        if item.status != PlanningStatus.DRAFT:
+            raise PlanningConflictError("Nur unbenutzte Entwürfe können gelöscht werden.")
+        event_count = self.db.scalar(
+            select(func.count()).select_from(Event).where(Event.season_id == item.id)
+        )
+        import_count = self.db.scalar(
+            select(func.count()).select_from(ImportRow).where(ImportRow.season_id == item.id)
+        )
+        if event_count or import_count:
+            raise PlanningConflictError(
+                "Diese Saison enthält historische Daten und kann nur archiviert werden."
+            )
+        self._audit(actor_user_id, "SEASON_DELETED", "season", item.id, {"name": item.name})
+        self.db.delete(item)
+        self.db.commit()
+
+    def delete_club_year(self, club_year_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
+        item = self.get_club_year(club_year_id)
+        if item.status != PlanningStatus.DRAFT:
+            raise PlanningConflictError("Nur unbenutzte Entwürfe können gelöscht werden.")
+        import_count = self.db.scalar(
+            select(func.count()).select_from(ImportBatch).where(ImportBatch.club_year_id == item.id)
+        )
+        if item.seasons or import_count:
+            raise PlanningConflictError(
+                "Dieses Vereinsjahr enthält historische Daten und kann nur archiviert werden."
+            )
+        self._audit(actor_user_id, "CLUB_YEAR_DELETED", "club_year", item.id, {"label": item.label})
+        self.db.delete(item)
+        self.db.commit()
+
+    def _audit(
+        self,
+        actor_user_id: uuid.UUID | None,
+        action: str,
+        entity_type: str,
+        entity_id: uuid.UUID,
+        metadata: dict[str, object],
+    ) -> None:
+        if actor_user_id is not None:
+            self.db.add(
+                AuditEvent(
+                    organization_id=self.organization_id,
+                    actor_user_id=actor_user_id,
+                    action=action,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    event_metadata={
+                        key: (value.value if hasattr(value, "value") else str(value))
+                        for key, value in metadata.items()
+                    },
+                )
+            )
 
     def update_event(self, event_id: uuid.UUID, payload: EventUpdate) -> Event:
         item = self._get_event(event_id)

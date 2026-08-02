@@ -7,12 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import {
   createClubYear,
+  deleteClubYear,
+  deleteSeason,
   cancelSignup,
   createEvent,
   createSeason,
   createShift,
   loadShiftCrewSuggestion,
   updateEventStatus,
+  updateClubYear,
+  updateSeason,
   updateSeasonStatus,
   updateShiftStatus,
   updateSignupAttendance,
@@ -423,6 +427,52 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     void run(() => updateSeasonStatus(org, season.id, next), "Saisonstatus wurde aktualisiert.");
   }
 
+  function editClubYear(year: ClubYear) {
+    const label = window.prompt("Label des Vereinsjahrs", year.label);
+    if (label === null) return;
+    const start = window.prompt("Startdatum (JJJJ-MM-TT)", year.start_date);
+    if (start === null) return;
+    const end = window.prompt("Enddatum (JJJJ-MM-TT)", year.end_date);
+    if (end === null) return;
+    void run(
+      () => updateClubYear(org, year.id, { label, start_date: start, end_date: end }),
+      "Vereinsjahr wurde aktualisiert.",
+    );
+  }
+
+  function editSeason(season: Season) {
+    const name = window.prompt("Name der Saison", season.name);
+    if (name === null) return;
+    const start = window.prompt("Startdatum (JJJJ-MM-TT)", season.start_date);
+    if (start === null) return;
+    const end = window.prompt("Enddatum (JJJJ-MM-TT)", season.end_date);
+    if (end === null) return;
+    void run(
+      () => updateSeason(org, season.id, { name, start_date: start, end_date: end }),
+      "Saison wurde aktualisiert.",
+    );
+  }
+
+  function removeClubYear(year: ClubYear) {
+    if (
+      !window.confirm(
+        `Vereinsjahr "${year.label}" endgültig löschen? Dies ist nur bei einem unbenutzten Entwurf möglich.`,
+      )
+    )
+      return;
+    void run(() => deleteClubYear(org, year.id), "Vereinsjahr wurde gelöscht.");
+  }
+
+  function removeSeason(season: Season) {
+    if (
+      !window.confirm(
+        `Saison "${season.name}" endgültig löschen? Dies ist nur bei einem unbenutzten Entwurf möglich.`,
+      )
+    )
+      return;
+    void run(() => deleteSeason(org, season.id), "Saison wurde gelöscht.");
+  }
+
   function changeEventStatus(planningEvent: PlanningEvent, next: EventStatus) {
     if (
       (next === "CANCELLED" || next === "COMPLETED") &&
@@ -684,8 +734,17 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                 >
                   <option value="">Bitte wählen</option>
                   {seasons.map((season) => (
-                    <option key={season.id} value={season.id}>
+                    <option
+                      key={season.id}
+                      value={season.id}
+                      disabled={season.status === "CLOSED" || season.status === "ARCHIVED"}
+                    >
                       {season.name}
+                      {season.status === "CLOSED"
+                        ? " (geschlossen)"
+                        : season.status === "ARCHIVED"
+                          ? " (archiviert)"
+                          : ""}
                     </option>
                   ))}
                 </select>
@@ -1126,6 +1185,55 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                           {dateRange(year.start_date, year.end_date)} ·{" "}
                           {seasons.filter((item) => item.club_year_id === year.id).length} Saisons
                         </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {year.status !== "ARCHIVED" ? (
+                            <Button
+                              variant="secondary"
+                              disabled={busy}
+                              aria-label={`Vereinsjahr ${year.label} bearbeiten`}
+                              onClick={() => editClubYear(year)}
+                            >
+                              Bearbeiten
+                            </Button>
+                          ) : null}
+                          {year.status === "DRAFT" ? (
+                            <Button
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() =>
+                                void run(
+                                  () => updateClubYear(org, year.id, { status: "CLOSED" }),
+                                  "Vereinsjahr wurde geschlossen.",
+                                )
+                              }
+                            >
+                              Schliessen
+                            </Button>
+                          ) : null}
+                          {year.status === "DRAFT" || year.status === "CLOSED" ? (
+                            <Button
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() =>
+                                void run(
+                                  () => updateClubYear(org, year.id, { status: "ARCHIVED" }),
+                                  "Vereinsjahr wurde archiviert.",
+                                )
+                              }
+                            >
+                              Archivieren
+                            </Button>
+                          ) : null}
+                          {year.status === "DRAFT" ? (
+                            <Button
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() => removeClubYear(year)}
+                            >
+                              Löschen
+                            </Button>
+                          ) : null}
+                        </div>
                       </CardBody>
                     </Card>
                   </li>
@@ -1198,6 +1306,27 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                             ))}
                           </div>
                         ) : null}
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {season.status === "DRAFT" || season.status === "ACTIVE" ? (
+                            <Button
+                              variant="secondary"
+                              disabled={busy}
+                              aria-label={`Saison ${season.name} bearbeiten`}
+                              onClick={() => editSeason(season)}
+                            >
+                              Bearbeiten
+                            </Button>
+                          ) : null}
+                          {season.status === "DRAFT" ? (
+                            <Button
+                              variant="secondary"
+                              disabled={busy}
+                              onClick={() => removeSeason(season)}
+                            >
+                              Löschen
+                            </Button>
+                          ) : null}
+                        </div>
                       </CardBody>
                     </Card>
                   </li>
@@ -1217,8 +1346,17 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   >
                     <option value="">Bitte wählen</option>
                     {clubYears.map((year) => (
-                      <option key={year.id} value={year.id}>
+                      <option
+                        key={year.id}
+                        value={year.id}
+                        disabled={year.status === "CLOSED" || year.status === "ARCHIVED"}
+                      >
                         {year.label}
+                        {year.status === "CLOSED"
+                          ? " (geschlossen)"
+                          : year.status === "ARCHIVED"
+                            ? " (archiviert)"
+                            : ""}
                       </option>
                     ))}
                   </select>

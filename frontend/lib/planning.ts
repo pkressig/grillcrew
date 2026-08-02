@@ -101,6 +101,15 @@ function writeInit(method: "POST" | "PATCH", payload: object): RequestInit {
   };
 }
 
+async function remove(path: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method: "DELETE",
+    credentials: "include",
+    headers: csrfHeaders(),
+  });
+  if (!response.ok) throw new Error("Der Planungszeitraum konnte nicht gelöscht werden.");
+}
+
 export async function loadPlanning(org: string) {
   const base = `/api/admin/${encodeURIComponent(org)}`;
   const [clubYears, seasons, currentResponse] = await Promise.all([
@@ -130,6 +139,20 @@ export const updateSeasonStatus = (org: string, seasonId: string, status: Planni
     `/api/admin/${encodeURIComponent(org)}/seasons/${encodeURIComponent(seasonId)}`,
     writeInit("PATCH", { status }),
   );
+export const updateClubYear = (org: string, clubYearId: string, payload: Partial<ClubYearInput>) =>
+  request<ClubYear>(
+    `/api/admin/${encodeURIComponent(org)}/club-years/${encodeURIComponent(clubYearId)}`,
+    writeInit("PATCH", payload),
+  );
+export const updateSeason = (org: string, seasonId: string, payload: Partial<SeasonInput>) =>
+  request<Season>(
+    `/api/admin/${encodeURIComponent(org)}/seasons/${encodeURIComponent(seasonId)}`,
+    writeInit("PATCH", payload),
+  );
+export const deleteClubYear = (org: string, clubYearId: string) =>
+  remove(`/api/admin/${encodeURIComponent(org)}/club-years/${encodeURIComponent(clubYearId)}`);
+export const deleteSeason = (org: string, seasonId: string) =>
+  remove(`/api/admin/${encodeURIComponent(org)}/seasons/${encodeURIComponent(seasonId)}`);
 
 export const loadEvents = (org: string, seasonId: string) =>
   request<PlanningEvent[]>(

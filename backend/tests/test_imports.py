@@ -288,6 +288,24 @@ def test_create_batch_raises_when_club_year_not_found() -> None:
         service.create_batch(uuid4(), "plan.xlsx", _workbook_bytes([]), uuid4())
 
 
+@pytest.mark.parametrize("status", [PlanningStatus.CLOSED, PlanningStatus.ARCHIVED])
+def test_create_batch_rejects_retired_club_year(status: PlanningStatus) -> None:
+    club_year = ClubYear(
+        id=uuid4(),
+        organization_id=uuid4(),
+        label="2026/2027",
+        start_date=date(2026, 7, 1),
+        end_date=date(2027, 6, 30),
+        status=status,
+    )
+    service = ImportService(
+        cast(object, _FakeDb(scalar_results=[club_year])),  # type: ignore[arg-type]
+        club_year.organization_id,
+    )
+    with pytest.raises(ImportConflictError, match="kein neuer Import"):
+        service.create_batch(club_year.id, "plan.xlsx", _workbook_bytes([]), uuid4())
+
+
 def test_create_batch_raises_when_season_type_missing() -> None:
     content = _workbook_bytes(
         [

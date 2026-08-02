@@ -154,8 +154,17 @@ export function ImportPanel({ org }: Readonly<{ org: string }>) {
                     disabled={uploadBusy}
                   >
                     {clubYears.map((clubYear) => (
-                      <option key={clubYear.id} value={clubYear.id}>
+                      <option
+                        key={clubYear.id}
+                        value={clubYear.id}
+                        disabled={clubYear.status === "CLOSED" || clubYear.status === "ARCHIVED"}
+                      >
                         {clubYear.label}
+                        {clubYear.status === "CLOSED"
+                          ? " (geschlossen)"
+                          : clubYear.status === "ARCHIVED"
+                            ? " (archiviert)"
+                            : ""}
                       </option>
                     ))}
                   </select>

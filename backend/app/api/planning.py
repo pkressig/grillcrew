@@ -182,7 +182,7 @@ def update_club_year(
 ) -> ClubYearResponse:
     try:
         item = _write_service(organization_slug, current, db, request).update_club_year(
-            club_year_id, payload
+            club_year_id, payload, current.user.id
         )
         return ClubYearResponse.model_validate(item)
     except (PlanningNotFoundError, PlanningConflictError, PlanningValidationError) as error:
@@ -231,7 +231,7 @@ def create_season(
             club_year_id, payload
         )
         return SeasonResponse.model_validate(item)
-    except (PlanningNotFoundError, PlanningValidationError) as error:
+    except (PlanningNotFoundError, PlanningConflictError, PlanningValidationError) as error:
         raise _translate(error) from None
 
 
@@ -247,10 +247,44 @@ def update_season(
 ) -> SeasonResponse:
     try:
         item = _write_service(organization_slug, current, db, request).update_season(
-            season_id, payload
+            season_id, payload, current.user.id
         )
         return SeasonResponse.model_validate(item)
     except (PlanningNotFoundError, PlanningConflictError, PlanningValidationError) as error:
+        raise _translate(error) from None
+
+
+@router.delete("/club-years/{club_year_id}", status_code=204)
+def delete_club_year(
+    organization_slug: str,
+    club_year_id: uuid.UUID,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> None:
+    try:
+        _write_service(organization_slug, current, db, request).delete_club_year(
+            club_year_id, current.user.id
+        )
+    except (PlanningNotFoundError, PlanningConflictError) as error:
+        raise _translate(error) from None
+
+
+@router.delete("/seasons/{season_id}", status_code=204)
+def delete_season(
+    organization_slug: str,
+    season_id: uuid.UUID,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> None:
+    try:
+        _write_service(organization_slug, current, db, request).delete_season(
+            season_id, current.user.id
+        )
+    except (PlanningNotFoundError, PlanningConflictError) as error:
         raise _translate(error) from None
 
 
@@ -284,7 +318,7 @@ def create_event(
         return EventResponse.model_validate(
             _write_service(organization_slug, current, db, request).create_event(season_id, payload)
         )
-    except (PlanningNotFoundError, PlanningValidationError) as error:
+    except (PlanningNotFoundError, PlanningConflictError, PlanningValidationError) as error:
         raise _translate(error) from None
 
 

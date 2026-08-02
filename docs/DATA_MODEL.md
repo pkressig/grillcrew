@@ -513,3 +513,6 @@ Zusammengesetzte Indizes `(organizationId, workDate)` und `(organizationId, payo
 Listen und Auszahlungsabfragen tenant-lokal. Der Satz ist ein eigener, expliziter Snapshot und nicht
 der Helfer-Auszahlungssatz aus `OrganizationSettings`; Aenderungen berechnen den Betrag nur in
 `OPEN` neu, ab `APPROVED` sind die Arbeits- und Finanzfelder gesperrt.
+## Planning-period retention
+
+`ClubYear.status` and `Season.status` are the retention boundary. Closed and archived rows remain addressable for history and reporting. A season is deletable only while `DRAFT` and without events/import rows. A club year is deletable only while `DRAFT` and without seasons/import batches. Application checks run before deletion; no planning-period delete may cascade historical records.

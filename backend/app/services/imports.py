@@ -18,6 +18,7 @@ from app.models.planning import (
     ImportRow,
     ImportRowClassification,
     ImportRowDecision,
+    PlanningStatus,
     Season,
     SeasonType,
     SpielTyp,
@@ -76,6 +77,10 @@ class ImportService:
         )
         if club_year is None:
             raise ImportNotFoundError("club year not found")
+        if club_year.status in {PlanningStatus.CLOSED, PlanningStatus.ARCHIVED}:
+            raise ImportConflictError(
+                "Für ein geschlossenes oder archiviertes Vereinsjahr ist kein neuer Import möglich."
+            )
 
         try:
             sheets = parse_game_plan(content)
@@ -95,6 +100,11 @@ class ImportService:
                 raise ImportValidationError(
                     f"Kein Saison-Eintrag vom Typ {sheet.season_type.value} im gewählten "
                     "Vereinsjahr gefunden. Bitte zuerst die Saison in der Planung anlegen."
+                )
+            if season.status in {PlanningStatus.CLOSED, PlanningStatus.ARCHIVED}:
+                raise ImportConflictError(
+                    f"Die Saison {season.name} ist geschlossen oder archiviert und kann nicht "
+                    "importiert werden."
                 )
             season_by_type[sheet.season_type] = season
 

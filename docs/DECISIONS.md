@@ -239,3 +239,6 @@ Papierunterschrift wird nur als manueller Empfangsvermerk mit optionaler Notiz d
 **Non-Goals (vorerst):** automatische Schichtverschiebung, digitale Unterschrift, KI-gestuetzte
 Besetzungsvorschlaege (Gemini), WhatsApp-Versandintegration, Sollstunden-Materialisierung
 (`FamilyRequirement`) - alle in `docs/BACKLOG.md` erfasst.
+## Planning-period lifecycle
+
+Club years and seasons use `DRAFT → ACTIVE → CLOSED → ARCHIVED` lifecycle states. ADMIN and KOORDINATION may edit open periods and close/archive them. Hard deletion is deliberately limited to unused drafts after server-side dependency checks; historical events, shifts, signups, imports, and work records are never cascaded away. The only active season cannot be closed until another active season exists.
