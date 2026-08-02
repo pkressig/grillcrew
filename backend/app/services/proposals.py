@@ -1,0 +1,254 @@
+"""Pure proposal grouping plus tenant-scoped orchestration and overrides."""
+
+from __future__ import annotations
+
+import hashlib
+import uuid
+from dataclasses import dataclass
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models.identity import AuditEvent
+from app.models.organization import CrewSizeRule, HomeVenue, Organization
+from app.models.planning import ClubYear, Event, EventStatus, Season
+from app.models.proposal import ProposalOverride
+from app.schemas.proposals import (
+    ProposalGameResponse,
+    ProposalOverrideUpdate,
+    ProposalWindowResponse,
+)
+from app.services.imports import _matches_home_venue
+from app.services.settings import normalize_venue_name
+
+
+class ProposalNotFoundError(Exception):
+    pass
+
+
+class ProposalValidationError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class ProposalGame:
+    id: uuid.UUID
+    title: str
+    date: date
+    kickoff_time: time
+    venue: str
+
+
+@dataclass(frozen=True)
+class ProposalWindow:
+    id: str
+    date: date
+    start_at: datetime
+    end_at: datetime
+    games: tuple[ProposalGame, ...]
+    split_reason: str | None
+
+
+def derive_proposal_windows(
+    games: list[ProposalGame], timezone: ZoneInfo, split_gap_minutes: int = 240
+) -> list[ProposalWindow]:
+    """Group dated kickoffs. A gap strictly greater than the threshold starts a new window."""
+    ordered = sorted(games, key=lambda game: (game.date, game.kickoff_time, str(game.id)))
+    groups: list[list[ProposalGame]] = []
+    for game in ordered:
+        if not groups or groups[-1][-1].date != game.date:
+            groups.append([game])
+            continue
+        previous = groups[-1][-1]
+        previous_at = datetime.combine(previous.date, previous.kickoff_time, timezone)
+        current_at = datetime.combine(game.date, game.kickoff_time, timezone)
+        if current_at - previous_at > timedelta(minutes=split_gap_minutes):
+            groups.append([game])
+        else:
+            groups[-1].append(game)
+
+    result: list[ProposalWindow] = []
+    date_counts: dict[date, int] = {}
+    for group in groups:
+        date_counts[group[0].date] = date_counts.get(group[0].date, 0) + 1
+    for group in groups:
+        first = datetime.combine(group[0].date, group[0].kickoff_time, timezone)
+        last = datetime.combine(group[-1].date, group[-1].kickoff_time, timezone)
+        key_source = ",".join(sorted(str(game.id) for game in group))
+        key = hashlib.sha256(key_source.encode()).hexdigest()
+        split = "KICKOFF_GAP_EXCEEDED" if date_counts[group[0].date] > 1 else None
+        result.append(
+            ProposalWindow(
+                key,
+                group[0].date,
+                first - timedelta(minutes=30),
+                last + timedelta(minutes=30),
+                tuple(group),
+                split,
+            )
+        )
+    return result
+
+
+class ProposalService:
+    def __init__(self, db: Session, organization_id: uuid.UUID, split_gap_minutes: int = 240):
+        self.db = db
+        self.organization_id = organization_id
+        self.split_gap_minutes = split_gap_minutes
+
+    def list_windows(self) -> list[ProposalWindowResponse]:
+        organization = self.db.get(Organization, self.organization_id)
+        if organization is None:
+            raise ProposalNotFoundError
+        patterns = set(
+            self.db.scalars(
+                select(HomeVenue.name_normalized).where(
+                    HomeVenue.organization_id == self.organization_id, HomeVenue.is_active.is_(True)
+                )
+            )
+        )
+        events = self.db.scalars(
+            select(Event)
+            .join(Season)
+            .join(ClubYear)
+            .where(
+                ClubYear.organization_id == self.organization_id,
+                Event.kickoff_time.is_not(None),
+                Event.status != EventStatus.CANCELLED,
+            )
+            .order_by(Event.date, Event.kickoff_time)
+        ).all()
+        games = [
+            ProposalGame(event.id, event.title, event.date, event.kickoff_time, event.location)
+            for event in events
+            if event.kickoff_time is not None
+            and _matches_home_venue(normalize_venue_name(event.location), patterns)
+        ]
+        windows = derive_proposal_windows(
+            games, ZoneInfo(organization.timezone), self.split_gap_minutes
+        )
+        overrides = {
+            item.window_key: item
+            for item in self.db.scalars(
+                select(ProposalOverride).where(
+                    ProposalOverride.organization_id == self.organization_id
+                )
+            )
+        }
+        rules = list(
+            self.db.scalars(
+                select(CrewSizeRule)
+                .where(
+                    CrewSizeRule.organization_id == self.organization_id,
+                    CrewSizeRule.is_active.is_(True),
+                )
+                .order_by(CrewSizeRule.sort_order)
+            )
+        )
+        return [self._response(window, overrides.get(window.id), rules) for window in windows]
+
+    def update(
+        self, window_id: str, payload: ProposalOverrideUpdate, actor_user_id: uuid.UUID
+    ) -> ProposalWindowResponse:
+        windows = {window.id: window for window in self.list_windows()}
+        current = windows.get(window_id)
+        if current is None:
+            raise ProposalNotFoundError
+        starts_at = payload.starts_at or current.start_at
+        ends_at = payload.ends_at or current.end_at
+        if (
+            starts_at >= ends_at
+            or starts_at.date() != current.date
+            or ends_at.date() != current.date
+        ):
+            raise ProposalValidationError(
+                "override times must be ordered and stay on the proposal date"
+            )
+        item = self.db.scalar(
+            select(ProposalOverride)
+            .where(
+                ProposalOverride.organization_id == self.organization_id,
+                ProposalOverride.window_key == window_id,
+            )
+            .with_for_update()
+        )
+        if item is None:
+            item = ProposalOverride(
+                organization_id=self.organization_id,
+                window_key=window_id,
+                proposal_date=current.date,
+            )
+            self.db.add(item)
+        for field in payload.model_fields_set:
+            setattr(item, field, getattr(payload, field))
+        self.db.flush()
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="PROPOSAL_OVERRIDE_CHANGED",
+                entity_type="proposal_override",
+                entity_id=item.id,
+                event_metadata={
+                    "window_key": window_id,
+                    "changed_fields": sorted(payload.model_fields_set),
+                },
+            )
+        )
+        self.db.commit()
+        return next(window for window in self.list_windows() if window.id == window_id)
+
+    def _response(
+        self, window: ProposalWindow, override: ProposalOverride | None, rules: list[CrewSizeRule]
+    ) -> ProposalWindowResponse:
+        count = 1 if len(window.games) <= 3 else 2
+        contexts: list[str] = []
+        for rule in rules:
+            if (
+                rule.pattern
+                and len(window.games) >= rule.min_games_per_shift
+                and any(rule.pattern.casefold() in game.title.casefold() for game in window.games)
+            ):
+                count = rule.required_griller_count
+                contexts.append(rule.pattern)
+                break
+        start = override.starts_at if override and override.starts_at else window.start_at
+        end = override.ends_at if override and override.ends_at else window.end_at
+        kiosk = override.kiosk_open if override and override.kiosk_open is not None else True
+        grill_requested = (
+            override.grill_required if override and override.grill_required is not None else True
+        )
+        grill = kiosk and grill_requested
+        slots = (
+            override.proposed_grill_slots
+            if override and override.proposed_grill_slots is not None
+            else count
+        )
+        if not grill:
+            slots = 0
+        zone = window.start_at.tzinfo
+        return ProposalWindowResponse(
+            id=window.id,
+            date=window.date,
+            start_at=start,
+            end_at=end,
+            kiosk_open=kiosk,
+            grill_required=grill,
+            proposed_grill_slots=slots,
+            override_state="MANUAL" if override else "PROPOSAL",
+            is_overridden=override is not None,
+            split_reason=window.split_reason,
+            venues=sorted({game.venue for game in window.games}),
+            crew_rule_context=", ".join(contexts) or None,
+            covered_event_ids=[game.id for game in window.games],
+            games=[
+                ProposalGameResponse(
+                    title=game.title,
+                    kickoff_at=datetime.combine(game.date, game.kickoff_time, zone),
+                    venue=game.venue,
+                )
+                for game in window.games
+            ],
+        )

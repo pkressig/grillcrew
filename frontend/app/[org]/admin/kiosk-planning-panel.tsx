@@ -1,0 +1,303 @@
+"use client";
+
+import { CheckCircle2, CircleOff, Info, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
+import { Card, CardBody } from "@/components/ui/card";
+import {
+  loadPlanningProposals,
+  refreshPlanningProposals,
+  updatePlanningProposal,
+  type ProposalWindow,
+} from "@/lib/proposals";
+
+function dateTime(value: string, timezone: string) {
+  return new Intl.DateTimeFormat("de-CH", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: timezone,
+  }).format(new Date(value));
+}
+
+function dateHeading(value: string) {
+  return new Intl.DateTimeFormat("de-CH", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T12:00:00Z`));
+}
+
+function inputDateTime(value: string) {
+  const date = new Date(value);
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function errorText(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function KioskWindowCard({
+  org,
+  timezone,
+  window,
+  onUpdated,
+}: Readonly<{
+  org: string;
+  timezone: string;
+  window: ProposalWindow;
+  onUpdated: (window: ProposalWindow) => void;
+}>) {
+  const [editing, setEditing] = useState(false);
+  const [startsAt, setStartsAt] = useState(inputDateTime(window.start_at));
+  const [endsAt, setEndsAt] = useState(inputDateTime(window.end_at));
+  const [kioskOpen, setKioskOpen] = useState(window.kiosk_open);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updatePlanningProposal(org, window.id, {
+        starts_at: new Date(startsAt).toISOString(),
+        ends_at: new Date(endsAt).toISOString(),
+        kiosk_open: kioskOpen,
+      });
+      onUpdated(updated);
+      setEditing(false);
+    } catch (caught) {
+      setError(errorText(caught, "Die manuelle Anpassung konnte nicht gespeichert werden."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardBody className="grid gap-5 lg:grid-cols-[13rem_minmax(0,1fr)_15rem]">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Kiosk-Zeitfenster</p>
+          <p className="mt-1 text-lg font-semibold">
+            <time dateTime={window.start_at}>{dateTime(window.start_at, timezone)}</time>
+            <span aria-hidden="true"> – </span>
+            <span className="sr-only"> bis </span>
+            <time dateTime={window.end_at}>{dateTime(window.end_at, timezone)}</time>
+          </p>
+          <p className="mt-2 inline-flex items-center gap-2 text-sm font-semibold">
+            {window.kiosk_open ? (
+              <CheckCircle2 aria-hidden="true" className="size-5 text-status-success" />
+            ) : (
+              <CircleOff aria-hidden="true" className="size-5 text-muted-foreground" />
+            )}
+            {window.kiosk_open ? "Kiosk offen" : "Kiosk geschlossen"}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {window.override_state === "MANUAL" ? "Manuell angepasst" : "Vorschlag"}
+          </p>
+        </div>
+
+        <div>
+          <h3 className="font-semibold">Abgedeckte Spiele</h3>
+          <ul className="mt-2 grid gap-2" aria-label="Abgedeckte Spiele">
+            {window.games.map((game) => (
+              <li
+                key={`${game.title}-${game.kickoff_at}`}
+                className="rounded-sm bg-muted p-3 text-sm"
+              >
+                <span className="font-medium">{game.title}</span>
+                <span className="block text-muted-foreground">
+                  {dateTime(game.kickoff_at, timezone)} · {game.venue}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Spielorte: {window.venues.join(", ")}
+          </p>
+          {window.split_reason ? (
+            <p className="mt-2 flex gap-2 text-sm text-muted-foreground">
+              <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+              <span>Geteiltes Zeitfenster: {window.split_reason}</span>
+            </p>
+          ) : (
+            <p className="mt-2 text-sm text-muted-foreground">Durchgehende Abdeckung</p>
+          )}
+        </div>
+
+        <div className="lg:border-l lg:pl-5">
+          {!editing ? (
+            <Button className="w-full" variant="secondary" onClick={() => setEditing(true)}>
+              Manuell anpassen
+            </Button>
+          ) : (
+            <div className="grid gap-3">
+              <label className="grid gap-1 text-sm font-medium">
+                Beginn
+                <input
+                  className="min-h-11 rounded-sm border bg-background px-3"
+                  type="datetime-local"
+                  value={startsAt}
+                  onChange={(event) => setStartsAt(event.target.value)}
+                />
+              </label>
+              <label className="grid gap-1 text-sm font-medium">
+                Ende
+                <input
+                  className="min-h-11 rounded-sm border bg-background px-3"
+                  type="datetime-local"
+                  value={endsAt}
+                  onChange={(event) => setEndsAt(event.target.value)}
+                />
+              </label>
+              <label className="flex min-h-11 items-center gap-3 text-sm font-medium">
+                <input
+                  className="size-5"
+                  type="checkbox"
+                  checked={kioskOpen}
+                  onChange={(event) => setKioskOpen(event.target.checked)}
+                />
+                Kiosk offen
+              </label>
+              {error ? (
+                <p role="alert" className="text-sm text-status-error">
+                  {error}
+                </p>
+              ) : null}
+              <Button disabled={saving || !startsAt || !endsAt} onClick={save}>
+                {saving ? "Wird gespeichert …" : "Anpassung speichern"}
+              </Button>
+              <Button disabled={saving} variant="ghost" onClick={() => setEditing(false)}>
+                Abbrechen
+              </Button>
+            </div>
+          )}
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
+export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; timezone: string }>) {
+  const [windows, setWindows] = useState<ProposalWindow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setWindows((await loadPlanningProposals(org)).windows);
+    } catch (caught) {
+      setError(errorText(caught, "Die Kiosk-Vorschläge konnten nicht geladen werden."));
+    } finally {
+      setLoading(false);
+    }
+  }, [org]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function refresh() {
+    setRefreshing(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const refreshed = await refreshPlanningProposals(org);
+      setWindows(refreshed.windows);
+      setSuccess("Vorschläge aus dem Spielbetrieb wurden aktualisiert.");
+    } catch (caught) {
+      setError(errorText(caught, "Die Kiosk-Vorschläge konnten nicht aktualisiert werden."));
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  const days = windows.reduce<Map<string, ProposalWindow[]>>((grouped, window) => {
+    const current = grouped.get(window.date) ?? [];
+    grouped.set(window.date, [...current, window]);
+    return grouped;
+  }, new Map());
+
+  return (
+    <section className="grid gap-6" aria-labelledby="kiosk-title">
+      <PageHeader
+        headingId="kiosk-title"
+        title="Kiosk"
+        description="Aus Heimspielen abgeleitete Zeitfenster. Vorschläge bleiben von bestätigten Einsätzen getrennt."
+        action={
+          <Button disabled={loading || refreshing} onClick={refresh}>
+            <RefreshCw
+              aria-hidden="true"
+              className={`size-4 ${refreshing ? "animate-spin" : ""}`}
+            />
+            {refreshing ? "Wird aktualisiert …" : "Vorschläge aus Spielbetrieb aktualisieren"}
+          </Button>
+        }
+      />
+
+      {success ? (
+        <p role="status" className="rounded-sm border border-status-success p-3">
+          {success}
+        </p>
+      ) : null}
+      {error ? (
+        <Card>
+          <CardBody>
+            <p role="alert" className="text-status-error">
+              {error}
+            </p>
+            <Button className="mt-4" variant="secondary" onClick={load}>
+              Erneut laden
+            </Button>
+          </CardBody>
+        </Card>
+      ) : loading ? (
+        <Card role="status" aria-live="polite">
+          <CardBody>Kiosk-Vorschläge werden geladen …</CardBody>
+        </Card>
+      ) : windows.length === 0 ? (
+        <Card role="status">
+          <CardBody>
+            <h2 className="text-lg font-semibold">Keine Kiosk-Zeitfenster</h2>
+            <p className="mt-2 text-muted-foreground">
+              Für die konfigurierten Heimspielorte wurden keine Spiele gefunden. Es werden keine
+              Einsätze erfunden.
+            </p>
+          </CardBody>
+        </Card>
+      ) : (
+        <div className="grid gap-8">
+          {[...days.entries()].map(([date, dayWindows]) => (
+            <section key={date} className="grid gap-3" aria-labelledby={`kiosk-day-${date}`}>
+              <h2 id={`kiosk-day-${date}`} className="text-xl font-semibold capitalize">
+                {dateHeading(date)}
+              </h2>
+              <div className="grid gap-4">
+                {dayWindows.map((window) => (
+                  <KioskWindowCard
+                    key={window.id}
+                    org={org}
+                    timezone={timezone}
+                    window={window}
+                    onUpdated={(updated) =>
+                      setWindows((current) =>
+                        current.map((item) => (item.id === updated.id ? updated : item)),
+                      )
+                    }
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}

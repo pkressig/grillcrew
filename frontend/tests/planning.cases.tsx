@@ -112,6 +112,7 @@ function planningFetch(
     if (url.endsWith("/seasons") && method === "GET")
       return Response.json(empty ? [] : returnedSeasons);
     if (url.endsWith("/seasons/current")) return new Response(null, { status: 404 });
+    if (url.endsWith("/proposals") && method === "GET") return Response.json({ windows: [] });
     if (url.endsWith("/seasons/season-1/events") && method === "GET")
       return Response.json(returnedEvents);
     if (url.endsWith("/events/event-1/shifts") && method === "GET")
@@ -201,7 +202,7 @@ describe("planning admin", () => {
     );
   });
 
-  it.each(["kiosk", "grill"] as const)("shows an honest %s planned state", async (section) => {
+  it.each(["kiosk", "grill"] as const)("shows an honest %s empty state", async (section) => {
     vi.stubGlobal("fetch", planningFetch("ADMIN"));
     render(
       <AuthProvider>
@@ -219,9 +220,8 @@ describe("planning admin", () => {
         name: section === "kiosk" ? "Kiosk" : "Grill",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/separate Quelle/);
-    expect(screen.getByRole("status")).toHaveTextContent(
-      /keine Einsätze oder Zuteilungen erfunden/,
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      section === "kiosk" ? /Keine Kiosk-Zeitfenster/ : /Keine offenen Kioskfenster/,
     );
     expect(
       screen.getByRole("link", { name: section === "kiosk" ? "Kiosk" : "Grill" }),

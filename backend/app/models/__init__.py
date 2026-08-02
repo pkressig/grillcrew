@@ -46,6 +46,7 @@ from app.models.planning import (
     Volunteer,
     VolunteerStatus,
 )
+from app.models.proposal import ProposalOverride
 from app.models.work_record import CompensationType, PayoutStatus, WorkRecord
 
 __all__ = [
@@ -75,6 +76,7 @@ __all__ = [
     "PayoutStatus",
     "PlanningStatus",
     "PlatformRole",
+    "ProposalOverride",
     "RefreshToken",
     "Season",
     "SeasonType",

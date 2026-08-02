@@ -242,3 +242,8 @@ Besetzungsvorschlaege (Gemini), WhatsApp-Versandintegration, Sollstunden-Materia
 ## Planning-period lifecycle
 
 Club years and seasons use `DRAFT → ACTIVE → CLOSED → ARCHIVED` lifecycle states. ADMIN and KOORDINATION may edit open periods and close/archive them. Hard deletion is deliberately limited to unused drafts after server-side dependency checks; historical events, shifts, signups, imports, and work records are never cascaded away. The only active season cannot be closed until another active season exists.
+## D-042 – Abgeleitete Kiosk-/Grillvorschläge (Phase 1)
+
+**Entscheid:** Kioskfenster werden für Spiele an aktiven Heimplätzen mit 30 Minuten Vor- und Nachlauf abgeleitet. Nur Abstände von mehr als 240 Minuten trennen Fenster. Grillbedarf bleibt Teil dieses Vorschlags: standardmässig ein Platz bis drei gleichzeitig abgedeckten Spielen, sonst zwei; eine passende CrewSizeRule kann die Anzahl übersteuern. Manuelle Änderungen werden separat, mandantenbezogen und auditiert gespeichert.
+
+**Abgrenzung:** Vorschläge erzeugen weder Schichten noch öffentliche Anmeldungen. Ein externer Kioskplan wird in dieser Phase nicht importiert.

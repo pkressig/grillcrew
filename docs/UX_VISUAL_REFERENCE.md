@@ -123,3 +123,6 @@ Each visual phase must name exact files, preserve APIs, include responsive/acces
 ## Planning-period controls
 
 Period cards show their lifecycle badge and expose 44px Edit, Schliessen, Archivieren, and (draft-only) Löschen controls as applicable. Destructive and lifecycle actions require explicit confirmation. Closed/archived options remain visible with German status labels in selectors but are disabled for new imports and creation.
+## Kiosk- und Grillvorschläge
+
+Kiosk verwendet eine nach Tagen gegliederte, responsive Kartenliste mit Fensterzeiten, Spielen, Spielorten, Teilungsgrund und sichtbarem Status `Vorschlag` oder `Manuell angepasst`. Grill zeigt ausschliesslich Fenster mit `Kiosk offen`, den Grillbedarf, ein/zwei vorgeschlagene Plätze beziehungsweise CrewSizeRule-Kontext sowie denselben Override-Status. Beide Ansichten besitzen Lade-, Leer-, Fehler- und Erfolgszustände, 44px-Bedienelemente und Textäquivalente für Statussymbole.

@@ -19,6 +19,8 @@ import type { PublicOrganization } from "@/lib/organization";
 import { FamiliesPanel } from "./families-panel";
 import { AttendancePanel } from "./attendance-panel";
 import { ImportPanel } from "./import-panel";
+import { GrillPlanningPanel } from "./grill-planning-panel";
+import { KioskPlanningPanel } from "./kiosk-planning-panel";
 import { PlanningPanel } from "./planning-panel";
 import { PlanningArchivePanel } from "./planning-archive-panel";
 import { PlanningPlaceholderPanel } from "./planning-placeholder-panel";
@@ -170,6 +172,10 @@ export function AdminShell({
               <PlanningNavigation activeSection={planningSection} org={org} />
               {planningSection === "schedule" ? (
                 <PlanningPanel org={org} timezone={organization.timezone} />
+              ) : planningSection === "kiosk" ? (
+                <KioskPlanningPanel org={org} timezone={organization.timezone} />
+              ) : planningSection === "grill" ? (
+                <GrillPlanningPanel org={org} timezone={organization.timezone} />
               ) : planningSection === "periods" ? (
                 <PeriodManagementPanel org={org} />
               ) : planningSection === "archive" ? (

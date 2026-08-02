@@ -745,3 +745,6 @@ F001 comes first because every future feature depends on a trustworthy organizat
 ## Planning-period administration
 
 ADMIN and KOORDINATION can correct labels/names and date ranges, close or archive periods, and explicitly delete never-used drafts. Closed/archived periods stay visible and labelled in history but are disabled for imports and new planning records. Conflicts are reported in German without changing existing data.
+## Kiosk- und Grillplanung – Phase 1
+
+Die privaten Planungsansichten zeigen transparente Vorschläge aus dem Spielbetrieb. Kiosk gruppiert Heimspiele in Tagesfenster, zeigt Abdeckung und Teilungsgrund und erlaubt manuelle Zeit-/Öffnungsanpassungen. Grill zeigt nur offene Kioskfenster, Crew-Regel-Kontext und änderbare Grillbedarfs-/Platzvorschläge. Vorschläge bleiben sichtbar von bestätigten Schichten und öffentlichen Anmeldungen getrennt.

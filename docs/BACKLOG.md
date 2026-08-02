@@ -64,3 +64,7 @@
 - Saisonend-Export/Report fuer Koordinationszeit und Helferarbeit bleibt eine eigene spaetere Phase.
 - Digitale Unterschriften bleiben ausgeschlossen; Phase 4B speichert nur einen manuellen
   Papier-Unterschrift-erhalten-Vermerk.
+## Nach Kiosk-/Grillvorschläge Phase 1
+
+- Externen aktuellen Kiosk-Excelplan erst nach Bereitstellung des Koordinator-Dokuments importieren und mit den abgeleiteten Vorschlägen vergleichen.
+- Vorschläge erst nach einem eigenen genehmigten Workflow in bestätigte Schichten beziehungsweise öffentliche Anmeldungen überführen.

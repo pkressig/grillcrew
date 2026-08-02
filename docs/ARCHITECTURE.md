@@ -258,3 +258,6 @@ Transaktion wie die fachliche Aenderung geschrieben.
 ## Planning lifecycle boundary
 
 Planning mutations remain behind staff-role, tenant, CSRF, and origin checks. The service layer validates transitions and dependencies atomically and writes audit events for update/delete lifecycle mutations. Import and creation services independently reject closed/archived targets, so UI filtering is not a security boundary.
+## Proposal boundary
+
+`/api/admin/{organization_slug}/proposals` ist eine private ADMIN-/KOORDINATION-Grenze. GET leitet den aktuellen Vorschlag mandantenbezogen aus Events, aktiven Heimplätzen und Crew-Regeln ab. POST `/refresh` berechnet denselben Snapshot neu; PATCH `/{window_id}` persistiert nur eine manuelle Abweichung und verlangt CSRF sowie gültigen Origin/Host. Keine Proposal-Route wird in die öffentliche Projektion importiert, und der Service erzeugt keine Schichten oder Signups.

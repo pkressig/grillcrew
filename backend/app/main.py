@@ -14,6 +14,7 @@ from app.api.imports import router as imports_router
 from app.api.internal import router as internal_router
 from app.api.invitations import router as invitations_router
 from app.api.planning import router as planning_router
+from app.api.proposals import router as proposals_router
 from app.api.public import router as public_router
 from app.api.settings import router as settings_router
 from app.core.config import AppEnv, get_settings
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     application.include_router(admin_router)
     application.include_router(families_router)
     application.include_router(planning_router)
+    application.include_router(proposals_router)
     application.include_router(settings_router)
     application.include_router(coordination_time_router)
     application.include_router(imports_router)
