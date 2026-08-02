@@ -3,6 +3,7 @@
 import { CheckCircle2, CircleOff, Info, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/page-header";
+import { ExternalPlanComparisonWorkspace } from "@/app/[org]/admin/external-plan-comparison";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import {
@@ -241,6 +242,8 @@ export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
           </Button>
         }
       />
+
+      <ExternalPlanComparisonWorkspace org={org} timezone={timezone} />
 
       {success ? (
         <p role="status" className="rounded-sm border border-status-success p-3">

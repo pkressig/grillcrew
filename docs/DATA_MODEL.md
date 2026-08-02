@@ -518,3 +518,14 @@ der Helfer-Auszahlungssatz aus `OrganizationSettings`; Aenderungen berechnen den
 ## Planning-period retention
 
 `ClubYear.status` and `Season.status` are the retention boundary. Closed and archived rows remain addressable for history and reporting. A season is deletable only while `DRAFT` and without events/import rows. A club year is deletable only while `DRAFT` and without seasons/import batches. Application checks run before deletion; no planning-period delete may cascade historical records.
+## Kiosk-/Grillvorschlags-Overrides
+
+`ExternalKioskBatch` stores an organization-scoped, review-only workbook snapshot with the original
+filename, worksheet, SHA-256 content hash, uploader, timestamp, and row count. The
+organization/hash uniqueness constraint makes repeat uploads idempotent. `ExternalKioskRow` stores
+the source row, normalized date and optional times, `KIOSK`/`GRILL` category, assigned-person text,
+notes, raw source text, and `PENDING`/`ACKNOWLEDGED`/`OVERRIDDEN` review state with reviewer metadata.
+Rows cascade only when their staging batch is explicitly cleaned up; neither entity writes to
+Event, ProposalOverride, Shift, or Signup.
+
+`ProposalOverride` speichert ausschliesslich manuelle Abweichungen von deterministisch abgeleiteten Fenstern. Der stabile Fensterschlüssel, die Organisation, optionale Start-/Endzeiten, Kiosk-/Grillstatus und vorgeschlagene Grillplätze sind persistiert; Spiele und Fenster bleiben aus `Event`, aktiven `HomeVenue`-Einträgen und `CrewSizeRule` abgeleitet. Änderungen schreiben im selben Transaktionskontext ein Audit-Ereignis.

@@ -747,4 +747,10 @@ F001 comes first because every future feature depends on a trustworthy organizat
 ADMIN and KOORDINATION can correct labels/names and date ranges, close or archive periods, and explicitly delete never-used drafts. Closed/archived periods stay visible and labelled in history but are disabled for imports and new planning records. Conflicts are reported in German without changing existing data.
 ## Kiosk- und Grillplanung – Phase 1
 
+The external Kiosk-plan comparison lets ADMIN and KOORDINATION upload the historical matrix workbook
+as a separate review dataset. The Kiosk view separates the Spielbetrieb proposal, imported workbook,
+and difference/status; the Grill view uses the same verified, missing, or manually overridden state.
+Rows can be explicitly acknowledged or overridden. This workflow never creates or changes proposals,
+confirmed shifts, public signups, or Spielbetrieb data.
+
 Die privaten Planungsansichten zeigen transparente Vorschläge aus dem Spielbetrieb. Kiosk gruppiert Heimspiele in Tagesfenster, zeigt Abdeckung und Teilungsgrund und erlaubt manuelle Zeit-/Öffnungsanpassungen. Grill zeigt nur offene Kioskfenster, Crew-Regel-Kontext und änderbare Grillbedarfs-/Platzvorschläge. Vorschläge bleiben sichtbar von bestätigten Schichten und öffentlichen Anmeldungen getrennt.

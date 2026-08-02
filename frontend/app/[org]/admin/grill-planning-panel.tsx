@@ -7,6 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import {
+  loadExternalPlanComparison,
+  type ExternalPlanComparisonRow,
+} from "@/lib/external-kiosk-plan";
+import {
   loadPlanningProposals,
   updatePlanningProposal,
   type PlanningProposalWindow,
@@ -23,6 +27,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [comparisonRows, setComparisonRows] = useState<ExternalPlanComparisonRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,6 +35,12 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     try {
       const result = await loadPlanningProposals(org);
       setWindows(result.windows);
+      try {
+        setComparisonRows((await loadExternalPlanComparison(org))?.rows ?? []);
+      } catch {
+        // Proposal editing remains available when the optional comparison cannot be loaded.
+        setComparisonRows([]);
+      }
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -119,6 +130,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
               timezone={timezone}
               saving={savingId === window.id}
               onSave={save}
+              comparison={comparisonRows.find((row) => row.proposal_window?.id === window.id)}
             />
           ))}
         </div>
@@ -132,11 +144,13 @@ function GrillWindowCard({
   timezone,
   saving,
   onSave,
+  comparison,
 }: Readonly<{
   window: PlanningProposalWindow;
   timezone: string;
   saving: boolean;
   onSave: (window: EditableWindow) => Promise<void>;
+  comparison?: ExternalPlanComparisonRow;
 }>) {
   const [grillRequired, setGrillRequired] = useState(window.grill_required);
   const [slots, setSlots] = useState(window.proposed_grill_slots);
@@ -164,6 +178,21 @@ function GrillWindowCard({
             </Badge>
             <Badge variant={window.override_state === "MANUAL" ? "warning" : "neutral"}>
               {window.override_state === "MANUAL" ? "Manuell angepasst" : "Vorschlag"}
+            </Badge>
+            <Badge
+              variant={
+                comparison?.review_state === "OVERRIDDEN"
+                  ? "warning"
+                  : comparison?.statuses.includes("MATCH")
+                    ? "success"
+                    : "neutral"
+              }
+            >
+              {comparison?.review_state === "OVERRIDDEN"
+                ? "Kioskdeckung manuell übersteuert"
+                : comparison?.statuses.includes("MATCH")
+                  ? "Kioskdeckung verifiziert"
+                  : "Kioskdeckung fehlt"}
             </Badge>
           </div>
         </div>

@@ -37,7 +37,7 @@ describe("Kiosk planning", () => {
     vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [windowProposal] });
     render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
 
-    expect(screen.getByRole("status")).toHaveTextContent("werden geladen");
+    expect(screen.getByText("Kiosk-Vorschläge werden geladen …")).toBeInTheDocument();
     const day = await screen.findByRole("heading", { level: 2, name: /12. September 2026/i });
     const section = day.closest("section")!;
     expect(within(section).getByText("Kiosk offen")).toBeInTheDocument();

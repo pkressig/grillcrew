@@ -31,6 +31,7 @@ Die Rollen sind in D-025 beschlossen und werden serverseitig durchgesetzt.
 | Exporte ohne Kontaktdaten erzeugen | ja | ja | nein | ja |
 | Exporte mit Kontaktdaten erzeugen | ja | ja, falls erforderlich | nein | nein |
 | Import aus Bestandsdaten ausführen | ja | nein | nein | nein |
+| Externen Kiosk-/Grillplan zur Prüfung importieren und vergleichen | ja | ja | nein | nein |
 | Audit-Log ansehen | ja | nein | nein | nein |
 
 ## Grundsätze
