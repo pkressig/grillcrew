@@ -13,7 +13,7 @@ import zipfile
 from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 from io import BytesIO
-from urllib.parse import unquote, urljoin, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urljoin, urlsplit, urlunsplit
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -138,6 +138,14 @@ def _validate_xlsx(content: bytes) -> None:
         raise OneDriveSyncError("Die Quelle ist keine gültige XLSX-Datei.") from error
 
 
+def _download_hint(url: str) -> str:
+    parsed = urlsplit(url)
+    query = parse_qsl(parsed.query, keep_blank_values=True)
+    if not any(key.lower() == "download" for key, _ in query):
+        query.append(("download", "1"))
+    return urlunsplit(parsed._replace(query=urlencode(query)))
+
+
 def download_workbook(url: str) -> tuple[str, bytes]:
     final_url = normalize_source_url(url)
     disposition: str | None = None
@@ -157,7 +165,13 @@ def download_workbook(url: str) -> tuple[str, bytes]:
         raise OneDriveSyncError("Zu viele OneDrive-Weiterleitungen.")
     if len(content) > MAX_DOWNLOAD_BYTES:
         raise OneDriveSyncError("Die Excel-Datei darf maximal 10 MiB gross sein.")
-    _validate_xlsx(content)
+    try:
+        _validate_xlsx(content)
+    except OneDriveSyncError:
+        hinted_url = _download_hint(url)
+        if hinted_url != url:
+            return download_workbook(hinted_url)
+        raise
     filename = unquote(
         disposition or urlsplit(final_url).path.rsplit("/", 1)[-1] or "onedrive.xlsx"
     )
