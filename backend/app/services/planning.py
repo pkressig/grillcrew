@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.external_kiosk import ExternalKioskBatch, ExternalKioskCategory, ExternalKioskRow
@@ -23,6 +23,7 @@ from app.models.planning import (
     SignupOutcome,
     SignupStatus,
 )
+from app.models.proposal import ProposalOverride
 from app.models.work_record import WorkRecord
 from app.schemas.planning import (
     ClubYearCreate,
@@ -34,6 +35,7 @@ from app.schemas.planning import (
     ShiftCreate,
     ShiftUpdate,
 )
+from app.schemas.proposals import ProposalWindowResponse
 from app.services.settings import SettingsService
 
 TRANSITIONS = {
@@ -429,6 +431,212 @@ class PlanningService:
         )
         self.db.delete(item)
         self.db.commit()
+
+    def force_delete_historical_event(self, event_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
+        """Permanently remove one terminal event and records exclusively owned by it."""
+        item = self.db.scalar(
+            select(Event)
+            .join(Season)
+            .join(ClubYear)
+            .where(Event.id == event_id, ClubYear.organization_id == self.organization_id)
+            .with_for_update(of=Event)
+        )
+        if item is None:
+            raise PlanningNotFoundError
+        if item.status not in {EventStatus.COMPLETED, EventStatus.CANCELLED}:
+            raise PlanningConflictError(
+                "Nur erledigte oder abgesagte Anlässe aus dem Archiv können endgültig "
+                "gelöscht werden."
+            )
+
+        shifts = list(
+            self.db.scalars(
+                select(Shift).where(Shift.event_id == item.id).with_for_update(of=Shift)
+            )
+        )
+        shift_ids = [shift.id for shift in shifts]
+        signups = (
+            list(
+                self.db.scalars(
+                    select(Signup).where(Signup.shift_id.in_(shift_ids)).with_for_update(of=Signup)
+                )
+            )
+            if shift_ids
+            else []
+        )
+        signup_ids = [signup.id for signup in signups]
+        work_records = (
+            list(
+                self.db.scalars(
+                    select(WorkRecord)
+                    .where(WorkRecord.signup_id.in_(signup_ids))
+                    .with_for_update(of=WorkRecord)
+                )
+            )
+            if signup_ids
+            else []
+        )
+        import_rows = list(
+            self.db.scalars(
+                select(ImportRow)
+                .where(ImportRow.matched_event_id == item.id)
+                .with_for_update(of=ImportRow)
+            )
+        )
+
+        # These associations are derived rather than represented by foreign keys. Prevent their
+        # source rows from changing while exclusive ownership is recomputed.
+        self.db.execute(
+            text("LOCK TABLE proposal_override, external_kiosk_row IN SHARE ROW EXCLUSIVE MODE")
+        )
+        proposal_overrides, comparison_rows = self._owned_planning_references(item)
+        counts = {
+            "shift_count": len(shifts),
+            "signup_count": len(signups),
+            "work_record_count": len(work_records),
+            "proposal_override_count": len(proposal_overrides),
+            "external_comparison_row_count": len(comparison_rows),
+            "import_row_link_count": len(import_rows),
+        }
+        self._audit(
+            actor_user_id,
+            "EVENT_FORCE_DELETED",
+            "event",
+            item.id,
+            {
+                "event_id": item.id,
+                "title": item.title,
+                "date": item.date,
+                "explicit_force_delete": True,
+                **counts,
+            },
+        )
+
+        # Keep the import history, but remove its now-invalid event link. All other rows here are
+        # exclusively owned by the selected event and are removed in dependency order.
+        if import_rows:
+            self.db.execute(
+                update(ImportRow)
+                .where(ImportRow.id.in_([row.id for row in import_rows]))
+                .values(matched_event_id=None)
+            )
+        comparison_counts_by_batch: dict[uuid.UUID, int] = {}
+        for row in comparison_rows:
+            comparison_counts_by_batch[row.batch_id] = (
+                comparison_counts_by_batch.get(row.batch_id, 0) + 1
+            )
+        for batch_id, deleted_count in comparison_counts_by_batch.items():
+            self.db.execute(
+                update(ExternalKioskBatch)
+                .where(ExternalKioskBatch.id == batch_id)
+                .values(row_count=func.greatest(0, ExternalKioskBatch.row_count - deleted_count))
+            )
+        for record in work_records:
+            self.db.delete(record)
+        for signup in signups:
+            self.db.delete(signup)
+        for shift in shifts:
+            self.db.delete(shift)
+        for override in proposal_overrides:
+            self.db.delete(override)
+        for row in comparison_rows:
+            self.db.delete(row)
+        self.db.delete(item)
+        self.db.commit()
+
+    def _owned_planning_references(
+        self, item: Event
+    ) -> tuple[list[ProposalOverride], list[ExternalKioskRow]]:
+        """Return derived rows that refer exclusively to the selected event.
+
+        A multi-event proposal window or comparison row is shared and therefore retained.
+        """
+        from app.services.proposals import ProposalService
+
+        windows = [
+            window
+            for window in ProposalService(self.db, self.organization_id).list_windows()
+            if item.id in window.covered_event_ids
+        ]
+        exclusive_windows = [window for window in windows if window.covered_event_ids == [item.id]]
+        if not windows:
+            ambiguous_override_count = self.db.scalar(
+                select(func.count())
+                .select_from(ProposalOverride)
+                .where(
+                    ProposalOverride.organization_id == self.organization_id,
+                    ProposalOverride.proposal_date == item.date,
+                )
+            )
+            if ambiguous_override_count:
+                raise PlanningConflictError(
+                    "Der Anlass kann nicht sicher gelöscht werden: Für dieses Datum bestehen "
+                    "manuelle Planungsreferenzen, die nicht eindeutig nur diesem Anlass gehören. "
+                    "Alle Daten bleiben erhalten."
+                )
+        if not exclusive_windows:
+            return [], []
+        window_keys = [window.id for window in exclusive_windows]
+        overrides = list(
+            self.db.scalars(
+                select(ProposalOverride)
+                .where(
+                    ProposalOverride.organization_id == self.organization_id,
+                    ProposalOverride.window_key.in_(window_keys),
+                )
+                .with_for_update(of=ProposalOverride)
+            )
+        )
+        organization = self.db.get(Organization, self.organization_id)
+        if organization is None:
+            raise PlanningConflictError(
+                "Der Anlass kann nicht sicher gelöscht werden: Die Organisation fehlt."
+            )
+        timezone = ZoneInfo(organization.timezone)
+        dated_rows = list(
+            self.db.scalars(
+                select(ExternalKioskRow)
+                .join(ExternalKioskBatch)
+                .where(
+                    ExternalKioskBatch.organization_id == self.organization_id,
+                    ExternalKioskRow.plan_date == item.date,
+                )
+                .with_for_update(of=ExternalKioskRow)
+            )
+        )
+        all_windows = ProposalService(self.db, self.organization_id).list_windows()
+        rows = [
+            row
+            for row in dated_rows
+            if any(
+                self._comparison_row_matches(row, window, timezone) for window in exclusive_windows
+            )
+            and not any(
+                item.id not in window.covered_event_ids
+                and self._comparison_row_matches(row, window, timezone)
+                for window in all_windows
+            )
+        ]
+        return overrides, rows
+
+    @staticmethod
+    def _comparison_row_matches(
+        row: ExternalKioskRow, window: ProposalWindowResponse, timezone: ZoneInfo
+    ) -> bool:
+        from app.services.external_kiosk import ExternalKioskService
+
+        return bool(
+            (
+                row.category == ExternalKioskCategory.KIOSK
+                or (row.category == ExternalKioskCategory.GRILL and window.grill_required)
+            )
+            and ExternalKioskService._overlaps(
+                row,
+                window.start_at,
+                window.end_at,
+                timezone,
+            )
+        )
 
     def _planning_reference_counts(self, item: Event) -> tuple[int, int]:
         """Count only derived planning references whose current window contains the event.

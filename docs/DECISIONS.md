@@ -241,7 +241,7 @@ Besetzungsvorschlaege (Gemini), WhatsApp-Versandintegration, Sollstunden-Materia
 (`FamilyRequirement`) - alle in `docs/BACKLOG.md` erfasst.
 ## Planning-period lifecycle
 
-Club years and seasons use `DRAFT → ACTIVE → CLOSED → ARCHIVED` lifecycle states. ADMIN and KOORDINATION may edit open periods and close/archive them. Hard deletion is deliberately limited to unused drafts after server-side dependency checks; historical events, shifts, signups, imports, and work records are never cascaded away. The only active season cannot be closed until another active season exists.
+Club years and seasons use `DRAFT → ACTIVE → CLOSED → ARCHIVED` lifecycle states. ADMIN and KOORDINATION may edit open periods and close/archive them. Hard deletion of a planning period is deliberately limited to unused drafts after server-side dependency checks. The only active season cannot be closed until another active season exists. D-045 defines the deliberately separate deletion rule for one terminal Event.
 ## D-042 – Abgeleitete Kiosk-/Grillvorschläge (Phase 1)
 
 **Entscheid:** Kioskfenster werden für Spiele an aktiven Heimplätzen mit 30 Minuten Vor- und Nachlauf abgeleitet. Nur Abstände von mehr als 240 Minuten trennen Fenster. Grillbedarf bleibt Teil dieses Vorschlags: standardmässig ein Platz bis drei gleichzeitig abgedeckten Spielen, sonst zwei; eine passende CrewSizeRule kann die Anzahl übersteuern. Manuelle Änderungen werden separat, mandantenbezogen und auditiert gespeichert.
@@ -250,3 +250,15 @@ Club years and seasons use `DRAFT → ACTIVE → CLOSED → ARCHIVED` lifecycle 
 # D-044: OneDrive-Spielplanquelle bleibt strikt lesend
 
 Die ADMIN-Konfiguration speichert nur einen validierten OneDrive-/SharePoint-HTTPS-Link, Zeitplan und Datumsfilter, niemals Zugangsdaten. Manuelle und fällige Läufe dürfen ausschliesslich per HTTP GET herunterladen und erzeugen einen prüfbaren `STAGED`-Import; Bestätigung und Event-Mutationen bleiben ein separater Admin-Schritt. Microsoft-Schreibscopes und Schreib-APIs sind ausgeschlossen. Ohne persistenten Worker ruft die Produktion den idempotenten `run-due`-Endpunkt täglich nach der konfigurierten Zeit auf.
+
+## D-045 – Explizites endgültiges Löschen eines historischen Anlasses
+
+ADMIN und KOORDINATION dürfen genau einen `COMPLETED`- oder `CANCELLED`-Anlass im Archiv nach
+Eingabe von `ANLASS_ENDGUELTIG_LOESCHEN` endgültig löschen. Die transaktionale Aktion entfernt nur
+die dem Anlass exklusiv gehörenden Einsätze, Anmeldungen, WorkRecords, Proposal-Overrides und
+externen Vergleichszeilen; Importzeilen bleiben als Importhistorie erhalten und verlieren nur ihren
+Event-Link. Geteilte Vorschlagsfenster und Vergleichszeilen sowie Perioden, Personen, Familien,
+Organisationen und bestehende Audit-Ereignisse bleiben erhalten. Vor der Löschung wird ein
+mandantenbezogenes `EVENT_FORCE_DELETED`-Audit-Ereignis mit Anlassidentität, Akteur und
+Abhängigkeitszahlen in derselben Transaktion geschrieben. Die Regeln zur Periodenaufbewahrung
+werden dadurch nicht gelockert.

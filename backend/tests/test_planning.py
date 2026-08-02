@@ -1,5 +1,6 @@
 """Focused F003 planning model, validation, lifecycle, and tenant tests."""
 
+from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
@@ -8,6 +9,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
 from app.api import dependencies, planning
 from app.api.dependencies import CurrentStaffMembership
@@ -263,6 +265,138 @@ def test_delete_event_rejects_active_event() -> None:
     with pytest.raises(PlanningConflictError, match="erledigte oder abgesagte"):
         PlanningService(cast(object, db), uuid4()).delete_event(target.id, uuid4())  # type: ignore[arg-type]
     assert db.commits == 0
+
+
+def test_force_delete_historical_event_removes_five_signups_and_owned_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = SimpleNamespace(
+        id=uuid4(), status=EventStatus.COMPLETED, title="Historisch", date=date(2026, 8, 1)
+    )
+    shifts = [SimpleNamespace(id=uuid4())]
+    signups = [SimpleNamespace(id=uuid4()) for _ in range(5)]
+    work_records = [SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())]
+    import_rows = [SimpleNamespace(id=uuid4())]
+    override = SimpleNamespace(id=uuid4())
+    comparison = SimpleNamespace(id=uuid4(), batch_id=uuid4())
+    db = _ForceEventDeleteDb(target, [shifts, signups, work_records, import_rows])
+    monkeypatch.setattr(
+        PlanningService,
+        "_owned_planning_references",
+        lambda *_args: ([override], [comparison]),
+    )
+
+    PlanningService(cast(object, db), uuid4()).force_delete_historical_event(  # type: ignore[arg-type]
+        target.id, uuid4()
+    )
+
+    assert db.deleted == [*work_records, *signups, *shifts, override, comparison, target]
+    assert db.commits == 1
+    audit = next(item for item in db.added if isinstance(item, AuditEvent))
+    assert audit.action == "EVENT_FORCE_DELETED"
+    assert audit.entity_id == target.id
+    assert audit.event_metadata["signup_count"] == "5"
+    assert audit.event_metadata["work_record_count"] == "2"
+    assert audit.event_metadata["explicit_force_delete"] == "True"
+    assert audit not in db.deleted
+    assert any("UPDATE import_row" in str(statement) for statement in db.executed)
+    assert any("UPDATE external_kiosk_batch" in str(statement) for statement in db.executed)
+
+
+def test_force_delete_empty_historical_event(monkeypatch: pytest.MonkeyPatch) -> None:
+    target = SimpleNamespace(
+        id=uuid4(), status=EventStatus.CANCELLED, title="Leer", date=date(2026, 8, 1)
+    )
+    db = _ForceEventDeleteDb(target, [[], []])
+    monkeypatch.setattr(PlanningService, "_owned_planning_references", lambda *_args: ([], []))
+
+    PlanningService(cast(object, db), uuid4()).force_delete_historical_event(  # type: ignore[arg-type]
+        target.id, uuid4()
+    )
+
+    assert db.deleted == [target]
+    assert db.commits == 1
+
+
+def test_force_delete_is_tenant_isolated() -> None:
+    db = _ForceEventDeleteDb(None, [])
+    with pytest.raises(PlanningNotFoundError):
+        PlanningService(cast(object, db), uuid4()).force_delete_historical_event(  # type: ignore[arg-type]
+            uuid4(), uuid4()
+        )
+    assert db.deleted == []
+    assert db.commits == 0
+
+
+def test_force_delete_rejects_active_event() -> None:
+    target = SimpleNamespace(
+        id=uuid4(), status=EventStatus.PUBLISHED, title="Aktiv", date=date(2026, 8, 1)
+    )
+    db = _ForceEventDeleteDb(target, [])
+    with pytest.raises(PlanningConflictError, match="erledigte oder abgesagte"):
+        PlanningService(cast(object, db), uuid4()).force_delete_historical_event(  # type: ignore[arg-type]
+            target.id, uuid4()
+        )
+    assert db.commits == 0
+
+
+def test_force_delete_reference_plan_retains_shared_and_unrelated_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = cast(Event, SimpleNamespace(id=uuid4(), date=date(2026, 8, 1)))
+    exclusive = SimpleNamespace(id="exclusive", covered_event_ids=[target.id])
+    shared = SimpleNamespace(id="shared", covered_event_ids=[target.id, uuid4()])
+    unrelated = SimpleNamespace(id="unrelated", covered_event_ids=[uuid4()])
+    override = SimpleNamespace(id=uuid4())
+    exclusive_row = SimpleNamespace(id=uuid4(), matches={"exclusive"})
+    shared_row = SimpleNamespace(id=uuid4(), matches={"exclusive", "unrelated"})
+    unrelated_row = SimpleNamespace(id=uuid4(), matches={"unrelated"})
+
+    class FakeProposalService:
+        def __init__(self, _db: object, _organization_id: object) -> None:
+            pass
+
+        def list_windows(self) -> list[object]:
+            return [exclusive, shared, unrelated]
+
+    db = _OwnedReferenceDb([override], [exclusive_row, shared_row, unrelated_row])
+    monkeypatch.setattr("app.services.proposals.ProposalService", FakeProposalService)
+    monkeypatch.setattr(
+        PlanningService,
+        "_comparison_row_matches",
+        staticmethod(lambda row, window, _timezone: window.id in row.matches),
+    )
+
+    overrides, rows = PlanningService(
+        cast(Session, db), db.organization.id
+    )._owned_planning_references(target)
+
+    assert overrides == [override]
+    assert rows == [exclusive_row]
+
+
+def test_force_delete_blocks_ambiguous_orphaned_proposal_reference(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = cast(Event, SimpleNamespace(id=uuid4(), date=date(2026, 8, 1)))
+
+    class EmptyProposalService:
+        def __init__(self, _db: object, _organization_id: object) -> None:
+            pass
+
+        def list_windows(self) -> list[object]:
+            return []
+
+    class AmbiguousReferenceDb:
+        def scalar(self, _statement: object) -> int:
+            return 1
+
+    monkeypatch.setattr("app.services.proposals.ProposalService", EmptyProposalService)
+
+    with pytest.raises(PlanningConflictError, match="nicht eindeutig"):
+        PlanningService(cast(Session, AmbiguousReferenceDb()), uuid4())._owned_planning_references(
+            target
+        )
 
 
 def test_planning_reference_counts_ignore_unrelated_same_date_windows(
@@ -560,6 +694,25 @@ def test_delete_event_endpoint_requires_exact_confirmation(
     app.dependency_overrides[get_db] = lambda: _ListDb()
     try:
         response = client.request("DELETE", f"/api/admin/tenant-a/events/{uuid4()}", json=payload)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+
+
+@pytest.mark.parametrize("payload", [None, {"confirmation": "LOESCHEN"}])
+def test_force_delete_event_endpoint_requires_exact_confirmation(
+    client: TestClient, payload: dict[str, str] | None
+) -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
+    current = cast(
+        CurrentStaffMembership,
+        SimpleNamespace(organization=organization, user=SimpleNamespace(id=uuid4())),
+    )
+    app.dependency_overrides[planning.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: _ListDb()
+    try:
+        response = client.post(f"/api/admin/tenant-a/events/{uuid4()}/force-delete", json=payload)
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 422
@@ -914,6 +1067,34 @@ class _EventDeleteDb:
         self.commits += 1
 
 
+class _ForceEventDeleteDb:
+    def __init__(self, event: object | None, scalar_lists: list[Sequence[object]]) -> None:
+        self.event = event
+        self.scalar_lists = iter(scalar_lists)
+        self.deleted: list[object] = []
+        self.added: list[object] = []
+        self.executed: list[object] = []
+        self.commits = 0
+
+    def scalar(self, _statement: object) -> object | None:
+        return self.event
+
+    def scalars(self, _statement: object) -> list[object]:
+        return list(next(self.scalar_lists))
+
+    def execute(self, statement: object) -> None:
+        self.executed.append(statement)
+
+    def add(self, item: object) -> None:
+        self.added.append(item)
+
+    def delete(self, item: object) -> None:
+        self.deleted.append(item)
+
+    def commit(self) -> None:
+        self.commits += 1
+
+
 class _DerivedReferenceDb:
     def __init__(self, rows: list[object]) -> None:
         self.organization = SimpleNamespace(id=uuid4(), timezone="UTC")
@@ -928,6 +1109,18 @@ class _DerivedReferenceDb:
 
     def scalars(self, _statement: object) -> list[object]:
         return self.rows
+
+
+class _OwnedReferenceDb:
+    def __init__(self, overrides: list[object], rows: list[object]) -> None:
+        self.organization = SimpleNamespace(id=uuid4(), timezone="UTC")
+        self.results = iter([overrides, rows])
+
+    def scalars(self, _statement: object) -> list[object]:
+        return next(self.results)
+
+    def get(self, _model: object, _identifier: object) -> object:
+        return self.organization
 
 
 # -- Crew-size suggestion --------------------------------------------------------

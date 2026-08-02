@@ -113,9 +113,13 @@ function writeInit(method: "POST" | "PATCH", payload: object): RequestInit {
   };
 }
 
-async function remove(path: string, payload?: object): Promise<void> {
+async function remove(
+  path: string,
+  payload?: object,
+  method: "DELETE" | "POST" = "DELETE",
+): Promise<void> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
-    method: "DELETE",
+    method,
     credentials: "include",
     headers: payload ? { "Content-Type": "application/json", ...csrfHeaders() } : csrfHeaders(),
     body: payload ? JSON.stringify(payload) : undefined,
@@ -195,9 +199,11 @@ export const updateEventStatus = (org: string, eventId: string, status: EventSta
     "Der Anlassstatus konnte nicht gespeichert werden.",
   );
 export const deleteEvent = (org: string, eventId: string) =>
-  remove(`/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}`, {
-    confirmation: "ANLASS_ENDGUELTIG_LOESCHEN",
-  });
+  remove(
+    `/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}/force-delete`,
+    { confirmation: "ANLASS_ENDGUELTIG_LOESCHEN" },
+    "POST",
+  );
 export const loadShifts = (org: string, eventId: string) =>
   request<Shift[]>(
     `/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}/shifts`,

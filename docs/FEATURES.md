@@ -745,6 +745,12 @@ F001 comes first because every future feature depends on a trustworthy organizat
 ## Planning-period administration
 
 ADMIN and KOORDINATION can correct labels/names and date ranges, close or archive periods, and explicitly delete never-used drafts. Closed/archived periods stay visible and labelled in history but are disabled for imports and new planning records. Conflicts are reported in German without changing existing data.
+
+Im Archiv können ADMIN und KOORDINATION zusätzlich genau einen erledigten oder abgesagten Anlass
+endgültig löschen. Dafür muss der Bestätigungswert `ANLASS_ENDGUELTIG_LOESCHEN` eingegeben werden;
+die Oberfläche warnt ausdrücklich vor dem Verlust der zugehörigen Anwesenheits-, Arbeits- und
+Auszahlungsdaten. Aktive/künftige Anlässe und die Aufbewahrungsregeln für Vereinsjahre/Saisons
+bleiben unverändert geschützt.
 ## Kiosk- und Grillplanung – Phase 1
 
 The external Kiosk-plan comparison lets ADMIN and KOORDINATION upload the historical matrix workbook

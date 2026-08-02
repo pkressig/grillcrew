@@ -7,6 +7,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.auth import _ensure_origin_and_host
@@ -357,6 +358,33 @@ def delete_event(
         )
     except PlanningConflictError as error:
         raise _translate(error) from None
+
+
+@router.post("/events/{event_id}/force-delete", status_code=204)
+def force_delete_historical_event(
+    organization_slug: str,
+    event_id: uuid.UUID,
+    payload: EventDeleteConfirmation,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> None:
+    try:
+        _write_service(organization_slug, current, db, request).force_delete_historical_event(
+            event_id, current.user.id
+        )
+    except (PlanningNotFoundError, PlanningConflictError) as error:
+        raise _translate(error) from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Der Anlass konnte wegen einer nicht sicher löschbaren Abhängigkeit nicht "
+                "gelöscht werden. Alle Daten bleiben erhalten."
+            ),
+        ) from None
 
 
 @router.get("/events/{event_id}/shift-suggestion", response_model=ShiftCrewSuggestion)

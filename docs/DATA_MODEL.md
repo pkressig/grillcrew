@@ -518,6 +518,13 @@ der Helfer-Auszahlungssatz aus `OrganizationSettings`; Aenderungen berechnen den
 ## Planning-period retention
 
 `ClubYear.status` and `Season.status` are the retention boundary. Closed and archived rows remain addressable for history and reporting. A season is deletable only while `DRAFT` and without events/import rows. A club year is deletable only while `DRAFT` and without seasons/import batches. Application checks run before deletion; no planning-period delete may cascade historical records.
+
+Ein einzelner terminaler `Event` (`COMPLETED`/`CANCELLED`) bildet eine engere, ausdrücklich
+bestätigte Löschgrenze (D-045). Seine `Shift`-, `Signup`- und `WorkRecord`-Zeilen werden gelöscht;
+`ImportRow.matchedEventId` wird auf `null` gesetzt. Ausschliesslich diesem Event zuordenbare
+`ProposalOverride`- und `ExternalKioskRow`-Zeilen werden entfernt, während gemeinsam genutzte
+Fenster/Zeilen erhalten bleiben. Das vorher erzeugte `AuditEvent` besitzt absichtlich keinen
+löschenden Foreign Key zum Event und überlebt die Transaktion.
 ## Kiosk-/Grillvorschlags-Overrides
 
 `ExternalKioskBatch` stores an organization-scoped, review-only workbook snapshot with the original

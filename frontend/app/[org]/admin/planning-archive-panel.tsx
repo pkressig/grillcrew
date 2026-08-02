@@ -10,6 +10,7 @@ import { deleteClubYear, deleteEvent, deleteSeason, type PlanningStatus } from "
 
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
 const historicalEventStatuses = new Set(["COMPLETED", "CANCELLED"]);
+const eventDeleteConfirmation = "ANLASS_ENDGUELTIG_LOESCHEN";
 const statusLabels: Record<PlanningStatus, string> = {
   DRAFT: "Entwurf",
   ACTIVE: "Aktiv",
@@ -22,6 +23,9 @@ export function PlanningArchivePanel({ org }: Readonly<{ org: string }>) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [eventToDelete, setEventToDelete] = useState<{ id: string; title: string } | null>(null);
+  const [eventDeleteValue, setEventDeleteValue] = useState("");
   const [search, setSearch] = useState("");
   const [year, setYear] = useState("");
   const [season, setSeason] = useState("");
@@ -94,16 +98,14 @@ export function PlanningArchivePanel({ org }: Readonly<{ org: string }>) {
   }
 
   async function removeEvent(id: string, title: string) {
-    if (
-      !window.confirm(
-        `Anlass „${title}“ und seine abhängigen Einsätze endgültig löschen? Der Server prüft zuvor alle historischen Abhängigkeiten.`,
-      )
-    )
-      return;
     setBusy(true);
     setError(null);
+    setSuccess(null);
     try {
       await deleteEvent(org, id);
+      setEventToDelete(null);
+      setEventDeleteValue("");
+      setSuccess(`Der Anlass „${title}“ wurde endgültig gelöscht.`);
       await refresh();
     } catch (caught) {
       setError(
@@ -134,6 +136,62 @@ export function PlanningArchivePanel({ org }: Readonly<{ org: string }>) {
           {error}
         </p>
       ) : null}
+      {success ? (
+        <p role="status" className="rounded-md border border-green-700 p-4">
+          {success}
+        </p>
+      ) : null}
+      {eventToDelete ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="event-delete-title"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+        >
+          <Card className="w-full max-w-xl border-destructive">
+            <CardBody>
+              <h2 id="event-delete-title" className="text-xl font-semibold">
+                Anlass endgültig löschen
+              </h2>
+              <p className="mt-3">
+                Der Anlass „{eventToDelete.title}“ und alle zugehörigen Einsätze, Anmeldungen,
+                Arbeits-, Anwesenheits- und Auszahlungsdaten werden dauerhaft entfernt. Diese Aktion
+                kann nicht rückgängig gemacht werden.
+              </p>
+              <label className="mt-4 block" htmlFor="event-delete-confirmation">
+                Zur Bestätigung <strong>{eventDeleteConfirmation}</strong> eingeben
+              </label>
+              <input
+                id="event-delete-confirmation"
+                className={`${control} mt-2`}
+                autoFocus
+                autoComplete="off"
+                value={eventDeleteValue}
+                onChange={(event) => setEventDeleteValue(event.target.value)}
+              />
+              <div className="mt-5 flex flex-wrap justify-end gap-3">
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => {
+                    setEventToDelete(null);
+                    setEventDeleteValue("");
+                  }}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={busy || eventDeleteValue !== eventDeleteConfirmation}
+                  onClick={() => void removeEvent(eventToDelete.id, eventToDelete.title)}
+                >
+                  Historische Daten endgültig löschen
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      ) : null}
       {!loading && data ? (
         <>
           <Card className="border-border/80 bg-muted/30">
@@ -141,9 +199,10 @@ export function PlanningArchivePanel({ org }: Readonly<{ org: string }>) {
               <h2 className="font-semibold">Schreibgeschützter Verlauf</h2>
               <p className="mt-2 text-sm text-muted-foreground">
                 Archivierte und geschlossene Daten werden hier nur angezeigt. Der bestehende
-                Lebenszyklus erlaubt keine Reaktivierung. Endgültiges Löschen wird nur für
-                archivierte Perioden angeboten und serverseitig bei historischen Abhängigkeiten
-                blockiert.
+                Lebenszyklus erlaubt keine Reaktivierung. Perioden bleiben bei historischen
+                Abhängigkeiten geschützt. Einzelne erledigte oder abgesagte Anlässe können nach
+                ausdrücklicher Bestätigung samt ihren historischen Einsatzdaten endgültig gelöscht
+                werden.
               </p>
             </CardBody>
           </Card>
@@ -320,15 +379,22 @@ export function PlanningArchivePanel({ org }: Readonly<{ org: string }>) {
                         {event.internal_note ? (
                           <p className="mt-2 text-sm">Bemerkung: {event.internal_note}</p>
                         ) : null}
-                        <Button
-                          className="mt-4"
-                          variant="destructive"
-                          disabled={busy}
-                          aria-label={`Anlass ${event.title} löschen`}
-                          onClick={() => void removeEvent(event.id, event.title)}
-                        >
-                          Anlass löschen
-                        </Button>
+                        {historicalEventStatuses.has(event.status) ? (
+                          <Button
+                            className="mt-4"
+                            variant="destructive"
+                            disabled={busy}
+                            aria-label={`Anlass ${event.title} löschen`}
+                            onClick={() => {
+                              setError(null);
+                              setSuccess(null);
+                              setEventDeleteValue("");
+                              setEventToDelete({ id: event.id, title: event.title });
+                            }}
+                          >
+                            Anlass löschen
+                          </Button>
+                        ) : null}
                       </CardBody>
                     </Card>
                   </li>

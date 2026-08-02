@@ -127,6 +127,12 @@ Each visual phase must name exact files, preserve APIs, include responsive/acces
 ## Planning-period controls
 
 Period cards show their lifecycle badge and expose 44px Edit, Schliessen, Archivieren, and (draft-only) Löschen controls as applicable. Destructive and lifecycle actions require explicit confirmation. Closed/archived options remain visible with German status labels in selectors but are disabled for new imports and creation.
+
+The Archive offers `Anlass löschen` only for completed or cancelled events. It opens a modal that
+names the permanent loss of that event's attendance, work, and payout history and requires the user
+to type `ANLASS_ENDGUELTIG_LOESCHEN` before the destructive action is enabled. Success and concrete
+server errors remain visible as status/alert feedback. Period deletion keeps its separate,
+dependency-blocking retention behavior.
 ## Kiosk- und Grillvorschläge
 
 Kiosk verwendet eine nach Tagen gegliederte, responsive Kartenliste mit Fensterzeiten, Spielen, Spielorten, Teilungsgrund und sichtbarem Status `Vorschlag` oder `Manuell angepasst`. Grill zeigt ausschliesslich Fenster mit `Kiosk offen`, den Grillbedarf, ein/zwei vorgeschlagene Plätze beziehungsweise CrewSizeRule-Kontext sowie denselben Override-Status. Beide Ansichten besitzen Lade-, Leer-, Fehler- und Erfolgszustände, 44px-Bedienelemente und Textäquivalente für Statussymbole.

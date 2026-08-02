@@ -258,6 +258,13 @@ Transaktion wie die fachliche Aenderung geschrieben.
 ## Planning lifecycle boundary
 
 Planning mutations remain behind staff-role, tenant, CSRF, and origin checks. The service layer validates transitions and dependencies atomically and writes audit events for update/delete lifecycle mutations. Import and creation services independently reject closed/archived targets, so UI filtering is not a security boundary.
+
+`POST /api/admin/{organization_slug}/events/{event_id}/force-delete` is the separate destructive
+boundary for one terminal event. It requires ADMIN/KOORDINATION, CSRF/origin validation and the exact
+typed confirmation token. The service locks the tenant-scoped event and dependent rows, protects
+derived-reference tables against concurrent changes, retains shared proposal/comparison data,
+unlinks import history, writes `EVENT_FORCE_DELETED`, and deletes exclusively owned rows in one
+transaction. It is not used by ClubYear/Season deletion.
 ## Proposal boundary
 
 The external comparison API at `/api/admin/{organization_slug}/external-kiosk-plans` stages

@@ -218,8 +218,6 @@ describe("planning admin", () => {
   });
 
   it("deletes a completed event from the archive after explicit confirmation", async () => {
-    const confirmMock = vi.fn(() => true);
-    vi.stubGlobal("confirm", confirmMock);
     const archivedSeason = { ...season, status: "ARCHIVED" };
     const completedEvent = { ...planningEvent, status: "COMPLETED" };
     const fetchMock = renderArchive(
@@ -228,19 +226,37 @@ describe("planning admin", () => {
     );
 
     fireEvent.click(await screen.findByRole("button", { name: "Anlass Sommerfest löschen" }));
-
-    expect(confirmMock).toHaveBeenCalledWith(
-      "Anlass „Sommerfest“ und seine abhängigen Einsätze endgültig löschen? Der Server prüft zuvor alle historischen Abhängigkeiten.",
+    expect(screen.getByRole("dialog", { name: "Anlass endgültig löschen" })).toHaveTextContent(
+      /Arbeits-, Anwesenheits- und Auszahlungsdaten werden dauerhaft entfernt/,
     );
+    const submit = screen.getByRole("button", { name: "Historische Daten endgültig löschen" });
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Zur Bestätigung/), {
+      target: { value: "ANLASS_ENDGUELTIG_LOESCHEN" },
+    });
+    fireEvent.click(submit);
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringMatching(/\/events\/event-1$/),
+        expect.stringMatching(/\/events\/event-1\/force-delete$/),
         expect.objectContaining({
-          method: "DELETE",
+          method: "POST",
           body: JSON.stringify({ confirmation: "ANLASS_ENDGUELTIG_LOESCHEN" }),
         }),
       ),
     );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Der Anlass „Sommerfest“ wurde endgültig gelöscht.",
+    );
+  });
+
+  it("does not offer force-delete for an active event shown through a closed period", async () => {
+    const closedSeason = { ...season, status: "CLOSED" };
+    renderArchive(
+      "ADMIN",
+      planningFetch("ADMIN", false, [closedSeason], true, true, [planningEvent]),
+    );
+    await screen.findByText("Sommerfest");
+    expect(screen.queryByRole("button", { name: "Anlass Sommerfest löschen" })).toBeNull();
   });
 
   it.each(["kiosk", "grill"] as const)("shows an honest %s empty state", async (section) => {
