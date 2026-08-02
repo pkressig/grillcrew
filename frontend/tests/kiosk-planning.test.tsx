@@ -40,8 +40,8 @@ describe("Kiosk planning", () => {
     expect(screen.getByText("Kiosk-Vorschläge werden geladen …")).toBeInTheDocument();
     const day = await screen.findByRole("heading", { level: 2, name: /12. September 2026/i });
     const section = day.closest("section")!;
-    expect(within(section).getByText("Kiosk offen")).toBeInTheDocument();
-    expect(within(section).getByText("Vorschlag")).toBeInTheDocument();
+    expect(within(section).getByText("Kiosk vorgeschlagen")).toBeInTheDocument();
+    expect(within(section).getByText(/Entwurf aus dem Spielbetrieb/)).toBeInTheDocument();
     expect(within(section).getByText(/mehr als 240 Minuten/)).toBeInTheDocument();
     expect(within(section).getAllByRole("listitem")).toHaveLength(2);
     expect(screen.queryByText("window-1")).not.toBeInTheDocument();
@@ -58,7 +58,7 @@ describe("Kiosk planning", () => {
     );
     await screen.findByText("Vorschläge aus dem Spielbetrieb wurden aktualisiert.");
     expect(proposals.refreshPlanningProposals).toHaveBeenCalledWith("example");
-    expect(screen.getByText("Kiosk offen")).toBeInTheDocument();
+    expect(screen.getByText("Kiosk vorgeschlagen")).toBeInTheDocument();
   });
 
   it("allows an accessible manual time and open-state override", async () => {
@@ -75,7 +75,7 @@ describe("Kiosk planning", () => {
     const end = screen.getByLabelText("Ende");
     expect(start).toHaveAttribute("type", "datetime-local");
     expect(end).toHaveAttribute("type", "datetime-local");
-    fireEvent.click(screen.getByLabelText("Kiosk offen"));
+    fireEvent.click(screen.getByLabelText("Kiosk-Betrieb vorsehen"));
     fireEvent.click(screen.getByRole("button", { name: "Anpassung speichern" }));
 
     await waitFor(() =>
@@ -85,8 +85,8 @@ describe("Kiosk planning", () => {
         expect.objectContaining({ kiosk_open: false }),
       ),
     );
-    expect(await screen.findByText("Manuell angepasst")).toBeInTheDocument();
-    expect(screen.getByText("Kiosk geschlossen")).toBeInTheDocument();
+    expect(await screen.findByText(/Manuell angepasst/)).toBeInTheDocument();
+    expect(screen.getByText("Kiosk nicht vorgesehen")).toBeInTheDocument();
   });
 
   it("offers retry after a loading error", async () => {

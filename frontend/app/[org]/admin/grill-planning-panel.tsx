@@ -225,7 +225,7 @@ function GrillWindowCard({
               ) : (
                 <XCircle aria-hidden="true" className="text-status-neutral" size={20} />
               )}
-              <span>Grill {grillRequired ? "erforderlich" : "nicht erforderlich"}</span>
+              <span>Grill {grillRequired ? "vorgeschlagen" : "nicht vorgesehen"}</span>
             </div>
             <p className="mt-2 flex items-center gap-2 text-sm">
               <Flame aria-hidden="true" size={17} />

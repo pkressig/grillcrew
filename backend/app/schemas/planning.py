@@ -103,6 +103,9 @@ class EventCreate(BaseModel):  # type: ignore[explicit-any]
     published_at: datetime | None = None
     source_import_id: uuid.UUID | None = None
     kickoff_time: time_type | None = None
+    duration_minutes: int | None = Field(default=None, ge=1, le=1440)
+    kiosk_requested: bool | None = None
+    grill_requested: bool | None = None
     external_game_number: str | None = Field(default=None, max_length=20)
     import_match_key: str | None = Field(default=None, max_length=300)
 
@@ -119,6 +122,9 @@ class EventUpdate(BaseModel):  # type: ignore[explicit-any]
     published_at: datetime | None = None
     source_import_id: uuid.UUID | None = None
     kickoff_time: time_type | None = None
+    duration_minutes: int | None = Field(default=None, ge=1, le=1440)
+    kiosk_requested: bool | None = None
+    grill_requested: bool | None = None
     external_game_number: str | None = Field(default=None, max_length=20)
     import_match_key: str | None = Field(default=None, max_length=300)
 
@@ -144,6 +150,9 @@ class EventResponse(BaseModel):  # type: ignore[explicit-any]
     published_at: datetime | None
     source_import_id: uuid.UUID | None
     kickoff_time: time_type | None
+    duration_minutes: int | None
+    kiosk_requested: bool | None
+    grill_requested: bool | None
     external_game_number: str | None
     import_match_key: str | None
     created_at: datetime

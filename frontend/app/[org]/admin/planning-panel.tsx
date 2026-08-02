@@ -879,6 +879,23 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   name="internal_note"
                 />
               </label>
+              <fieldset className="grid gap-2 rounded-md border border-dashed p-3 sm:col-span-2">
+                <legend className="px-1 text-sm font-medium">Betriebshinweise (optional)</legend>
+                <p className="text-xs text-muted-foreground">
+                  Leer lassen, damit Kiosk und Grill automatisch aus dem Spieltag vorgeschlagen
+                  werden.
+                </p>
+                <div className="flex flex-wrap gap-5">
+                  <label className="flex min-h-11 items-center gap-2 text-sm">
+                    <input className="size-5" name="kiosk_requested" type="checkbox" />
+                    Kiosk vorsehen
+                  </label>
+                  <label className="flex min-h-11 items-center gap-2 text-sm">
+                    <input className="size-5" name="grill_requested" type="checkbox" />
+                    Grill vorsehen
+                  </label>
+                </div>
+              </fieldset>
               <Button className="sm:self-end" disabled={busy || seasons.length === 0} type="submit">
                 Anlass erstellen
               </Button>
@@ -999,6 +1016,20 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                           {planningEvent.source_import_id
                                             ? "Importiert"
                                             : "Manuell"}
+                                        </Badge>
+                                        <Badge className="mt-2 mr-2" variant="warning">
+                                          {planningEvent.kiosk_requested === true
+                                            ? "Kiosk vorgeschlagen"
+                                            : planningEvent.kiosk_requested === false
+                                              ? "Kiosk nicht vorgesehen"
+                                              : "Kiosk offen"}
+                                        </Badge>
+                                        <Badge className="mt-2 mr-2" variant="warning">
+                                          {planningEvent.grill_requested === true
+                                            ? "Grill vorgeschlagen"
+                                            : planningEvent.grill_requested === false
+                                              ? "Grill nicht vorgesehen"
+                                              : "Grill offen"}
                                         </Badge>
                                         <Badge className="mt-2" variant="neutral">
                                           {eventShifts.length}{" "}

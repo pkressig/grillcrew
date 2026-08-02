@@ -40,3 +40,24 @@ def test_multiple_venues_are_kept_in_same_daily_window() -> None:
         [game(1, time(10), "A"), game(2, time(11), "B")], ZoneInfo("UTC")
     )
     assert {item.venue for item in windows[0].games} == {"A", "B"}
+
+
+def test_window_uses_last_game_duration_and_configured_margins() -> None:
+    games = [
+        ProposalGame(UUID(int=1), "Spiel 1", date(2026, 8, 2), time(10), "A", 90),
+        ProposalGame(UUID(int=2), "Spiel 2", date(2026, 8, 2), time(12), "A", 120),
+    ]
+    windows = derive_proposal_windows(
+        games, ZoneInfo("Europe/Zurich"), pre_margin_minutes=20, post_margin_minutes=40
+    )
+    assert len(windows) == 1
+    assert windows[0].start_at.time() == time(9, 40)
+    assert windows[0].end_at.time() == time(14, 40)
+
+
+def test_games_on_different_days_never_share_a_window() -> None:
+    games = [
+        game(1, time(10)),
+        ProposalGame(UUID(int=2), "Spiel 2", date(2026, 8, 3), time(10), "A"),
+    ]
+    assert len(derive_proposal_windows(games, ZoneInfo("UTC"))) == 2

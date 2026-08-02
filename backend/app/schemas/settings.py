@@ -17,6 +17,9 @@ class OrganizationSettingsUpdate(BaseModel):  # type: ignore[explicit-any]
     signup_rate_limit_per_contact: int | None = Field(default=None, ge=1)
     signup_rate_limit_window_minutes: int | None = Field(default=None, ge=1)
     coordination_contact_label: str | None = None
+    kiosk_lead_minutes: int | None = Field(default=None, ge=0, le=720)
+    kiosk_trail_minutes: int | None = Field(default=None, ge=0, le=720)
+    default_game_duration_minutes: int | None = Field(default=None, ge=1, le=1440)
 
     @model_validator(mode="after")
     def reject_null_required_fields(self) -> OrganizationSettingsUpdate:
@@ -39,6 +42,9 @@ class OrganizationSettingsResponse(BaseModel):  # type: ignore[explicit-any]
     signup_rate_limit_per_contact: int
     signup_rate_limit_window_minutes: int
     coordination_contact_label: str | None
+    kiosk_lead_minutes: int
+    kiosk_trail_minutes: int
+    default_game_duration_minutes: int
     created_at: datetime
     updated_at: datetime
 

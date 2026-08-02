@@ -6,6 +6,9 @@ export type OrganizationSettings = {
   payout_rate_minor_per_hour: number;
   signup_rate_limit_per_contact: number;
   signup_rate_limit_window_minutes: number;
+  kiosk_lead_minutes: number;
+  kiosk_trail_minutes: number;
+  default_game_duration_minutes: number;
   coordination_contact_label: string | null;
   created_at: string;
   updated_at: string;

@@ -224,6 +224,9 @@ class Event(Base):
         UUID(as_uuid=True), ForeignKey("import_batch.id", ondelete="SET NULL"), nullable=True
     )
     kickoff_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    kiosk_requested: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    grill_requested: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     external_game_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     import_match_key: Mapped[str | None] = mapped_column(String(300), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

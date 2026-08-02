@@ -42,6 +42,10 @@ export type PlanningEvent = {
   kickoff_time?: string | null;
   external_game_number?: string | null;
   import_match_key?: string | null;
+  /** Optional planning signals. Missing means "not decided yet", not "no". */
+  kiosk_requested?: boolean | null;
+  grill_requested?: boolean | null;
+  duration_minutes?: number | null;
 };
 export type Shift = {
   id: string;

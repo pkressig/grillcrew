@@ -335,6 +335,9 @@ function OrganizationSettingsSection({ org }: Readonly<{ org: string }>) {
           payout_rate_minor_per_hour: Number(data.get("payout_rate_minor_per_hour")),
           signup_rate_limit_per_contact: Number(data.get("signup_rate_limit_per_contact")),
           signup_rate_limit_window_minutes: Number(data.get("signup_rate_limit_window_minutes")),
+          kiosk_lead_minutes: Number(data.get("kiosk_lead_minutes")),
+          kiosk_trail_minutes: Number(data.get("kiosk_trail_minutes")),
+          default_game_duration_minutes: Number(data.get("default_game_duration_minutes")),
           coordination_contact_label: String(data.get("coordination_contact_label") ?? "") || null,
         }),
       );
@@ -407,6 +410,52 @@ function OrganizationSettingsSection({ org }: Readonly<{ org: string }>) {
                 min={1}
                 required
                 defaultValue={settings.signup_rate_limit_window_minutes}
+                disabled={busy}
+              />
+            </label>
+            <div className="sm:col-span-2 border-t pt-3">
+              <h3 className="font-semibold">Kiosk- und Spielbetrieb</h3>
+              <p className="text-sm text-muted-foreground">
+                Diese Werte berechnen nur Vorschläge. Sie öffnen keinen Kiosk und erstellen keine
+                öffentlichen Einsätze.
+              </p>
+            </div>
+            <label className="grid gap-1" htmlFor="kiosk-lead-minutes">
+              Kiosk-Vorlauf (Minuten)
+              <input
+                className={control}
+                id="kiosk-lead-minutes"
+                name="kiosk_lead_minutes"
+                type="number"
+                min={0}
+                required
+                defaultValue={settings.kiosk_lead_minutes ?? 30}
+                disabled={busy}
+              />
+            </label>
+            <label className="grid gap-1" htmlFor="kiosk-trail-minutes">
+              Kiosk-Nachlauf (Minuten)
+              <input
+                className={control}
+                id="kiosk-trail-minutes"
+                name="kiosk_trail_minutes"
+                type="number"
+                min={0}
+                required
+                defaultValue={settings.kiosk_trail_minutes ?? 30}
+                disabled={busy}
+              />
+            </label>
+            <label className="grid gap-1" htmlFor="default-game-duration-minutes">
+              Standard-Spieldauer (Minuten)
+              <input
+                className={control}
+                id="default-game-duration-minutes"
+                name="default_game_duration_minutes"
+                type="number"
+                min={1}
+                required
+                defaultValue={settings.default_game_duration_minutes ?? 90}
                 disabled={busy}
               />
             </label>

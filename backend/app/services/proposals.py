@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.identity import AuditEvent
-from app.models.organization import CrewSizeRule, HomeVenue, Organization
+from app.models.organization import CrewSizeRule, HomeVenue, Organization, OrganizationSettings
 from app.models.planning import ClubYear, Event, EventStatus, Season
 from app.models.proposal import ProposalOverride
 from app.schemas.proposals import (
@@ -39,6 +39,9 @@ class ProposalGame:
     date: date
     kickoff_time: time
     venue: str
+    # Duration is optional because legacy imported games only carry a kickoff.
+    # A zero duration preserves the historical proposal behaviour.
+    duration_minutes: int = 0
 
 
 @dataclass(frozen=True)
@@ -52,9 +55,20 @@ class ProposalWindow:
 
 
 def derive_proposal_windows(
-    games: list[ProposalGame], timezone: ZoneInfo, split_gap_minutes: int = 240
+    games: list[ProposalGame],
+    timezone: ZoneInfo,
+    split_gap_minutes: int = 240,
+    pre_margin_minutes: int = 30,
+    post_margin_minutes: int = 30,
 ) -> list[ProposalWindow]:
-    """Group dated kickoffs. A gap strictly greater than the threshold starts a new window."""
+    """Group games into day-level kiosk windows.
+
+    Games are grouped per calendar day, rather than one window per event.  A
+    long break between kickoffs starts a new window; otherwise the resulting
+    window covers the first kickoff (minus the configured pre-margin) through
+    the last game's end (plus the post-margin).  Legacy rows without a known
+    duration use a zero duration and therefore retain the old behaviour.
+    """
     ordered = sorted(games, key=lambda game: (game.date, game.kickoff_time, str(game.id)))
     groups: list[list[ProposalGame]] = []
     for game in ordered:
@@ -75,7 +89,8 @@ def derive_proposal_windows(
         date_counts[group[0].date] = date_counts.get(group[0].date, 0) + 1
     for group in groups:
         first = datetime.combine(group[0].date, group[0].kickoff_time, timezone)
-        last = datetime.combine(group[-1].date, group[-1].kickoff_time, timezone)
+        last_kickoff = datetime.combine(group[-1].date, group[-1].kickoff_time, timezone)
+        last = last_kickoff + timedelta(minutes=max(0, group[-1].duration_minutes))
         key_source = ",".join(sorted(str(game.id) for game in group))
         key = hashlib.sha256(key_source.encode()).hexdigest()
         split = "KICKOFF_GAP_EXCEEDED" if date_counts[group[0].date] > 1 else None
@@ -83,8 +98,8 @@ def derive_proposal_windows(
             ProposalWindow(
                 key,
                 group[0].date,
-                first - timedelta(minutes=30),
-                last + timedelta(minutes=30),
+                first - timedelta(minutes=max(0, pre_margin_minutes)),
+                last + timedelta(minutes=max(0, post_margin_minutes)),
                 tuple(group),
                 split,
             )
@@ -102,6 +117,14 @@ class ProposalService:
         organization = self.db.get(Organization, self.organization_id)
         if organization is None:
             raise ProposalNotFoundError
+        settings = self.db.scalar(
+            select(OrganizationSettings).where(
+                OrganizationSettings.organization_id == self.organization_id
+            )
+        )
+        lead_minutes = settings.kiosk_lead_minutes if settings else 30
+        trail_minutes = settings.kiosk_trail_minutes if settings else 30
+        default_duration = settings.default_game_duration_minutes if settings else 90
         patterns = set(
             self.db.scalars(
                 select(HomeVenue.name_normalized).where(
@@ -121,13 +144,24 @@ class ProposalService:
             .order_by(Event.date, Event.kickoff_time)
         ).all()
         games = [
-            ProposalGame(event.id, event.title, event.date, event.kickoff_time, event.location)
+            ProposalGame(
+                event.id,
+                event.title,
+                event.date,
+                event.kickoff_time,
+                event.location,
+                event.duration_minutes or default_duration,
+            )
             for event in events
             if event.kickoff_time is not None
             and _matches_home_venue(normalize_venue_name(event.location), patterns)
         ]
         windows = derive_proposal_windows(
-            games, ZoneInfo(organization.timezone), self.split_gap_minutes
+            games,
+            ZoneInfo(organization.timezone),
+            self.split_gap_minutes,
+            lead_minutes,
+            trail_minutes,
         )
         overrides = {
             item.window_key: item

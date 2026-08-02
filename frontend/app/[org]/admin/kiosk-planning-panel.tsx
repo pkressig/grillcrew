@@ -94,10 +94,12 @@ function KioskWindowCard({
             ) : (
               <CircleOff aria-hidden="true" className="size-5 text-muted-foreground" />
             )}
-            {window.kiosk_open ? "Kiosk offen" : "Kiosk geschlossen"}
+            {window.kiosk_open ? "Kiosk vorgeschlagen" : "Kiosk nicht vorgesehen"}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {window.override_state === "MANUAL" ? "Manuell angepasst" : "Vorschlag"}
+            {window.override_state === "MANUAL"
+              ? "Manuell angepasst – noch nicht bestätigt"
+              : "Entwurf aus dem Spielbetrieb – bitte bestätigen"}
           </p>
         </div>
 
@@ -161,7 +163,7 @@ function KioskWindowCard({
                   checked={kioskOpen}
                   onChange={(event) => setKioskOpen(event.target.checked)}
                 />
-                Kiosk offen
+                Kiosk-Betrieb vorsehen
               </label>
               {error ? (
                 <p role="alert" className="text-sm text-status-error">
