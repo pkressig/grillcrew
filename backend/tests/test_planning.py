@@ -189,6 +189,119 @@ def test_delete_club_year_blocks_each_dependency(counts: list[int], reason: str)
     assert db.deleted == []
 
 
+def test_delete_dependency_free_completed_event_and_its_shifts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = SimpleNamespace(
+        id=uuid4(),
+        status=EventStatus.COMPLETED,
+        title="Testspiel",
+        date=date(2026, 8, 1),
+        season=SimpleNamespace(),
+    )
+    shifts: list[object] = [SimpleNamespace(id=uuid4()), SimpleNamespace(id=uuid4())]
+    db = _EventDeleteDb(target, shifts, [0, 0, 0])
+    monkeypatch.setattr(PlanningService, "_planning_reference_counts", lambda *_args: (0, 0))
+
+    PlanningService(cast(object, db), uuid4()).delete_event(target.id, uuid4())  # type: ignore[arg-type]
+
+    assert db.deleted == [target]
+    assert db.commits == 1
+    audit = next(item for item in db.added if isinstance(item, AuditEvent))
+    assert audit.action == "EVENT_DELETED"
+    assert audit.event_metadata["shift_count"] == "2"
+
+
+@pytest.mark.parametrize(
+    ("counts", "reason"),
+    [
+        ([2, 0, 0, 0, 0], "2 Anmeldung"),
+        ([0, 1, 0, 0, 0], "1 Arbeitsnachweis"),
+        ([0, 0, 3, 0, 0], "3 Spielplan-Importzeile"),
+        ([0, 0, 0, 1, 0], "1 manuelle Planungsreferenz"),
+        ([0, 0, 0, 0, 4], "4 externe Vergleichszeile"),
+    ],
+)
+def test_delete_event_blocks_each_historical_dependency(
+    counts: list[int], reason: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = SimpleNamespace(
+        id=uuid4(),
+        status=EventStatus.CANCELLED,
+        title="Historisch",
+        date=date(2026, 8, 1),
+        season=SimpleNamespace(),
+    )
+    db = _EventDeleteDb(target, [SimpleNamespace(id=uuid4())], counts[:3])
+    monkeypatch.setattr(
+        PlanningService, "_planning_reference_counts", lambda *_args: tuple(counts[3:])
+    )
+
+    with pytest.raises(PlanningConflictError, match=reason):
+        PlanningService(cast(object, db), uuid4()).delete_event(target.id, uuid4())  # type: ignore[arg-type]
+
+    assert db.deleted == []
+    assert db.commits == 0
+
+
+def test_delete_event_is_tenant_isolated_and_idempotent_when_missing() -> None:
+    db = _EventDeleteDb(None, [], [])
+    PlanningService(cast(object, db), uuid4()).delete_event(uuid4(), uuid4())  # type: ignore[arg-type]
+    assert db.deleted == []
+    assert db.commits == 0
+
+
+def test_delete_event_rejects_active_event() -> None:
+    target = SimpleNamespace(
+        id=uuid4(),
+        status=EventStatus.PUBLISHED,
+        title="Aktiv",
+        date=date(2026, 8, 1),
+        season=SimpleNamespace(),
+    )
+    db = _EventDeleteDb(target, [], [])
+    with pytest.raises(PlanningConflictError, match="erledigte oder abgesagte"):
+        PlanningService(cast(object, db), uuid4()).delete_event(target.id, uuid4())  # type: ignore[arg-type]
+    assert db.commits == 0
+
+
+def test_planning_reference_counts_ignore_unrelated_same_date_windows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = cast(Event, SimpleNamespace(id=uuid4(), date=date(2026, 8, 1)))
+    target_window = SimpleNamespace(
+        covered_event_ids=[target.id],
+        is_overridden=False,
+        start_at=datetime(2026, 8, 1, 10, tzinfo=UTC),
+        end_at=datetime(2026, 8, 1, 12, tzinfo=UTC),
+        grill_required=True,
+    )
+    unrelated_window = SimpleNamespace(
+        covered_event_ids=[uuid4()],
+        is_overridden=True,
+        start_at=datetime(2026, 8, 1, 16, tzinfo=UTC),
+        end_at=datetime(2026, 8, 1, 18, tzinfo=UTC),
+        grill_required=True,
+    )
+    unrelated_row = SimpleNamespace(
+        id=uuid4(),
+        category="KIOSK",
+        plan_date=target.date,
+        start_time=datetime(2026, 8, 1, 16).time(),
+        end_time=datetime(2026, 8, 1, 18).time(),
+    )
+    db = _DerivedReferenceDb([unrelated_row])
+    monkeypatch.setattr(
+        "app.services.proposals.ProposalService.list_windows",
+        lambda _self: [target_window, unrelated_window],
+    )
+
+    assert PlanningService(cast(object, db), db.organization.id)._planning_reference_counts(  # type: ignore[arg-type]
+        target
+    ) == (0, 0)
+    assert "LOCK TABLE proposal_override, external_kiosk_row IN SHARE MODE" in str(db.executed[0])
+
+
 def test_delete_lookups_remain_tenant_scoped() -> None:
     service = PlanningService(cast(object, _MissingDb()), uuid4())  # type: ignore[arg-type]
     with pytest.raises(PlanningNotFoundError):
@@ -355,6 +468,7 @@ def test_event_shift_routes_are_registered_with_manage_guard() -> None:
         ("GET", "/api/admin/{organization_slug}/seasons/{season_id}/events"),
         ("POST", "/api/admin/{organization_slug}/seasons/{season_id}/events"),
         ("PATCH", "/api/admin/{organization_slug}/events/{event_id}"),
+        ("DELETE", "/api/admin/{organization_slug}/events/{event_id}"),
         ("GET", "/api/admin/{organization_slug}/events/{event_id}/shifts"),
         ("POST", "/api/admin/{organization_slug}/events/{event_id}/shifts"),
         ("PATCH", "/api/admin/{organization_slug}/shifts/{shift_id}"),
@@ -385,6 +499,70 @@ def test_wrong_organization_slug_is_forbidden(client: TestClient) -> None:
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 403
+
+
+@pytest.mark.parametrize(("blocked", "expected_status"), [(False, 204), (True, 409)])
+def test_delete_event_endpoint_returns_success_or_concrete_conflict(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    blocked: bool,
+    expected_status: int,
+) -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
+    current = cast(
+        CurrentStaffMembership,
+        SimpleNamespace(organization=organization, user=SimpleNamespace(id=uuid4())),
+    )
+
+    class FakePlanningService:
+        def __init__(self, _db: object, _organization_id: object) -> None:
+            pass
+
+        def delete_event(self, _event_id: object, _actor_id: object) -> None:
+            if blocked:
+                raise PlanningConflictError(
+                    "Dieser Anlass kann nicht gelöscht werden: abhängig sind 2 Anmeldung(en)."
+                )
+
+    app.dependency_overrides[planning.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: _ListDb()
+    monkeypatch.setattr(planning, "PlanningService", FakePlanningService)
+    monkeypatch.setattr(planning, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.request(
+            "DELETE",
+            f"/api/admin/tenant-a/events/{uuid4()}",
+            json={"confirmation": "ANLASS_ENDGUELTIG_LOESCHEN"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == expected_status
+    if blocked:
+        assert "2 Anmeldung" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [None, {"confirmation": "LOESCHEN"}],
+)
+def test_delete_event_endpoint_requires_exact_confirmation(
+    client: TestClient, payload: dict[str, str] | None
+) -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
+    current = cast(
+        CurrentStaffMembership,
+        SimpleNamespace(organization=organization, user=SimpleNamespace(id=uuid4())),
+    )
+    app.dependency_overrides[planning.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: _ListDb()
+    try:
+        response = client.request("DELETE", f"/api/admin/tenant-a/events/{uuid4()}", json=payload)
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
 
 
 def test_admin_and_coordination_role_dependency_is_configured() -> None:
@@ -707,6 +885,49 @@ class _SignupDb:
 
     def refresh(self, _item: object) -> None:
         self.refreshes += 1
+
+
+class _EventDeleteDb:
+    def __init__(self, event: object | None, shifts: list[object], counts: list[int]) -> None:
+        self.event = event
+        self.shifts = shifts
+        self.counts = iter(counts)
+        self.deleted: list[object] = []
+        self.added: list[object] = []
+        self.commits = 0
+
+    def scalar(self, statement: object) -> object | None:
+        if "count(" in str(statement).lower():
+            return next(self.counts)
+        return self.event
+
+    def scalars(self, _statement: object) -> list[object]:
+        return self.shifts
+
+    def add(self, item: object) -> None:
+        self.added.append(item)
+
+    def delete(self, item: object) -> None:
+        self.deleted.append(item)
+
+    def commit(self) -> None:
+        self.commits += 1
+
+
+class _DerivedReferenceDb:
+    def __init__(self, rows: list[object]) -> None:
+        self.organization = SimpleNamespace(id=uuid4(), timezone="UTC")
+        self.rows = rows
+        self.executed: list[object] = []
+
+    def execute(self, statement: object) -> None:
+        self.executed.append(statement)
+
+    def get(self, _model: object, _identifier: object) -> object:
+        return self.organization
+
+    def scalars(self, _statement: object) -> list[object]:
+        return self.rows
 
 
 # -- Crew-size suggestion --------------------------------------------------------

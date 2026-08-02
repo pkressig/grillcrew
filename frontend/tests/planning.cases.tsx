@@ -160,6 +160,21 @@ function renderPeriodAdmin(role: Parameters<typeof session>[0], fetchMock = plan
   return fetchMock;
 }
 
+function renderArchive(role: Parameters<typeof session>[0], fetchMock = planningFetch(role)) {
+  vi.stubGlobal("fetch", fetchMock);
+  render(
+    <AuthProvider>
+      <AdminShell
+        activeView="planning"
+        planningSection="archive"
+        org="example"
+        organization={platformFallbackOrganization}
+      />
+    </AuthProvider>,
+  );
+  return fetchMock;
+}
+
 function openEventForm() {
   fireEvent.click(screen.getByText("Anlass erstellen", { selector: "summary" }));
 }
@@ -199,6 +214,32 @@ describe("planning admin", () => {
     expect(within(navigation).getByRole("link", { name: "Spielplan" })).toHaveAttribute(
       "aria-current",
       "page",
+    );
+  });
+
+  it("deletes a completed event from the archive after explicit confirmation", async () => {
+    const confirmMock = vi.fn(() => true);
+    vi.stubGlobal("confirm", confirmMock);
+    const archivedSeason = { ...season, status: "ARCHIVED" };
+    const completedEvent = { ...planningEvent, status: "COMPLETED" };
+    const fetchMock = renderArchive(
+      "KOORDINATION",
+      planningFetch("KOORDINATION", false, [archivedSeason], true, true, [completedEvent]),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Anlass Sommerfest löschen" }));
+
+    expect(confirmMock).toHaveBeenCalledWith(
+      "Anlass „Sommerfest“ und seine abhängigen Einsätze endgültig löschen? Der Server prüft zuvor alle historischen Abhängigkeiten.",
+    );
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/events\/event-1$/),
+        expect.objectContaining({
+          method: "DELETE",
+          body: JSON.stringify({ confirmation: "ANLASS_ENDGUELTIG_LOESCHEN" }),
+        }),
+      ),
     );
   });
 

@@ -68,3 +68,6 @@
 
 - Externen aktuellen Kiosk-Excelplan erst nach Bereitstellung des Koordinator-Dokuments importieren und mit den abgeleiteten Vorschlägen vergleichen.
 - Vorschläge erst nach einem eigenen genehmigten Workflow in bestätigte Schichten beziehungsweise öffentliche Anmeldungen überführen.
+# Operations follow-up: production due-sync invocation
+
+- Vor Aktivierung in Produktion `ONEDRIVE_CRON_TOKEN` als mindestens 32 Zeichen langes Deployment-Secret setzen und einen täglichen Bearer-authentifizierten Aufruf von `POST /api/cron/onedrive-sync/run-due` konfigurieren. Solange dies fehlt, zeigt die UI nur die Vorschau; sie darf keinen erfolgreichen geplanten Lauf vortäuschen.

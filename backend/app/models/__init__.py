@@ -14,6 +14,7 @@ from app.models.identity import (
     User,
     UserStatus,
 )
+from app.models.onedrive_sync import OneDriveSyncConfig, OneDriveSyncRun, OneDriveSyncStatus
 from app.models.organization import (
     CrewSizeRule,
     HomeVenue,
@@ -73,6 +74,9 @@ __all__ = [
     "ImportRowDecision",
     "Invitation",
     "MenuType",
+    "OneDriveSyncConfig",
+    "OneDriveSyncRun",
+    "OneDriveSyncStatus",
     "Organization",
     "OrganizationSettings",
     "PasswordResetToken",

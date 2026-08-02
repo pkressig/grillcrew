@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { loadAdminPlanningData } from "@/lib/admin-planning-data";
-import { deleteClubYear, deleteSeason, type PlanningStatus } from "@/lib/planning";
+import { deleteClubYear, deleteEvent, deleteSeason, type PlanningStatus } from "@/lib/planning";
 
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
 const historicalEventStatuses = new Set(["COMPLETED", "CANCELLED"]);
@@ -87,6 +87,27 @@ export function PlanningArchivePanel({ org }: Readonly<{ org: string }>) {
     } catch (caught) {
       setError(
         caught instanceof Error ? caught.message : "Der Datensatz konnte nicht gelöscht werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeEvent(id: string, title: string) {
+    if (
+      !window.confirm(
+        `Anlass „${title}“ und seine abhängigen Einsätze endgültig löschen? Der Server prüft zuvor alle historischen Abhängigkeiten.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteEvent(org, id);
+      await refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Der Anlass konnte nicht gelöscht werden.",
       );
     } finally {
       setBusy(false);
@@ -299,6 +320,15 @@ export function PlanningArchivePanel({ org }: Readonly<{ org: string }>) {
                         {event.internal_note ? (
                           <p className="mt-2 text-sm">Bemerkung: {event.internal_note}</p>
                         ) : null}
+                        <Button
+                          className="mt-4"
+                          variant="destructive"
+                          disabled={busy}
+                          aria-label={`Anlass ${event.title} löschen`}
+                          onClick={() => void removeEvent(event.id, event.title)}
+                        >
+                          Anlass löschen
+                        </Button>
                       </CardBody>
                     </Card>
                   </li>

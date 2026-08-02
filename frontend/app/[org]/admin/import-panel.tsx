@@ -20,6 +20,7 @@ import {
   type SpielTyp,
 } from "@/lib/imports";
 import { loadPlanning, type ClubYear } from "@/lib/planning";
+import { OneDriveSyncCard } from "./onedrive-sync-card";
 
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
 
@@ -125,6 +126,21 @@ export function ImportPanel({ org }: Readonly<{ org: string }>) {
         headingId="import-heading"
         title="Spielplan-Import"
         description="Heimspielplan hochladen, Änderungen prüfen und übernehmen."
+      />
+      <OneDriveSyncCard
+        org={org}
+        clubYears={clubYears}
+        onReview={(batchId) =>
+          void loadImportRows(org, batchId)
+            .then(setResult)
+            .catch((caught: unknown) =>
+              setUploadError(
+                caught instanceof Error
+                  ? caught.message
+                  : "Der Import konnte nicht geladen werden.",
+              ),
+            )
+        }
       />
       {!result ? (
         <Card className="border-border/80">

@@ -37,6 +37,7 @@ Ab F002 (Authentifizierung, D-037–D-040) zusaetzlich erforderlich, sobald die 
 live gehen:
 
 - `JWT_SECRET_KEY`: eindeutiges, zufaelliges Secret fuer die Access-Token-Signierung (mind. 32 Zeichen);
+- `ONEDRIVE_CRON_TOKEN`: separates zufälliges Bearer-Secret (mind. 32 Zeichen) für den externen täglichen OneDrive-Due-Runner; nur erforderlich, wenn die Synchronisation produktiv aktiviert wird.
   niemals der Entwicklungs-Default aus `app/core/config.py`. Die CSRF-Signierung wird per HMAC aus
   diesem Secret abgeleitet, kein separates Secret noetig.
 - `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_USE_TLS`: Transport fuer

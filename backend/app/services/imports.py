@@ -87,6 +87,9 @@ class ImportService:
         source_filename: str,
         content: bytes,
         uploaded_by_user_id: uuid.UUID,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        commit: bool = True,
     ) -> ImportBatch:
         club_year = self.db.scalar(
             select(ClubYear).where(
@@ -151,6 +154,10 @@ class ImportService:
         for sheet in sheets:
             season = season_by_type[sheet.season_type]
             for parsed in sheet.rows:
+                if start_date is not None and parsed.game_date < start_date:
+                    continue
+                if end_date is not None and parsed.game_date > end_date:
+                    continue
                 key = _match_key(parsed.spielnummer, parsed.teams, parsed.game_date)
                 if key in seen_keys:
                     raise ImportValidationError(
@@ -179,8 +186,11 @@ class ImportService:
         for row in rows:
             row.import_batch_id = batch.id
             self.db.add(row)
-        self.db.commit()
-        self.db.refresh(batch)
+        if commit:
+            self.db.commit()
+            self.db.refresh(batch)
+        else:
+            self.db.flush()
         return batch
 
     def list_rows(self, batch_id: uuid.UUID) -> tuple[ImportBatch, list[ImportRow]]:

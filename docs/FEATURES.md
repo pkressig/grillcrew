@@ -754,3 +754,6 @@ Rows can be explicitly acknowledged or overridden. This workflow never creates o
 confirmed shifts, public signups, or Spielbetrieb data.
 
 Die privaten Planungsansichten zeigen transparente Vorschläge aus dem Spielbetrieb. Kiosk gruppiert Heimspiele in Tagesfenster, zeigt Abdeckung und Teilungsgrund und erlaubt manuelle Zeit-/Öffnungsanpassungen. Grill zeigt nur offene Kioskfenster, Crew-Regel-Kontext und änderbare Grillbedarfs-/Platzvorschläge. Vorschläge bleiben sichtbar von bestätigten Schichten und öffentlichen Anmeldungen getrennt.
+# OneDrive-Spielplansynchronisation
+
+ADMIN kann im Spielplan-Import eine strikt lesende OneDrive-Quelle konfigurieren, manuell abrufen und einen täglichen Lauf in der Organisationszeitzone planen. Jeder erfolgreiche neue Inhalt endet als bestehender, explizit zu prüfender Importvergleich; es gibt keine automatische Übernahme.

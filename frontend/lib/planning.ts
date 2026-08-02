@@ -113,11 +113,12 @@ function writeInit(method: "POST" | "PATCH", payload: object): RequestInit {
   };
 }
 
-async function remove(path: string): Promise<void> {
+async function remove(path: string, payload?: object): Promise<void> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     method: "DELETE",
     credentials: "include",
-    headers: csrfHeaders(),
+    headers: payload ? { "Content-Type": "application/json", ...csrfHeaders() } : csrfHeaders(),
+    body: payload ? JSON.stringify(payload) : undefined,
   });
   if (!response.ok) {
     let detail: string | undefined;
@@ -193,6 +194,10 @@ export const updateEventStatus = (org: string, eventId: string, status: EventSta
     writeInit("PATCH", { status }),
     "Der Anlassstatus konnte nicht gespeichert werden.",
   );
+export const deleteEvent = (org: string, eventId: string) =>
+  remove(`/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}`, {
+    confirmation: "ANLASS_ENDGUELTIG_LOESCHEN",
+  });
 export const loadShifts = (org: string, eventId: string) =>
   request<Shift[]>(
     `/api/admin/${encodeURIComponent(org)}/events/${encodeURIComponent(eventId)}/shifts`,

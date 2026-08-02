@@ -5,8 +5,14 @@ import { AuthProvider } from "@/components/auth-provider";
 import { clearCsrfToken } from "@/lib/api";
 import type { AuthSession, StaffRole } from "@/lib/auth";
 import { platformFallbackOrganization } from "@/lib/organization";
+import { loadOneDriveConfig } from "@/lib/onedrive-sync";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+vi.mock("@/lib/onedrive-sync", () => ({
+  loadOneDriveConfig: vi.fn().mockResolvedValue(null),
+  saveOneDriveConfig: vi.fn(),
+  syncOneDriveNow: vi.fn(),
+}));
 
 const clubYear = {
   id: "cy-1",
@@ -153,6 +159,12 @@ describe("import admin navigation and role gating", () => {
       "href",
       "/example/admin/import",
     );
+  });
+
+  it("does not mount OneDrive synchronization outside the import workspace", async () => {
+    renderAdmin("KOORDINATION", "families");
+    await screen.findByRole("heading", { name: "Familien" });
+    expect(loadOneDriveConfig).not.toHaveBeenCalled();
   });
 
   it("hides the nav link and denies direct access for KOORDINATION", async () => {

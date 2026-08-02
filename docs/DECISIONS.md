@@ -247,3 +247,6 @@ Club years and seasons use `DRAFT → ACTIVE → CLOSED → ARCHIVED` lifecycle 
 **Entscheid:** Kioskfenster werden für Spiele an aktiven Heimplätzen mit 30 Minuten Vor- und Nachlauf abgeleitet. Nur Abstände von mehr als 240 Minuten trennen Fenster. Grillbedarf bleibt Teil dieses Vorschlags: standardmässig ein Platz bis drei gleichzeitig abgedeckten Spielen, sonst zwei; eine passende CrewSizeRule kann die Anzahl übersteuern. Manuelle Änderungen werden separat, mandantenbezogen und auditiert gespeichert.
 
 **Abgrenzung:** Vorschläge erzeugen weder Schichten noch öffentliche Anmeldungen. Ein externer Kioskplan wird in dieser Phase nicht importiert.
+# D-044: OneDrive-Spielplanquelle bleibt strikt lesend
+
+Die ADMIN-Konfiguration speichert nur einen validierten OneDrive-/SharePoint-HTTPS-Link, Zeitplan und Datumsfilter, niemals Zugangsdaten. Manuelle und fällige Läufe dürfen ausschliesslich per HTTP GET herunterladen und erzeugen einen prüfbaren `STAGED`-Import; Bestätigung und Event-Mutationen bleiben ein separater Admin-Schritt. Microsoft-Schreibscopes und Schreib-APIs sind ausgeschlossen. Ohne persistenten Worker ruft die Produktion den idempotenten `run-due`-Endpunkt täglich nach der konfigurierten Zeit auf.

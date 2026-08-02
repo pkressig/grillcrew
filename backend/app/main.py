@@ -14,6 +14,8 @@ from app.api.health import router as health_router
 from app.api.imports import router as imports_router
 from app.api.internal import router as internal_router
 from app.api.invitations import router as invitations_router
+from app.api.onedrive_sync import cron_router as onedrive_cron_router
+from app.api.onedrive_sync import router as onedrive_sync_router
 from app.api.planning import router as planning_router
 from app.api.proposals import router as proposals_router
 from app.api.public import router as public_router
@@ -55,6 +57,8 @@ def create_app() -> FastAPI:
     application.include_router(coordination_time_router)
     application.include_router(external_kiosk_router)
     application.include_router(imports_router)
+    application.include_router(onedrive_sync_router)
+    application.include_router(onedrive_cron_router)
     if settings.app_env != AppEnv.PRODUCTION:
         application.include_router(internal_router)
 

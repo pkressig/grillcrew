@@ -31,6 +31,10 @@ Visual language: charcoal sidebar, warm cream canvas, paprika primary actions, e
 
 ## Page catalogue
 
+### OneDrive-Karte im Spielplan-Import
+
+Die ADMIN-only Karte zeigt Link, Aktivierung, tägliche Europe/Zurich-Zeit, Datumsbereich und „Nur ab heute und zukünftige Spiele“. „Jetzt synchronisieren“ lädt ausschliesslich lesend und öffnet danach die bestehende Importprüfung. Letzter Status/Fehler, nächste Laufvorschau, Dateiname, Hash, effektiver Bereich, Zeilenzahl und Vergleichszusammenfassung bleiben sichtbar. Der Hinweis „nur lesen, nie automatisch übernehmen“ ist dauerhaft sichtbar.
+
 ### 1. Übersicht / Dashboard — implemented reference
 
 Reference: `docs/design-reference/admin-overview.png`

@@ -22,6 +22,7 @@ from app.schemas.planning import (
     ClubYearResponse,
     ClubYearUpdate,
     EventCreate,
+    EventDeleteConfirmation,
     EventResponse,
     EventUpdate,
     SeasonCreate,
@@ -337,6 +338,24 @@ def update_event(
             _write_service(organization_slug, current, db, request).update_event(event_id, payload)
         )
     except (PlanningNotFoundError, PlanningValidationError) as error:
+        raise _translate(error) from None
+
+
+@router.delete("/events/{event_id}", status_code=204)
+def delete_event(
+    organization_slug: str,
+    event_id: uuid.UUID,
+    payload: EventDeleteConfirmation,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> None:
+    try:
+        _write_service(organization_slug, current, db, request).delete_event(
+            event_id, current.user.id
+        )
+    except PlanningConflictError as error:
         raise _translate(error) from None
 
 

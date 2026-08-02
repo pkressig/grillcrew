@@ -72,6 +72,7 @@ class Settings(BaseSettings):  # type: ignore[explicit-any]
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_use_tls: bool = True
+    onedrive_cron_token: str | None = Field(default=None, min_length=32)
     frontend_public_url: str = "http://localhost:3000"
 
     @field_validator("database_url")

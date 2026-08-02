@@ -6,6 +6,7 @@ import uuid
 from datetime import date as date_type
 from datetime import datetime
 from datetime import time as time_type
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -37,6 +38,10 @@ class ClubYearCreate(DateRangeModel):  # type: ignore[explicit-any]
     start_date: date_type
     end_date: date_type
     status: PlanningStatus = PlanningStatus.DRAFT
+
+
+class EventDeleteConfirmation(BaseModel):  # type: ignore[explicit-any]
+    confirmation: Literal["ANLASS_ENDGUELTIG_LOESCHEN"]
 
 
 class ClubYearUpdate(DateRangeModel):  # type: ignore[explicit-any]

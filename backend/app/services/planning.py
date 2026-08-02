@@ -2,12 +2,14 @@
 
 import uuid
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, selectinload
 
+from app.models.external_kiosk import ExternalKioskBatch, ExternalKioskCategory, ExternalKioskRow
 from app.models.identity import AuditEvent
-from app.models.organization import CrewSizeRule, MenuType
+from app.models.organization import CrewSizeRule, MenuType, Organization
 from app.models.planning import (
     ClubYear,
     Event,
@@ -21,6 +23,7 @@ from app.models.planning import (
     SignupOutcome,
     SignupStatus,
 )
+from app.models.work_record import WorkRecord
 from app.schemas.planning import (
     ClubYearCreate,
     ClubYearUpdate,
@@ -341,6 +344,142 @@ class PlanningService:
         self.db.commit()
         self.db.refresh(item)
         return item
+
+    def delete_event(self, event_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
+        """Delete a historical event only when every known dependent record is absent.
+
+        Locking the event and its shifts makes the dependency check and delete one atomic
+        operation. A missing event is an idempotent success and does not disclose whether the
+        identifier belongs to another organization.
+        """
+        item = self.db.scalar(
+            select(Event)
+            .join(Season)
+            .join(ClubYear)
+            .options(selectinload(Event.season))
+            .where(Event.id == event_id, ClubYear.organization_id == self.organization_id)
+            .with_for_update(of=Event)
+        )
+        if item is None:
+            return
+        if item.status not in {EventStatus.COMPLETED, EventStatus.CANCELLED}:
+            raise PlanningConflictError(
+                "Nur erledigte oder abgesagte Anlässe aus dem Archiv können gelöscht werden."
+            )
+
+        shifts = list(
+            self.db.scalars(
+                select(Shift).where(Shift.event_id == item.id).with_for_update(of=Shift)
+            )
+        )
+        shift_ids = [shift.id for shift in shifts]
+        signup_count = 0
+        work_record_count = 0
+        if shift_ids:
+            signup_count = (
+                self.db.scalar(
+                    select(func.count()).select_from(Signup).where(Signup.shift_id.in_(shift_ids))
+                )
+                or 0
+            )
+            work_record_count = (
+                self.db.scalar(
+                    select(func.count())
+                    .select_from(WorkRecord)
+                    .join(Signup, WorkRecord.signup_id == Signup.id)
+                    .where(Signup.shift_id.in_(shift_ids))
+                )
+                or 0
+            )
+        import_row_count = (
+            self.db.scalar(
+                select(func.count())
+                .select_from(ImportRow)
+                .where(ImportRow.matched_event_id == item.id)
+            )
+            or 0
+        )
+        proposal_count, external_comparison_count = self._planning_reference_counts(item)
+
+        dependencies = []
+        if signup_count:
+            dependencies.append(f"{signup_count} Anmeldung(en)")
+        if work_record_count:
+            dependencies.append(f"{work_record_count} Arbeitsnachweis(e)")
+        if import_row_count:
+            dependencies.append(f"{import_row_count} Spielplan-Importzeile(n)")
+        if proposal_count:
+            dependencies.append(f"{proposal_count} manuelle Planungsreferenz(en)")
+        if external_comparison_count:
+            dependencies.append(
+                f"{external_comparison_count} externe Vergleichszeile(n) am selben Datum"
+            )
+        if dependencies:
+            raise PlanningConflictError(
+                "Dieser Anlass kann nicht gelöscht werden: abhängig sind "
+                f"{', '.join(dependencies)}. Die historischen Daten bleiben erhalten."
+            )
+
+        self._audit(
+            actor_user_id,
+            "EVENT_DELETED",
+            "event",
+            item.id,
+            {"title": item.title, "date": item.date, "shift_count": len(shifts)},
+        )
+        self.db.delete(item)
+        self.db.commit()
+
+    def _planning_reference_counts(self, item: Event) -> tuple[int, int]:
+        """Count only derived planning references whose current window contains the event.
+
+        Proposal overrides and external comparison rows have no event foreign key. Their
+        association is calculated by ``ProposalService`` from a window's covered event IDs and
+        by time overlap respectively, so a same-date row alone is not a dependency.
+        """
+        from app.services.external_kiosk import ExternalKioskService
+        from app.services.proposals import ProposalService
+
+        # These references are derived and have no event FK. PostgreSQL SHARE table locks are
+        # intentionally short-lived here: they prevent concurrent inserts/updates/deletes from
+        # creating a phantom dependency between recomputation and the event delete. Row-only
+        # tenant locks would not protect against new matching rows.
+        self.db.execute(text("LOCK TABLE proposal_override, external_kiosk_row IN SHARE MODE"))
+
+        windows = [
+            window
+            for window in ProposalService(self.db, self.organization_id).list_windows()
+            if item.id in window.covered_event_ids
+        ]
+        proposal_count = sum(window.is_overridden for window in windows)
+        if not windows:
+            return proposal_count, 0
+
+        organization = self.db.get(Organization, self.organization_id)
+        if organization is None:
+            return proposal_count, 0
+        timezone = ZoneInfo(organization.timezone)
+        rows = list(
+            self.db.scalars(
+                select(ExternalKioskRow)
+                .join(ExternalKioskBatch)
+                .where(
+                    ExternalKioskBatch.organization_id == self.organization_id,
+                    ExternalKioskRow.plan_date == item.date,
+                )
+            )
+        )
+        referenced_row_ids = {
+            row.id
+            for row in rows
+            for window in windows
+            if (
+                row.category == ExternalKioskCategory.KIOSK
+                or (row.category == ExternalKioskCategory.GRILL and window.grill_required)
+            )
+            and ExternalKioskService._overlaps(row, window.start_at, window.end_at, timezone)
+        }
+        return proposal_count, len(referenced_row_ids)
 
     def list_shifts(self, event_id: uuid.UUID) -> list[Shift]:
         event = self._get_event(event_id)
