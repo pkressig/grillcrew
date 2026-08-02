@@ -1,12 +1,19 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { loadPlanningProposals, updatePlanningProposal } = vi.hoisted(() => ({
-  loadPlanningProposals: vi.fn(),
-  updatePlanningProposal: vi.fn(),
-}));
+const { loadPlanningProposals, updatePlanningProposal, confirmPlanningProposal } = vi.hoisted(
+  () => ({
+    loadPlanningProposals: vi.fn(),
+    updatePlanningProposal: vi.fn(),
+    confirmPlanningProposal: vi.fn(),
+  }),
+);
 
-vi.mock("@/lib/proposals", () => ({ loadPlanningProposals, updatePlanningProposal }));
+vi.mock("@/lib/proposals", () => ({
+  loadPlanningProposals,
+  updatePlanningProposal,
+  confirmPlanningProposal,
+}));
 
 import { GrillPlanningPanel } from "@/app/[org]/admin/grill-planning-panel";
 

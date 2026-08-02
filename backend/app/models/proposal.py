@@ -43,6 +43,12 @@ class ProposalOverride(Base):
     kiosk_open: Mapped[bool | None] = mapped_column(Boolean)
     grill_required: Mapped[bool | None] = mapped_column(Boolean)
     proposed_grill_slots: Mapped[int | None] = mapped_column(Integer)
+    kiosk_confirmed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    grill_confirmed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

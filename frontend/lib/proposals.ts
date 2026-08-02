@@ -23,16 +23,33 @@ export type ProposalWindow = {
   crew_rule_context: string | null;
   covered_event_ids?: string[];
   games: ProposalGame[];
+  /** Lifecycle fields are optional for backwards-compatible proposal responses. */
+  status?: "DRAFT" | "CONFIRMED";
+  kiosk_shift_count?: number;
+  grill_shift_count?: number;
 };
 
 export type PlanningProposalWindow = ProposalWindow;
 export type PlanningProposalResponse = { windows: ProposalWindow[] };
 
 export type ProposalOverrideInput = Partial<
-  Pick<ProposalWindow, "kiosk_open" | "grill_required" | "proposed_grill_slots">
+  Pick<
+    ProposalWindow,
+    | "kiosk_open"
+    | "grill_required"
+    | "proposed_grill_slots"
+    | "kiosk_shift_count"
+    | "grill_shift_count"
+  >
 > & {
   starts_at?: string;
   ends_at?: string;
+};
+
+export type ProposalConfirmationInput = {
+  kind?: "kiosk" | "grill";
+  kiosk_shift_count?: number;
+  grill_shift_count?: number;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -77,6 +94,21 @@ export async function updatePlanningProposal(
   await ensureCsrfToken();
   return request<ProposalWindow>(`${proposalPath(org)}/${encodeURIComponent(id)}`, {
     method: "PATCH",
+    headers: { "Content-Type": "application/json", ...csrfHeaders() },
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Confirm a proposal and materialise its configured draft shifts. */
+export async function confirmPlanningProposal(
+  org: string,
+  id: string,
+  payload: ProposalConfirmationInput = {},
+): Promise<ProposalWindow> {
+  await ensureCsrfToken();
+  const kind = payload.kind ?? "kiosk";
+  return request<ProposalWindow>(`${proposalPath(org)}/${encodeURIComponent(id)}/confirm/${kind}`, {
+    method: "POST",
     headers: { "Content-Type": "application/json", ...csrfHeaders() },
     body: JSON.stringify(payload),
   });

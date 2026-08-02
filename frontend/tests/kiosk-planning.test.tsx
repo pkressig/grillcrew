@@ -7,6 +7,7 @@ vi.mock("@/lib/proposals", () => ({
   loadPlanningProposals: vi.fn(),
   refreshPlanningProposals: vi.fn(),
   updatePlanningProposal: vi.fn(),
+  confirmPlanningProposal: vi.fn(),
 }));
 
 const windowProposal = {

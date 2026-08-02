@@ -61,3 +61,22 @@ def update_proposal(
         raise HTTPException(status_code=404, detail="proposal not found") from None
     except ProposalValidationError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
+
+
+@router.post("/{window_id}/confirm/{kind}", response_model=ProposalWindowResponse)
+def confirm_proposal(
+    organization_slug: str,
+    window_id: str,
+    kind: str,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> ProposalWindowResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        return _service(organization_slug, current, db).confirm(window_id, kind, current.user.id)
+    except ProposalNotFoundError:
+        raise HTTPException(status_code=404, detail="proposal not found") from None
+    except ProposalValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None

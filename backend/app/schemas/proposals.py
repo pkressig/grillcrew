@@ -26,6 +26,8 @@ class ProposalWindowResponse(BaseModel):  # type: ignore[explicit-any]
     crew_rule_context: str | None
     covered_event_ids: list[uuid.UUID]
     games: list[ProposalGameResponse]
+    kiosk_confirmed: bool = False
+    grill_confirmed: bool = False
 
 
 class ProposalResponse(BaseModel):  # type: ignore[explicit-any]

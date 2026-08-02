@@ -11,6 +11,7 @@ import {
   type ExternalPlanComparisonRow,
 } from "@/lib/external-kiosk-plan";
 import {
+  confirmPlanningProposal,
   loadPlanningProposals,
   updatePlanningProposal,
   type PlanningProposalWindow,
@@ -78,6 +79,32 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     }
   }
 
+  async function confirm(window: EditableWindow) {
+    if (
+      !window.grill_required ||
+      !globalThis.window.confirm("Diesen Grill-Vorschlag als Entwurf im Grillplan anlegen?")
+    )
+      return;
+    setSavingId(window.id);
+    setError(null);
+    try {
+      const updated = await confirmPlanningProposal(org, window.id, {
+        kind: "grill",
+        grill_shift_count: window.proposed_grill_slots,
+      });
+      setWindows((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      setSuccess(`Grillentwurf für ${formatDate(updated.date)} angelegt.`);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Der Grill-Vorschlag konnte nicht bestätigt werden.",
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   const openWindows = windows.filter((window) => window.kiosk_open);
 
   return (
@@ -130,6 +157,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
               timezone={timezone}
               saving={savingId === window.id}
               onSave={save}
+              onConfirm={confirm}
               comparison={comparisonRows.find((row) => row.proposal_window?.id === window.id)}
             />
           ))}
@@ -144,21 +172,26 @@ function GrillWindowCard({
   timezone,
   saving,
   onSave,
+  onConfirm,
   comparison,
 }: Readonly<{
   window: PlanningProposalWindow;
   timezone: string;
   saving: boolean;
   onSave: (window: EditableWindow) => Promise<void>;
+  onConfirm: (window: EditableWindow) => Promise<void>;
   comparison?: ExternalPlanComparisonRow;
 }>) {
   const [grillRequired, setGrillRequired] = useState(window.grill_required);
   const [slots, setSlots] = useState(window.proposed_grill_slots);
+  const [confirmed, setConfirmed] = useState(window.status === "CONFIRMED");
+  const confirming = saving;
   const headingId = `grill-window-${window.id}`;
 
   useEffect(() => {
     setGrillRequired(window.grill_required);
     setSlots(window.proposed_grill_slots);
+    setConfirmed(window.status === "CONFIRMED");
   }, [window]);
 
   return (
@@ -240,6 +273,32 @@ function GrillWindowCard({
             </p>
           </div>
         </div>
+        {!confirmed ? (
+          <Button
+            className="justify-self-start"
+            disabled={saving || !grillRequired}
+            type="button"
+            onClick={async () => {
+              if (!globalThis.window.confirm("Diesen Grill-Vorschlag als Entwurf anlegen?")) return;
+              setConfirmed(true);
+              try {
+                await onConfirm({
+                  ...window,
+                  grill_required: grillRequired,
+                  proposed_grill_slots: slots,
+                });
+              } finally {
+                // callback owns persistence state
+              }
+            }}
+          >
+            {confirming ? "Wird angelegt …" : "Grill-Vorschlag bestätigen"}
+          </Button>
+        ) : (
+          <p className="text-sm text-status-success" role="status">
+            Grill-Entwurf angelegt
+          </p>
+        )}
 
         <form
           aria-labelledby={headingId}

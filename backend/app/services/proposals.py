@@ -13,7 +13,16 @@ from sqlalchemy.orm import Session
 
 from app.models.identity import AuditEvent
 from app.models.organization import CrewSizeRule, HomeVenue, Organization, OrganizationSettings
-from app.models.planning import ClubYear, Event, EventStatus, Season
+from app.models.planning import (
+    ClubYear,
+    Event,
+    EventStatus,
+    Season,
+    Shift,
+    ShiftAssignmentMode,
+    ShiftStatus,
+    ShiftType,
+)
 from app.models.proposal import ProposalOverride
 from app.schemas.proposals import (
     ProposalGameResponse,
@@ -234,6 +243,81 @@ class ProposalService:
         self.db.commit()
         return next(window for window in self.list_windows() if window.id == window_id)
 
+    def confirm(
+        self, window_id: str, kind: str, actor_user_id: uuid.UUID
+    ) -> ProposalWindowResponse:
+        """Confirm one derived window as a real, public signup-capable shift."""
+        if kind not in {"kiosk", "grill"}:
+            raise ProposalValidationError("unknown proposal type")
+        windows = {window.id: window for window in self.list_windows()}
+        current = windows.get(window_id)
+        if current is None:
+            raise ProposalNotFoundError
+        item = self.db.scalar(
+            select(ProposalOverride)
+            .where(
+                ProposalOverride.organization_id == self.organization_id,
+                ProposalOverride.window_key == window_id,
+            )
+            .with_for_update()
+        )
+        if item is None:
+            item = ProposalOverride(
+                organization_id=self.organization_id,
+                window_key=window_id,
+                proposal_date=current.date,
+            )
+            self.db.add(item)
+            self.db.flush()
+        if kind == "kiosk":
+            if not current.kiosk_open:
+                raise ProposalValidationError("Kiosk ist für diesen Vorschlag deaktiviert")
+            item.kiosk_confirmed = True
+            shift_type = ShiftType.KIOSK
+            required = 1
+        else:
+            if not current.grill_required:
+                raise ProposalValidationError("Grill ist für diesen Vorschlag deaktiviert")
+            item.grill_confirmed = True
+            shift_type = ShiftType.GRILL
+            required = max(1, current.proposed_grill_slots)
+        event_id = current.covered_event_ids[0]
+        existing = self.db.scalar(
+            select(Shift)
+            .where(
+                Shift.event_id == event_id,
+                Shift.shift_type == shift_type,
+                Shift.starts_at == current.start_at,
+                Shift.ends_at == current.end_at,
+                Shift.status != ShiftStatus.CANCELLED,
+            )
+            .with_for_update()
+        )
+        if existing is None:
+            self.db.add(
+                Shift(
+                    event_id=event_id,
+                    starts_at=current.start_at,
+                    ends_at=current.end_at,
+                    required_volunteers=required,
+                    status=ShiftStatus.OPEN,
+                    shift_type=shift_type,
+                    assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
+                )
+            )
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="PROPOSAL_CONFIRMED",
+                entity_type="proposal_override",
+                entity_id=item.id,
+                event_metadata={"window_key": window_id, "kind": kind},
+            )
+        )
+        self.db.commit()
+        return next(window for window in self.list_windows() if window.id == window_id)
+
     def _response(
         self, window: ProposalWindow, override: ProposalOverride | None, rules: list[CrewSizeRule]
     ) -> ProposalWindowResponse:
@@ -285,4 +369,6 @@ class ProposalService:
                 )
                 for game in window.games
             ],
+            kiosk_confirmed=bool(override and override.kiosk_confirmed),
+            grill_confirmed=bool(override and override.grill_confirmed),
         )
