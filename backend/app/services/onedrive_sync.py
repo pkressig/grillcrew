@@ -197,8 +197,6 @@ class OneDriveSyncService:
         config = self.get_config()
         if config is None:
             raise OneDriveSyncError("OneDrive-Synchronisation ist nicht konfiguriert.")
-        if not config.enabled:
-            raise OneDriveSyncError("OneDrive-Synchronisation ist deaktiviert.")
         current = now or datetime.now(UTC)
         effective_start = (
             max(config.import_start_date, current.astimezone(ZoneInfo(self.timezone)).date())

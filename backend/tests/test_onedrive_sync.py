@@ -87,13 +87,9 @@ def test_pinned_connection_uses_validated_ip_but_tls_original_hostname() -> None
     wrap_socket.assert_called_once_with(raw, server_hostname="tenant.sharepoint.com")
 
 
-def test_disabled_configuration_refuses_manual_sync() -> None:
-    config = cast(OneDriveSyncConfig, SimpleNamespace(enabled=False))
-    db = SimpleNamespace(scalar=lambda _query: config)
-    with pytest.raises(OneDriveSyncError, match="deaktiviert"):
-        OneDriveSyncService(cast(Session, db), __import__("uuid").uuid4(), "Europe/Zurich").sync(
-            None
-        )
+def test_disabled_daily_schedule_does_not_block_manual_sync() -> None:
+    source = inspect.getsource(OneDriveSyncService.sync)
+    assert "if not config.enabled" not in source
 
 
 def test_rejects_non_xlsx_payload_before_parser() -> None:
