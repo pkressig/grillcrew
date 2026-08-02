@@ -43,6 +43,32 @@ export function SettingsPanel({ org }: Readonly<{ org: string }>) {
         title="Einstellungen"
         description="Heimplätze, Crew-Regeln und Organisationseinstellungen verwalten."
       />
+      <nav aria-label="Einstellungskategorien" className="flex flex-wrap gap-2">
+        <a
+          className="min-h-11 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+          href="#org-settings-heading"
+        >
+          Organisation &amp; Betrieb
+        </a>
+        <a
+          className="min-h-11 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+          href="#coordination-time-heading"
+        >
+          Koordinationszeit
+        </a>
+        <a
+          className="min-h-11 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+          href="#home-venues-heading"
+        >
+          Heimspielorte
+        </a>
+        <a
+          className="min-h-11 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+          href="#crew-size-rules-heading"
+        >
+          Crew-Regeln
+        </a>
+      </nav>
       <OrganizationSettingsSection org={org} />
       <CoordinationTimeSection org={org} />
       <HomeVenuesSection org={org} />
