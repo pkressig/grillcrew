@@ -137,3 +137,10 @@ export const confirmImportBatch = (org: string, batchId: string) =>
     { method: "POST", headers: { ...csrfHeaders() } },
     "Der Import konnte nicht bestätigt werden.",
   );
+
+export const applyImportRow = (org: string, batchId: string, rowId: string) =>
+  request<ImportRow>(
+    `${base(org)}/${encodeURIComponent(batchId)}/rows/${encodeURIComponent(rowId)}/apply`,
+    { method: "POST", headers: { ...csrfHeaders() } },
+    "Das Spiel konnte nicht als Entwurf übernommen werden.",
+  );

@@ -249,6 +249,8 @@ class ImportService:
         rows = list(self.db.scalars(select(ImportRow).where(ImportRow.import_batch_id == batch.id)))
         now = datetime.now(UTC)
         for row in rows:
+            if row.applied_at is not None:
+                continue
             if row.include_decision == ImportRowDecision.INCLUDE:
                 if row.classification == ImportRowClassification.NEU:
                     self._apply_neu(row, batch, now)
@@ -265,6 +267,37 @@ class ImportService:
         for row in rows:
             self.db.refresh(row)
         return batch, rows
+
+    def apply_row(
+        self, batch_id: uuid.UUID, row_id: uuid.UUID, actor_user_id: uuid.UUID
+    ) -> ImportRow:
+        batch = self._get_batch(batch_id)
+        if batch.status != ImportBatchStatus.STAGED:
+            raise ImportConflictError("import batch is no longer staged")
+        row = self.db.scalar(
+            select(ImportRow).where(ImportRow.id == row_id, ImportRow.import_batch_id == batch.id)
+        )
+        if row is None:
+            raise ImportNotFoundError("import row not found")
+        if not row.is_home_venue:
+            raise ImportValidationError("Nur Spiele an einem Heimplatz können übernommen werden.")
+        if row.classification not in {
+            ImportRowClassification.NEU,
+            ImportRowClassification.GEAENDERT,
+        }:
+            raise ImportConflictError("Dieses Spiel benötigt keine neue Entwurfsübernahme.")
+        if row.applied_at is not None:
+            return row
+        now = datetime.now(UTC)
+        row.include_decision = ImportRowDecision.INCLUDE
+        if row.classification == ImportRowClassification.NEU:
+            self._apply_neu(row, batch, now)
+        else:
+            self._apply_geaendert(row, now)
+        row.applied_at = now
+        self.db.commit()
+        self.db.refresh(row)
+        return row
 
     def _apply_neu(self, row: ImportRow, batch: ImportBatch, now: datetime) -> None:
         event = Event(

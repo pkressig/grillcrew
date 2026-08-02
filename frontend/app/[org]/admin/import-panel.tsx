@@ -9,6 +9,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import { StatSummary } from "@/components/ui/stat-summary";
 import {
   confirmImportBatch,
+  applyImportRow,
   loadImportRows,
   updateImportRow,
   uploadImportBatch,
@@ -312,6 +313,21 @@ function ImportReview({
       setBusyRowId(null);
     }
   }
+  async function applyOneRow(row: ImportRow) {
+    setBusyRowId(row.id);
+    setError(null);
+    try {
+      await applyImportRow(org, batch.id, row.id);
+      onResult(await loadImportRows(org, batch.id));
+      setSuccess("Das Spiel wurde als Entwurf in den Spielbetrieb übernommen.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Das Spiel konnte nicht übernommen werden.",
+      );
+    } finally {
+      setBusyRowId(null);
+    }
+  }
 
   async function confirm() {
     const includedCount = rows.filter((row) => row.include_decision === "INCLUDE").length;
@@ -402,6 +418,7 @@ function ImportReview({
                 busy={busyRowId === row.id}
                 disabled={!isStaged}
                 onPatch={(payload) => void patchRow(row.id, payload)}
+                onApply={() => void applyOneRow(row)}
               />
             ))}
           </ul>
@@ -434,11 +451,13 @@ function ImportRowCard({
   busy,
   disabled,
   onPatch,
+  onApply,
 }: Readonly<{
   row: ImportRow;
   busy: boolean;
   disabled: boolean;
   onPatch: (payload: Parameters<typeof updateImportRow>[3]) => void;
+  onApply: () => void;
 }>) {
   const overridden = isOverridden(row);
   const isRemoved = row.classification === "ENTFERNT";
@@ -492,7 +511,7 @@ function ImportRowCard({
                   row.classification === "GEAENDERT"
                     ? "Die Änderungen als Entwurf im Spielbetrieb übernehmen?"
                     : "Dieses Spiel als Entwurf in den Spielbetrieb übernehmen?";
-                if (window.confirm(prompt)) onPatch({ include_decision: "INCLUDE" });
+                if (window.confirm(prompt)) onApply();
               }}
             >
               {row.classification === "GEAENDERT"

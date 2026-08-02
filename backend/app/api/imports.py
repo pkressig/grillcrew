@@ -142,6 +142,24 @@ def update_import_row(
         raise _translate(error) from None
 
 
+@router.post("/{batch_id}/rows/{row_id}/apply", response_model=ImportRowResponse)
+def apply_import_row(
+    organization_slug: str,
+    batch_id: uuid.UUID,
+    row_id: uuid.UUID,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> ImportRowResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        row = _service(organization_slug, current, db).apply_row(batch_id, row_id, current.user.id)
+        return ImportRowResponse.model_validate(row)
+    except (ImportNotFoundError, ImportConflictError, ImportValidationError) as error:
+        raise _translate(error) from None
+
+
 @router.post("/{batch_id}/confirm", response_model=ImportBatchWithRowsResponse)
 def confirm_import(
     organization_slug: str,
