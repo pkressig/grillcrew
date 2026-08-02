@@ -101,6 +101,10 @@ export function ImportPanel({ org }: Readonly<{ org: string }>) {
     const form = event.currentTarget;
     const data = new FormData(form);
     const clubYearId = String(data.get("club_year_id") ?? "");
+    const importStartDate = String(data.get("import_start_date") ?? "");
+    const importEndDate = String(data.get("import_end_date") ?? "");
+    const futureOnly = data.get("future_only") === "on";
+    const homeOnly = data.get("home_only") === "on";
     const fileList = (form.elements.namedItem("file") as HTMLInputElement | null)?.files;
     const file = fileList?.[0];
     if (!clubYearId || !file) {
@@ -110,7 +114,14 @@ export function ImportPanel({ org }: Readonly<{ org: string }>) {
     setUploadBusy(true);
     setUploadError(null);
     try {
-      setResult(await uploadImportBatch(org, clubYearId, file));
+      setResult(
+        await uploadImportBatch(org, clubYearId, file, {
+          importStartDate: importStartDate || undefined,
+          importEndDate: importEndDate || undefined,
+          futureOnly,
+          homeOnly,
+        }),
+      );
     } catch (caught) {
       setUploadError(
         caught instanceof Error ? caught.message : "Die Datei konnte nicht importiert werden.",
@@ -185,6 +196,39 @@ export function ImportPanel({ org }: Readonly<{ org: string }>) {
                     ))}
                   </select>
                 </label>
+                <fieldset className="grid gap-3 rounded-md border p-3">
+                  <legend className="px-1 font-medium">Importfilter</legend>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <label className="grid gap-1" htmlFor="import-start-date">
+                      Ab Datum (optional)
+                      <input
+                        className={control}
+                        id="import-start-date"
+                        name="import_start_date"
+                        type="date"
+                        disabled={uploadBusy}
+                      />
+                    </label>
+                    <label className="grid gap-1" htmlFor="import-end-date">
+                      Bis Datum (optional)
+                      <input
+                        className={control}
+                        id="import-end-date"
+                        name="import_end_date"
+                        type="date"
+                        disabled={uploadBusy}
+                      />
+                    </label>
+                  </div>
+                  <label className="flex min-h-11 items-center gap-2">
+                    <input name="future_only" type="checkbox" disabled={uploadBusy} />
+                    Nur ab heute und zukünftige Spiele
+                  </label>
+                  <label className="flex min-h-11 items-center gap-2">
+                    <input name="home_only" type="checkbox" disabled={uploadBusy} />
+                    Nur Heimspiele importieren (nicht passende Spiele werden ignoriert)
+                  </label>
+                </fieldset>
                 <label className="grid gap-1" htmlFor="import-file">
                   Heimspielplan (Excel-Datei)
                   <input
@@ -433,6 +477,30 @@ function ImportRowCard({
             <p className="text-sm text-status-warning">
               Termin hat sich geändert — bitte betroffene Helfer ausserhalb der App kontaktieren.
             </p>
+          ) : null}
+          {!isRemoved && row.is_home_venue ? (
+            <Button
+              className="justify-self-start"
+              disabled={disabled || busy}
+              type="button"
+              onClick={() => {
+                if (row.classification === "UNVERAENDERT") {
+                  window.alert("Dieses Spiel ist im Spielbetrieb bereits unverändert vorhanden.");
+                  return;
+                }
+                const prompt =
+                  row.classification === "GEAENDERT"
+                    ? "Die Änderungen als Entwurf im Spielbetrieb übernehmen?"
+                    : "Dieses Spiel als Entwurf in den Spielbetrieb übernehmen?";
+                if (window.confirm(prompt)) onPatch({ include_decision: "INCLUDE" });
+              }}
+            >
+              {row.classification === "GEAENDERT"
+                ? "Änderung als Entwurf übernehmen"
+                : row.classification === "UNVERAENDERT"
+                  ? "Bereits vorhanden"
+                  : "Als Entwurf übernehmen"}
+            </Button>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-3">
             <label className="grid gap-1 text-sm" htmlFor={`include-${row.id}`}>

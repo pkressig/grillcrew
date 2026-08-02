@@ -3,6 +3,7 @@
 # ruff: noqa: B008
 
 import uuid
+from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
@@ -66,6 +67,10 @@ async def upload_import(
     organization_slug: str,
     request: Request,
     club_year_id: uuid.UUID = Form(...),
+    import_start_date: date | None = Form(default=None),
+    import_end_date: date | None = Form(default=None),
+    future_only: bool = Form(default=False),
+    home_only: bool = Form(default=False),
     file: UploadFile = File(...),
     current: CurrentStaffMembership = Depends(manage),
     _: None = Depends(validate_csrf),
@@ -78,8 +83,23 @@ async def upload_import(
         raise _translate(error) from None
     service = _service(organization_slug, current, db)
     try:
+        effective_start = import_start_date
+        if future_only:
+            effective_start = max(effective_start or date.min, datetime.now().date())
+        if (
+            import_end_date is not None
+            and effective_start is not None
+            and import_end_date < effective_start
+        ):
+            raise ImportValidationError("Das Enddatum muss am oder nach dem Startdatum liegen.")
         batch = service.create_batch(
-            club_year_id, file.filename or "spielplan.xlsx", content, current.user.id
+            club_year_id,
+            file.filename or "spielplan.xlsx",
+            content,
+            current.user.id,
+            start_date=effective_start,
+            end_date=import_end_date,
+            home_only=home_only,
         )
     except (ImportNotFoundError, ImportValidationError) as error:
         raise _translate(error) from None

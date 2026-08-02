@@ -82,10 +82,25 @@ async function request<T>(path: string, init?: RequestInit, errorMessage?: strin
 
 const base = (org: string) => `/api/admin/${encodeURIComponent(org)}/imports`;
 
-export const uploadImportBatch = (org: string, clubYearId: string, file: File) => {
+export type ImportFilters = {
+  importStartDate?: string;
+  importEndDate?: string;
+  futureOnly?: boolean;
+  homeOnly?: boolean;
+};
+export const uploadImportBatch = (
+  org: string,
+  clubYearId: string,
+  file: File,
+  filters: ImportFilters = {},
+) => {
   const formData = new FormData();
   formData.append("club_year_id", clubYearId);
   formData.append("file", file);
+  if (filters.importStartDate) formData.append("import_start_date", filters.importStartDate);
+  if (filters.importEndDate) formData.append("import_end_date", filters.importEndDate);
+  if (filters.futureOnly) formData.append("future_only", "true");
+  if (filters.homeOnly) formData.append("home_only", "true");
   return request<ImportBatchWithRows>(
     base(org),
     { method: "POST", headers: { ...csrfHeaders() }, body: formData },

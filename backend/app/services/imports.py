@@ -89,6 +89,7 @@ class ImportService:
         uploaded_by_user_id: uuid.UUID,
         start_date: date | None = None,
         end_date: date | None = None,
+        home_only: bool = False,
         commit: bool = True,
     ) -> ImportBatch:
         club_year = self.db.scalar(
@@ -158,6 +159,10 @@ class ImportService:
                     continue
                 if end_date is not None and parsed.game_date > end_date:
                     continue
+                if home_only and not _matches_home_venue(
+                    normalize_venue_name(parsed.venue), home_venue_names
+                ):
+                    continue
                 key = _match_key(parsed.spielnummer, parsed.teams, parsed.game_date)
                 if key in seen_keys:
                     raise ImportValidationError(
@@ -171,7 +176,10 @@ class ImportService:
             self._build_row(parsed, season, key, existing_by_key, home_venue_names)
             for parsed, season, key in parsed_with_context
         ]
-        rows.extend(self._build_removed_rows(existing_by_key, seen_keys.keys(), home_venue_names))
+        if not home_only:
+            rows.extend(
+                self._build_removed_rows(existing_by_key, seen_keys.keys(), home_venue_names)
+            )
 
         batch = ImportBatch(
             organization_id=self.organization_id,
