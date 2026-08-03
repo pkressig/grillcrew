@@ -111,7 +111,12 @@ export async function createAuthenticatedSignup(
   await ensureCsrfToken();
   const response = await fetch(
     `${apiBaseUrl}/api/public/${encodeURIComponent(org)}/shifts/${encodeURIComponent(shiftId)}/signups/account`,
-    { method: "POST", credentials: "include", headers: csrfHeaders(), body: "{}" },
+    {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+      body: "{}",
+    },
   );
   if (!response.ok) {
     let detail = "signup failed";
