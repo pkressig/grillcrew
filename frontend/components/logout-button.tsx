@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { apiBaseUrl, csrfHeaders, ensureCsrfToken } from "@/lib/api";
 
-export function LogoutButton() {
+export function LogoutButton({ redirectTo = "/login" }: Readonly<{ redirectTo?: string }>) {
   const auth = useAuth();
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -20,7 +20,7 @@ export function LogoutButton() {
       });
     } finally {
       auth.clear();
-      router.replace("/login");
+      router.replace(redirectTo);
       setPending(false);
     }
   }
