@@ -94,6 +94,8 @@ export function OrganizationLanding() {
           );
         } else if (err.message === "csrf validation failed") {
           setSignupError("Die Sitzung ist abgelaufen. Bitte lade die Seite neu und versuche es nochmals.");
+        } else if (err.statusCode === 422) {
+          setSignupError(`Anmeldung konnte nicht geprüft werden: ${err.message}`);
         } else {
           setSignupError(
             "Die Eintragung ist nicht gelungen. Bitte prüfe deine Angaben und versuche es nochmals.",
