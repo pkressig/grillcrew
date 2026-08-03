@@ -10,6 +10,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
+import { LogoutButton } from "@/components/logout-button";
 import { fetchVolunteerProfile, type VolunteerProfile } from "@/lib/volunteer-profile";
 import {
   createAuthenticatedSignup,
@@ -180,6 +181,7 @@ export function OrganizationLanding() {
                 >
                   Mein Profil
                 </Link>
+                <LogoutButton />
               </>
             ) : (
               <>
