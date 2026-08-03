@@ -3,6 +3,7 @@
 import { CalendarClock, Pencil, PlusCircle, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { PageHeader } from "@/components/page-header";
+import { ensureCsrfToken } from "@/lib/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -115,6 +116,7 @@ export function ImportPanel({ org }: Readonly<{ org: string }>) {
     setUploadBusy(true);
     setUploadError(null);
     try {
+      await ensureCsrfToken();
       setResult(
         await uploadImportBatch(org, clubYearId, file, {
           importStartDate: importStartDate || undefined,
@@ -303,6 +305,7 @@ function ImportReview({
     setError(null);
     setSuccess(null);
     try {
+      await ensureCsrfToken();
       await updateImportRow(org, batch.id, rowId, payload);
       await refresh();
     } catch (caught) {
@@ -317,6 +320,7 @@ function ImportReview({
     setBusyRowId(row.id);
     setError(null);
     try {
+      await ensureCsrfToken();
       await applyImportRow(org, batch.id, row.id);
       onResult(await loadImportRows(org, batch.id));
       setSuccess("Das Spiel wurde als Entwurf in den Spielbetrieb übernommen.");
@@ -339,6 +343,7 @@ function ImportReview({
     setError(null);
     setSuccess(null);
     try {
+      await ensureCsrfToken();
       onResult(await confirmImportBatch(org, batch.id));
       setSuccess("Import wurde übernommen.");
     } catch (caught) {
