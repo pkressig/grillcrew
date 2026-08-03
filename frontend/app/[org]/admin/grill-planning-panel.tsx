@@ -17,6 +17,7 @@ import {
   updatePlanningProposal,
   type PlanningProposalWindow,
 } from "@/lib/proposals";
+import { loadShifts, type Shift } from "@/lib/planning";
 
 type EditableWindow = PlanningProposalWindow & {
   grill_required: boolean;
@@ -31,6 +32,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
   const [refreshing, setRefreshing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [comparisonRows, setComparisonRows] = useState<ExternalPlanComparisonRow[]>([]);
+  const [shiftsByWindow, setShiftsByWindow] = useState<Record<string, Shift[]>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -38,6 +40,18 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     try {
       const result = await loadPlanningProposals(org);
       setWindows(result.windows);
+      const loadedShifts = await Promise.all(
+        result.windows.map(async (item) => {
+          const eventId = item.covered_event_ids?.[0];
+          if (!eventId) return [item.id, []] as const;
+          try {
+            return [item.id, await loadShifts(org, eventId)] as const;
+          } catch {
+            return [item.id, []] as const;
+          }
+        }),
+      );
+      setShiftsByWindow(Object.fromEntries(loadedShifts));
       try {
         setComparisonRows((await loadExternalPlanComparison(org))?.rows ?? []);
       } catch {
@@ -113,6 +127,13 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
         grill_shift_count: window.proposed_grill_slots,
       });
       setWindows((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (updated.covered_event_ids?.[0]) {
+        const confirmedShifts = await loadShifts(org, updated.covered_event_ids[0]);
+        setShiftsByWindow((current) => ({
+          ...current,
+          [updated.id]: confirmedShifts,
+        }));
+      }
       setSuccess(`Grillentwurf für ${formatDate(updated.date)} angelegt.`);
     } catch (caught) {
       setError(
@@ -186,6 +207,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
               onSave={save}
               onConfirm={confirm}
               comparison={comparisonRows.find((row) => row.proposal_window?.id === window.id)}
+              shifts={shiftsByWindow[window.id] ?? []}
             />
           ))}
         </div>
@@ -201,6 +223,7 @@ function GrillWindowCard({
   onSave,
   onConfirm,
   comparison,
+  shifts,
 }: Readonly<{
   window: PlanningProposalWindow;
   timezone: string;
@@ -208,17 +231,18 @@ function GrillWindowCard({
   onSave: (window: EditableWindow) => Promise<void>;
   onConfirm: (window: EditableWindow) => Promise<void>;
   comparison?: ExternalPlanComparisonRow;
+  shifts: Shift[];
 }>) {
   const [grillRequired, setGrillRequired] = useState(window.grill_required);
   const [slots, setSlots] = useState(window.proposed_grill_slots);
-  const [confirmed, setConfirmed] = useState(window.status === "CONFIRMED");
+  const [confirmed, setConfirmed] = useState(window.grill_confirmed === true);
   const confirming = saving;
   const headingId = `grill-window-${window.id}`;
 
   useEffect(() => {
     setGrillRequired(window.grill_required);
     setSlots(window.proposed_grill_slots);
-    setConfirmed(window.status === "CONFIRMED");
+    setConfirmed(window.grill_confirmed === true);
   }, [window]);
 
   return (
@@ -285,7 +309,14 @@ function GrillWindowCard({
               ) : (
                 <XCircle aria-hidden="true" className="text-status-neutral" size={20} />
               )}
-              <span>Grill {grillRequired ? "vorgeschlagen" : "nicht vorgesehen"}</span>
+              <span>
+                Grill{" "}
+                {grillRequired
+                  ? confirmed
+                    ? "geplant / bestätigt"
+                    : "vorgeschlagen"
+                  : "nicht vorgesehen"}
+              </span>
             </div>
             <p className="mt-2 flex items-center gap-2 text-sm">
               <Flame aria-hidden="true" size={17} />
@@ -322,9 +353,29 @@ function GrillWindowCard({
             {confirming ? "Wird angelegt …" : "Grill-Vorschlag bestätigen"}
           </Button>
         ) : (
-          <p className="text-sm text-status-success" role="status">
-            Grill-Entwurf angelegt
-          </p>
+          <div
+            className="grid gap-2 rounded-md border border-status-success/30 bg-status-success/5 p-3"
+            role="status"
+          >
+            <p className="font-medium text-status-success">Grill geplant / bestätigt</p>
+            {shifts.map((shift) => (
+              <div key={shift.id} className="text-sm">
+                <p>
+                  {shift.occupied_volunteers} von {shift.required_volunteers} Helfer angemeldet
+                </p>
+                {shift.signups.length ? (
+                  <p className="text-muted-foreground">
+                    {shift.signups.map((signup) => signup.public_name).join(", ")}
+                  </p>
+                ) : (
+                  <p className="text-status-error">Noch keine Helfer angemeldet</p>
+                )}
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">
+              Zuordnung, Bearbeitung und Entfernung erfolgen im Bereich Anwesenheit.
+            </p>
+          </div>
         )}
 
         <form
