@@ -48,10 +48,9 @@ export async function registerVolunteer(payload: {
   child_first_name?: string;
   child_last_name?: string;
 }) {
-  await ensureCsrfToken();
   return request<{ ok: boolean }>("/api/auth/volunteer/register", {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...csrfHeaders() },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 }
