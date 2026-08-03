@@ -273,14 +273,29 @@ class ProposalService:
             if not current.kiosk_open:
                 raise ProposalValidationError("Kiosk ist für diesen Vorschlag deaktiviert")
             item.kiosk_confirmed = True
-            shift_type = ShiftType.KIOSK
-            required = 1
+            # Kiosk confirmation only unlocks the downstream grill proposal;
+            # it must not create a public signup shift yet.
         else:
             if not current.grill_required:
                 raise ProposalValidationError("Grill ist für diesen Vorschlag deaktiviert")
             item.grill_confirmed = True
             shift_type = ShiftType.GRILL
             required = max(1, current.proposed_grill_slots)
+        if kind == "grill" and not item.kiosk_confirmed:
+            raise ProposalValidationError("Der Kiosk muss zuerst bestÃ¤tigt werden")
+        if kind == "kiosk":
+            self.db.add(
+                AuditEvent(
+                    organization_id=self.organization_id,
+                    actor_user_id=actor_user_id,
+                    action="PROPOSAL_CONFIRMED",
+                    entity_type="proposal_override",
+                    entity_id=item.id,
+                    event_metadata={"window_key": window_id, "kind": kind},
+                )
+            )
+            self.db.commit()
+            return next(window for window in self.list_windows() if window.id == window_id)
         event_id = current.covered_event_ids[0]
         existing = self.db.scalar(
             select(Shift)

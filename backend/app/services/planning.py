@@ -19,6 +19,7 @@ from app.models.planning import (
     PlanningStatus,
     Season,
     Shift,
+    ShiftStatus,
     Signup,
     SignupOutcome,
     SignupStatus,
@@ -228,6 +229,7 @@ class PlanningService:
                     ClubYear.organization_id == self.organization_id,
                     Event.status == EventStatus.PUBLISHED,
                     Event.date >= from_date,
+                    Event.shifts.any(Shift.status != ShiftStatus.CANCELLED),
                 )
                 .order_by(Event.date, Event.id)
             )

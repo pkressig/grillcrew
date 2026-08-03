@@ -73,14 +73,15 @@ const eventActions: Record<EventStatus, EventStatus[]> = {
   DRAFT: ["PUBLISHED", "CANCELLED"],
   PUBLISHED: ["POSTPONED", "COMPLETED", "CANCELLED"],
   POSTPONED: ["PUBLISHED", "CANCELLED"],
-  CANCELLED: [],
-  COMPLETED: [],
+  CANCELLED: ["DRAFT"],
+  COMPLETED: ["DRAFT"],
 };
 const eventActionLabels: Partial<Record<EventStatus, string>> = {
   PUBLISHED: "Veröffentlichen",
   POSTPONED: "Verschieben",
   CANCELLED: "Absagen",
   COMPLETED: "Erledigen",
+  DRAFT: "Wiedereröffnen",
 };
 const shiftActions: Record<ShiftStatus, ShiftStatus[]> = {
   OPEN: ["CLOSED", "CANCELLED"],

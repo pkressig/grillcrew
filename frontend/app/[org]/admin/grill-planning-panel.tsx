@@ -105,7 +105,9 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     }
   }
 
-  const openWindows = windows.filter((window) => window.kiosk_open);
+  const openWindows = windows.filter(
+    (window) => window.kiosk_open && window.kiosk_confirmed !== false,
+  );
 
   return (
     <section className="grid gap-6" aria-labelledby="grill-title">

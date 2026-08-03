@@ -23,6 +23,8 @@ export type ProposalWindow = {
   crew_rule_context: string | null;
   covered_event_ids?: string[];
   games: ProposalGame[];
+  kiosk_confirmed?: boolean;
+  grill_confirmed?: boolean;
   /** Lifecycle fields are optional for backwards-compatible proposal responses. */
   status?: "DRAFT" | "CONFIRMED";
   kiosk_shift_count?: number;
