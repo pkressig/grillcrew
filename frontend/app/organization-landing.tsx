@@ -88,6 +88,8 @@ export function OrganizationLanding() {
           setSignupError(
             "Zu viele Anfragen. Bitte warte einen kurzen Moment und versuche es nochmals.",
           );
+        } else if (err.message === "csrf validation failed") {
+          setSignupError("Die Sitzung ist abgelaufen. Bitte lade die Seite neu und versuche es nochmals.");
         } else {
           setSignupError(
             "Die Eintragung ist nicht gelungen. Bitte prüfe deine Angaben und versuche es nochmals.",
