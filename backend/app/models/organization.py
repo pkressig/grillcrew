@@ -126,6 +126,9 @@ class OrganizationSettings(Base):
     default_game_duration_minutes: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="90"
     )
+    volunteer_password_min_length: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="6"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

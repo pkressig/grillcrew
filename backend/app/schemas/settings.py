@@ -20,6 +20,7 @@ class OrganizationSettingsUpdate(BaseModel):  # type: ignore[explicit-any]
     kiosk_lead_minutes: int | None = Field(default=None, ge=0, le=720)
     kiosk_trail_minutes: int | None = Field(default=None, ge=0, le=720)
     default_game_duration_minutes: int | None = Field(default=None, ge=1, le=1440)
+    volunteer_password_min_length: int | None = Field(default=None, ge=6, le=128)
 
     @model_validator(mode="after")
     def reject_null_required_fields(self) -> OrganizationSettingsUpdate:
@@ -45,6 +46,7 @@ class OrganizationSettingsResponse(BaseModel):  # type: ignore[explicit-any]
     kiosk_lead_minutes: int
     kiosk_trail_minutes: int
     default_game_duration_minutes: int
+    volunteer_password_min_length: int
     created_at: datetime
     updated_at: datetime
 

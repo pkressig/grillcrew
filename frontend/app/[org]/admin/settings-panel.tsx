@@ -439,6 +439,20 @@ function OrganizationSettingsSection({ org }: Readonly<{ org: string }>) {
                 disabled={busy}
               />
             </label>
+            <label className="grid gap-1" htmlFor="volunteer-password-min-length">
+              Mindestlänge Helfer-Passwort
+              <input
+                className={control}
+                id="volunteer-password-min-length"
+                name="volunteer_password_min_length"
+                type="number"
+                min={6}
+                max={128}
+                required
+                defaultValue={settings.volunteer_password_min_length ?? 6}
+                disabled={busy}
+              />
+            </label>
             <div className="sm:col-span-2 border-t pt-3">
               <h3 className="font-semibold">Kiosk- und Spielbetrieb</h3>
               <p className="text-sm text-muted-foreground">

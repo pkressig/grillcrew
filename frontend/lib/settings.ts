@@ -9,6 +9,7 @@ export type OrganizationSettings = {
   kiosk_lead_minutes: number;
   kiosk_trail_minutes: number;
   default_game_duration_minutes: number;
+  volunteer_password_min_length: number;
   coordination_contact_label: string | null;
   created_at: string;
   updated_at: string;

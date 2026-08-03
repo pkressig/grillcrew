@@ -25,7 +25,7 @@ from app.core.security.rate_limit import InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
 from app.models.family import Family, FamilyMember, FamilyMemberType
 from app.models.identity import User, UserStatus
-from app.models.organization import Organization
+from app.models.organization import Organization, OrganizationSettings
 from app.models.planning import SignupSource, Volunteer
 from app.schemas.auth import (
     AcceptInvitationRequest,
@@ -79,15 +79,21 @@ def register_volunteer(
 ) -> VolunteerRegisterResponse:
     settings = get_settings()
     _ensure_origin_and_host(request, db, settings)
-    try:
-        validate_password_policy(payload.password)
-    except PasswordPolicyError:
-        raise HTTPException(status_code=422, detail="password policy violation") from None
     organization = db.scalar(
         select(Organization).where(Organization.slug == payload.organization_slug)
     )
     if organization is None:
         raise HTTPException(status_code=404, detail="organization not found")
+    try:
+        settings_record = db.scalar(
+            select(OrganizationSettings).where(
+                OrganizationSettings.organization_id == organization.id
+            )
+        )
+        minimum_length = settings_record.volunteer_password_min_length if settings_record else 6
+        validate_password_policy(payload.password, minimum_length=minimum_length)
+    except PasswordPolicyError:
+        raise HTTPException(status_code=422, detail="password policy violation") from None
     email = normalize_email(payload.email)
     if db.scalar(select(User.id).where(User.email_normalized == email)) is not None:
         raise HTTPException(status_code=409, detail="email already registered")

@@ -14,11 +14,9 @@ class PasswordPolicyError(ValueError):
     """Raised when a candidate password does not meet the minimum policy."""
 
 
-def validate_password_policy(password: str) -> None:
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise PasswordPolicyError(
-            f"password must be at least {MIN_PASSWORD_LENGTH} characters long"
-        )
+def validate_password_policy(password: str, *, minimum_length: int = MIN_PASSWORD_LENGTH) -> None:
+    if len(password) < minimum_length:
+        raise PasswordPolicyError(f"password must be at least {minimum_length} characters long")
 
 
 def hash_password(password: str) -> str:
