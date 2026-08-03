@@ -19,6 +19,7 @@ class ProposalWindowResponse(BaseModel):  # type: ignore[explicit-any]
     kiosk_open: bool
     grill_required: bool
     proposed_grill_slots: int
+    proposed_kiosk_slots: int = 1
     override_state: Literal["PROPOSAL", "MANUAL"]
     is_overridden: bool
     split_reason: str | None
@@ -41,6 +42,7 @@ class ProposalOverrideUpdate(BaseModel):  # type: ignore[explicit-any]
     kiosk_open: bool | None = None
     grill_required: bool | None = None
     proposed_grill_slots: int | None = Field(default=None, ge=0, le=20)
+    proposed_kiosk_slots: int | None = Field(default=None, ge=1, le=20)
 
     @model_validator(mode="after")
     def validate_times(self) -> "ProposalOverrideUpdate":

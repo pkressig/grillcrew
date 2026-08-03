@@ -43,6 +43,7 @@ class ProposalOverride(Base):
     kiosk_open: Mapped[bool | None] = mapped_column(Boolean)
     grill_required: Mapped[bool | None] = mapped_column(Boolean)
     proposed_grill_slots: Mapped[int | None] = mapped_column(Integer)
+    proposed_kiosk_slots: Mapped[int | None] = mapped_column(Integer)
     kiosk_confirmed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )

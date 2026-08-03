@@ -60,7 +60,7 @@ function KioskWindowCard({
   const [shiftCount, setShiftCount] = useState(window.kiosk_shift_count ?? 1);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const [confirmed, setConfirmed] = useState(window.status === "CONFIRMED");
+  const [confirmed, setConfirmed] = useState(window.kiosk_confirmed === true);
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
@@ -71,7 +71,7 @@ function KioskWindowCard({
         starts_at: new Date(startsAt).toISOString(),
         ends_at: new Date(endsAt).toISOString(),
         kiosk_open: kioskOpen,
-        kiosk_shift_count: shiftCount,
+        proposed_kiosk_slots: shiftCount,
       });
       onUpdated(updated);
       setEditing(false);
@@ -83,11 +83,17 @@ function KioskWindowCard({
   }
 
   async function confirm() {
-    if (!window.kiosk_open || !globalThis.window.confirm("Diesen Kiosk-Vorschlag als Entwurf im Kioskplan anlegen?")) return;
+    if (
+      !window.kiosk_open ||
+      !globalThis.window.confirm("Diesen Kiosk-Vorschlag als Entwurf im Kioskplan anlegen?")
+    )
+      return;
     setConfirming(true);
     setError(null);
     try {
-      const updated = await confirmPlanningProposal(org, window.id, { kiosk_shift_count: shiftCount });
+      const updated = await confirmPlanningProposal(org, window.id, {
+        kiosk_shift_count: shiftCount,
+      });
       setConfirmed(true);
       onUpdated(updated);
     } catch (caught) {
@@ -187,7 +193,14 @@ function KioskWindowCard({
               </label>
               <label className="grid gap-1 text-sm font-medium">
                 Kiosk-Schichten
-                <input className="min-h-11 rounded-sm border bg-background px-3" type="number" min={1} max={20} value={shiftCount} onChange={(event) => setShiftCount(Math.max(1, Number(event.target.value)))} />
+                <input
+                  className="min-h-11 rounded-sm border bg-background px-3"
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={shiftCount}
+                  onChange={(event) => setShiftCount(Math.max(1, Number(event.target.value)))}
+                />
               </label>
               {error ? (
                 <p role="alert" className="text-sm text-status-error">
@@ -203,11 +216,19 @@ function KioskWindowCard({
             </div>
           )}
           {!editing && !confirmed ? (
-            <Button className="mt-3 w-full" disabled={confirming || !window.kiosk_open} onClick={confirm}>
+            <Button
+              className="mt-3 w-full"
+              disabled={confirming || !window.kiosk_open}
+              onClick={confirm}
+            >
               {confirming ? "Wird angelegt …" : "Kiosk-Vorschlag bestätigen"}
             </Button>
           ) : null}
-          {confirmed ? <p className="mt-3 text-sm text-status-success" role="status">Kiosk-Entwurf angelegt</p> : null}
+          {confirmed ? (
+            <p className="mt-3 text-sm text-status-success" role="status">
+              Kiosk-Entwurf angelegt
+            </p>
+          ) : null}
         </div>
       </CardBody>
     </Card>

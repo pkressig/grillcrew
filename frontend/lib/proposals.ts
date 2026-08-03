@@ -16,6 +16,7 @@ export type ProposalWindow = {
   kiosk_open: boolean;
   grill_required: boolean;
   proposed_grill_slots: number;
+  proposed_kiosk_slots?: number;
   override_state: ProposalOverrideState;
   is_overridden?: boolean;
   split_reason: string | null;
@@ -40,6 +41,7 @@ export type ProposalOverrideInput = Partial<
     | "kiosk_open"
     | "grill_required"
     | "proposed_grill_slots"
+    | "proposed_kiosk_slots"
     | "kiosk_shift_count"
     | "grill_shift_count"
   >

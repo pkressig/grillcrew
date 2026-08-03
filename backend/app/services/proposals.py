@@ -284,6 +284,30 @@ class ProposalService:
         if kind == "grill" and not item.kiosk_confirmed:
             raise ProposalValidationError("Der Kiosk muss zuerst bestÃ¤tigt werden")
         if kind == "kiosk":
+            event_id = current.covered_event_ids[0]
+            existing = self.db.scalar(
+                select(Shift)
+                .where(
+                    Shift.event_id == event_id,
+                    Shift.shift_type == ShiftType.KIOSK,
+                    Shift.starts_at == current.start_at,
+                    Shift.ends_at == current.end_at,
+                    Shift.status != ShiftStatus.CANCELLED,
+                )
+                .with_for_update()
+            )
+            if existing is None:
+                self.db.add(
+                    Shift(
+                        event_id=event_id,
+                        starts_at=current.start_at,
+                        ends_at=current.end_at,
+                        required_volunteers=current.proposed_kiosk_slots or 1,
+                        status=ShiftStatus.CLOSED,
+                        shift_type=ShiftType.KIOSK,
+                        assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
+                    )
+                )
             self.db.add(
                 AuditEvent(
                     organization_id=self.organization_id,
@@ -359,6 +383,11 @@ class ProposalService:
             if override and override.proposed_grill_slots is not None
             else count
         )
+        kiosk_slots = (
+            override.proposed_kiosk_slots
+            if override and override.proposed_kiosk_slots is not None
+            else 1
+        )
         if not grill:
             slots = 0
         zone = window.start_at.tzinfo
@@ -370,6 +399,7 @@ class ProposalService:
             kiosk_open=kiosk,
             grill_required=grill,
             proposed_grill_slots=slots,
+            proposed_kiosk_slots=kiosk_slots,
             override_state="MANUAL" if override else "PROPOSAL",
             is_overridden=override is not None,
             split_reason=window.split_reason,

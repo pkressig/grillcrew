@@ -13,6 +13,7 @@ import {
 import {
   confirmPlanningProposal,
   loadPlanningProposals,
+  refreshPlanningProposals,
   updatePlanningProposal,
   type PlanningProposalWindow,
 } from "@/lib/proposals";
@@ -27,6 +28,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [comparisonRows, setComparisonRows] = useState<ExternalPlanComparisonRow[]>([]);
 
@@ -56,6 +58,24 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
   useEffect(() => {
     void load();
   }, [load]);
+
+  async function refresh() {
+    setRefreshing(true);
+    setError(null);
+    try {
+      const result = await refreshPlanningProposals(org);
+      setWindows(result.windows);
+      setSuccess("Grillvorschläge aus Spielbetrieb und Kiosk wurden aktualisiert.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Die Grillvorschläge konnten nicht aktualisiert werden.",
+      );
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function save(window: EditableWindow) {
     setSavingId(window.id);
@@ -114,6 +134,11 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
       <PageHeader
         headingId="grill-title"
         title="Grill"
+        action={
+          <Button disabled={loading || refreshing} onClick={() => void refresh()}>
+            {refreshing ? "Wird aktualisiert" : "Vorschläge aus Kiosk aktualisieren"}
+          </Button>
+        }
         description="Grillvorschläge innerhalb geöffneter Kioskfenster – noch keine bestätigten Einsätze."
       />
 
