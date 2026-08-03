@@ -27,7 +27,7 @@ export function RegisterForm({ organization }: Readonly<{ organization: PublicOr
         child_first_name: String(data.get("child_first_name") ?? "") || undefined,
         child_last_name: String(data.get("child_last_name") ?? "") || undefined,
       });
-      router.replace(`/login?org=${encodeURIComponent(organization.slug)}&registered=1`);
+      router.replace(`/${encodeURIComponent(organization.slug)}`);
     } catch (caughtError) {
       const detail = caughtError instanceof Error ? caughtError.message : "";
       const message =
