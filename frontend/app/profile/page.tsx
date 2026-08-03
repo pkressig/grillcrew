@@ -42,6 +42,8 @@ export default function ProfilePage() {
         compensation_preference: String(
           data.get("compensation_preference"),
         ) as VolunteerProfile["compensation_preference"],
+        compensation_family_member_id:
+          String(data.get("compensation_family_member_id") ?? "") || null,
       });
       setProfile(updated);
       setMessage("Profil gespeichert.");
@@ -83,12 +85,21 @@ export default function ProfilePage() {
             <option value="PAYOUT">Bezahlt</option>
           </select>
         </label>
-        <div className="rounded border p-3">
-          <p className="font-medium">Zugeordnetes Kind</p>
-          <p className="text-sm text-muted-foreground">
-            {profile.compensation_family_member_name ?? "Noch kein Kind zugeordnet"}
-          </p>
-        </div>
+        <label className="flex flex-col gap-1 font-medium">
+          Zugeordnetes Kind
+          <select
+            className="min-h-11 rounded border px-3"
+            name="compensation_family_member_id"
+            defaultValue={profile.compensation_family_member_id ?? ""}
+          >
+            <option value="">Keine Zuordnung</option>
+            {profile.compensation_family_member_id ? (
+              <option value={profile.compensation_family_member_id}>
+                {profile.compensation_family_member_name ?? "Zugeordnetes Kind"}
+              </option>
+            ) : null}
+          </select>
+        </label>
         <SignupList title="Kommende Einsätze" entries={profile.upcoming_signups} />
         <SignupList title="Geleistete Einsätze" entries={profile.completed_signups} />
         {message ? <p role="status">{message}</p> : null}
