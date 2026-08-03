@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { CalendarDays, Clock3, MapPin, Users } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { useOrganization } from "@/components/organization-provider";
@@ -8,8 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth-provider";
 import {
-  createPublicSignup,
+  createAuthenticatedSignup,
   fetchPublicPlan,
   PublicSignupError,
   type PublicPlan,
@@ -32,10 +34,10 @@ const dateTileDayFormatter = new Intl.DateTimeFormat("de-CH", {
 });
 export function OrganizationLanding() {
   const organization = useOrganization();
+  const auth = useAuth();
   const [plan, setPlan] = useState<PublicPlan | null>(null);
   const [error, setError] = useState(false);
   const [selectedShift, setSelectedShift] = useState<string | null>(null);
-  const [formStartedAt, setFormStartedAt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [signupError, setSignupError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ message: string; managementUrl: string | null } | null>(
@@ -44,7 +46,6 @@ export function OrganizationLanding() {
 
   function openSignup(shiftId: string) {
     setSelectedShift(shiftId);
-    setFormStartedAt(new Date().toISOString());
     setSignupError(null);
     setSuccess(null);
   }
@@ -53,17 +54,8 @@ export function OrganizationLanding() {
     event.preventDefault();
     setSubmitting(true);
     setSignupError(null);
-    const data = new FormData(event.currentTarget);
     try {
-      const result = await createPublicSignup(organization.slug, shiftId, {
-        first_name: String(data.get("first_name") ?? ""),
-        last_name: String(data.get("last_name") ?? ""),
-        phone: String(data.get("phone") ?? ""),
-        email: String(data.get("email") ?? ""),
-        public_display_consent: data.get("public_display_consent") === "on",
-        website: String(data.get("website") ?? ""),
-        form_started_at: formStartedAt,
-      });
+      const result = await createAuthenticatedSignup(organization.slug, shiftId);
       if (result.signup) {
         setPlan((current) =>
           current
@@ -165,6 +157,33 @@ export function OrganizationLanding() {
             <p className="text-sm font-semibold text-muted-foreground">Öffentlicher Einsatzplan</p>
             <h1 className="text-xl font-bold sm:text-2xl">{organization.name}</h1>
           </div>
+          <nav className="ml-auto flex items-center gap-2" aria-label="Konto">
+            {auth.isAuthenticated ? (
+              <>
+                <Link
+                  className={cn(buttonVariants({ variant: "secondary" }), "min-h-11")}
+                  href="/profile"
+                >
+                  Mein Profil
+                </Link>
+              </>
+            ) : (
+              <>
+                <a
+                  className={cn(buttonVariants({ variant: "secondary" }), "min-h-11")}
+                  href={`/login?org=${encodeURIComponent(organization.slug)}`}
+                >
+                  Login
+                </a>
+                <a
+                  className={cn(buttonVariants(), "min-h-11")}
+                  href={`/register?org=${encodeURIComponent(organization.slug)}`}
+                >
+                  Registrieren
+                </a>
+              </>
+            )}
+          </nav>
         </div>
       </header>
 
@@ -319,7 +338,13 @@ export function OrganizationLanding() {
                             <Button
                               type="button"
                               disabled={shift.status !== "OPEN" || full}
-                              onClick={() => openSignup(shift.id)}
+                              onClick={() => {
+                                if (!auth.isAuthenticated) {
+                                  window.location.href = `/login?org=${encodeURIComponent(organization.slug)}&next=/${encodeURIComponent(organization.slug)}`;
+                                  return;
+                                }
+                                openSignup(shift.id);
+                              }}
                               aria-label={`Eintragen: ${event.title}, ${formatTime(shift.starts_at, organization.timezone)} bis ${formatTime(shift.ends_at, organization.timezone)} Uhr`}
                               aria-describedby={`shift-${shift.id}-capacity shift-${shift.id}-status`}
                               className="mt-4 w-full"
@@ -328,7 +353,9 @@ export function OrganizationLanding() {
                                 ? "Geschlossen"
                                 : full
                                   ? "Besetzt"
-                                  : "Einsatz anmelden"}
+                                  : auth.isAuthenticated
+                                    ? "Einsatz anmelden"
+                                    : "Anmelden und Einsatz wählen"}
                             </Button>
                             {selectedShift === shift.id ? (
                               <form

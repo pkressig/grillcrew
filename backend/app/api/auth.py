@@ -1,6 +1,7 @@
 """Authentication API endpoints."""
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
@@ -19,10 +20,13 @@ from app.core.security.origins import (
     build_allowed_origins,
     is_origin_allowed,
 )
-from app.core.security.password import PasswordPolicyError
+from app.core.security.password import PasswordPolicyError, hash_password, validate_password_policy
 from app.core.security.rate_limit import InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
+from app.models.family import Family, FamilyMember, FamilyMemberType
+from app.models.identity import User, UserStatus
 from app.models.organization import Organization
+from app.models.planning import SignupSource, Volunteer
 from app.schemas.auth import (
     AcceptInvitationRequest,
     AcceptInvitationResponse,
@@ -34,6 +38,9 @@ from app.schemas.auth import (
     LogoutResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
+    VolunteerProfileResponse,
+    VolunteerRegisterRequest,
+    VolunteerRegisterResponse,
 )
 from app.services.auth import (
     ACCESS_TOKEN_COOKIE_NAME,
@@ -49,6 +56,7 @@ from app.services.auth import (
     RefreshTokenValidation,
     build_session_response,
     dispatch_password_reset_email,
+    issue_session,
     normalize_email,
 )
 from app.services.invitation import (
@@ -56,9 +64,101 @@ from app.services.invitation import (
     InvitationService,
     hash_invitation_token,
 )
+from app.services.public_signup import normalize_phone
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 _rate_limiter = InMemoryRateLimiter()
+
+
+@router.post("/volunteer/register", response_model=VolunteerRegisterResponse, status_code=201)
+def register_volunteer(
+    payload: VolunteerRegisterRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> VolunteerRegisterResponse:
+    settings = get_settings()
+    _ensure_origin_and_host(request, db, settings)
+    try:
+        validate_password_policy(payload.password)
+    except PasswordPolicyError:
+        raise HTTPException(status_code=422, detail="password policy violation") from None
+    organization = db.scalar(
+        select(Organization).where(Organization.slug == payload.organization_slug)
+    )
+    if organization is None:
+        raise HTTPException(status_code=404, detail="organization not found")
+    email = normalize_email(payload.email)
+    if db.scalar(select(User.id).where(User.email_normalized == email)) is not None:
+        raise HTTPException(status_code=409, detail="email already registered")
+    phone = normalize_phone(payload.phone)
+    user = User(
+        email_normalized=email,
+        display_name=f"{payload.first_name.strip()} {payload.last_name.strip()}",
+        password_hash=hash_password(payload.password),
+        status=UserStatus.ACTIVE,
+    )
+    db.add(user)
+    db.flush()
+    volunteer = Volunteer(
+        organization_id=organization.id,
+        user_id=user.id,
+        first_name=payload.first_name.strip(),
+        last_name=payload.last_name.strip(),
+        phone_normalized=phone,
+        phone_display=payload.phone.strip(),
+        email_normalized=email,
+        email_display=payload.email.strip(),
+        created_from=SignupSource.PUBLIC_SIGNUP,
+        compensation_preference=payload.compensation_preference,
+    )
+    db.add(volunteer)
+    family = Family(organization_id=organization.id, display_name=payload.last_name.strip())
+    db.add(family)
+    db.flush()
+    db.add(
+        FamilyMember(
+            family_id=family.id,
+            member_type=FamilyMemberType.HELPER,
+            first_name=payload.first_name.strip(),
+            last_name=payload.last_name.strip(),
+            volunteer_id=volunteer.id,
+        )
+    )
+    if payload.child_first_name and payload.child_last_name:
+        child = FamilyMember(
+            family_id=family.id,
+            member_type=FamilyMemberType.CHILD,
+            first_name=payload.child_first_name.strip(),
+            last_name=payload.child_last_name.strip(),
+        )
+        db.add(child)
+        volunteer.compensation_family_member_id = child.id
+    now = datetime.now(UTC)
+    session = issue_session(db=db, user=user, settings=settings, now=now)
+    db.commit()
+    set_auth_cookies(response, session, settings)
+    return VolunteerRegisterResponse(session=build_session_response(user))
+
+
+@router.get("/volunteer/profile", response_model=VolunteerProfileResponse)
+def volunteer_profile(
+    current_user: CurrentUser = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> VolunteerProfileResponse:
+    volunteer = db.scalar(select(Volunteer).where(Volunteer.user_id == current_user.user.id))
+    if volunteer is None:
+        raise HTTPException(status_code=404, detail="volunteer profile not found")
+    return VolunteerProfileResponse(
+        first_name=volunteer.first_name,
+        last_name=volunteer.last_name,
+        phone=volunteer.phone_display,
+        email=volunteer.email_display,
+        compensation_preference=volunteer.compensation_preference,
+        compensation_family_member_id=str(volunteer.compensation_family_member_id)
+        if volunteer.compensation_family_member_id
+        else None,
+    )
 
 
 @router.post("/login", response_model=AuthSessionResponse)

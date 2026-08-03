@@ -277,6 +277,12 @@ class PublicSignupCreate(BaseModel):  # type: ignore[explicit-any]
     form_started_at: datetime
 
 
+class AuthenticatedSignupCreate(BaseModel):
+    """Empty payload for account-backed signup reservations."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PublicSignupSummary(BaseModel):  # type: ignore[explicit-any]
     public_name: str
     occupied_volunteers: int

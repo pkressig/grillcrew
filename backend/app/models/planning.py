@@ -86,6 +86,12 @@ class SignupSource(StrEnum):
     IMPORT = "IMPORT"
 
 
+class VolunteerCompensation(StrEnum):
+    WORK_HOURS = "WORK_HOURS"
+    VOLUNTARY = "VOLUNTARY"
+    PAYOUT = "PAYOUT"
+
+
 class ImportBatchStatus(StrEnum):
     STAGED = "STAGED"
     CONFIRMED = "CONFIRMED"
@@ -305,6 +311,9 @@ class Volunteer(Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("organization.id", ondelete="RESTRICT"), nullable=False
     )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True, unique=True
+    )
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     phone_normalized: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -321,6 +330,14 @@ class Volunteer(Base):
         Enum(SignupSource, name="signup_source"), nullable=False
     )
     internal_note: Mapped[str | None] = mapped_column(Text)
+    compensation_preference: Mapped[VolunteerCompensation] = mapped_column(
+        Enum(VolunteerCompensation, name="volunteer_compensation"),
+        nullable=False,
+        server_default=VolunteerCompensation.WORK_HOURS.value,
+    )
+    compensation_family_member_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("family_member.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

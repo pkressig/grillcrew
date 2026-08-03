@@ -6,13 +6,15 @@ from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.api.dependencies import CurrentUser, get_current_user, validate_csrf
 from app.core.config import get_settings
 from app.core.security.rate_limit import InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
 from app.models.organization import Organization
-from app.models.planning import ShiftStatus, Signup, SignupStatus
+from app.models.planning import ShiftStatus, Signup, SignupStatus, Volunteer
 from app.schemas.organization import (
     OrganizationContact,
     PublicOrganizationResponse,
@@ -20,6 +22,7 @@ from app.schemas.organization import (
     PublicTheme,
 )
 from app.schemas.planning import (
+    AuthenticatedSignupCreate,
     ManagedSignupResponse,
     PublicEventResponse,
     PublicPlanResponse,
@@ -221,6 +224,64 @@ def public_signup(
             required_volunteers=created.required,
         ),
         management_url=(f"/{organization.slug}/manage-signup/{created.management_token}"),
+    )
+
+
+@router.post(
+    "/{organization_slug}/shifts/{shift_id}/signups/account",
+    response_model=PublicSignupResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def authenticated_signup(
+    request: Request,
+    organization_slug: str,
+    shift_id: uuid.UUID,
+    _payload: AuthenticatedSignupCreate,
+    background_tasks: BackgroundTasks,
+    current_user: CurrentUser = Depends(get_current_user),  # noqa: B008
+    _csrf: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),  # noqa: B008
+) -> PublicSignupResponse:
+    organization = _resolve_path_organization(request, organization_slug, db)
+    volunteer = db.scalar(
+        select(Volunteer).where(
+            Volunteer.user_id == current_user.user.id, Volunteer.organization_id == organization.id
+        )
+    )
+    if volunteer is None:
+        raise HTTPException(status_code=403, detail="volunteer profile required")
+    try:
+        created = PublicSignupService(db, organization.id).create_for_volunteer(
+            shift_id, volunteer.id
+        )
+    except PublicSignupNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="shift not found") from exc
+    except PublicSignupConflictError as exc:
+        raise HTTPException(status_code=409, detail="shift unavailable") from exc
+    signup = created.signup
+    background_tasks.add_task(
+        dispatch_signup_confirmation_email,
+        get_settings(),
+        recipient=signup.volunteer.email_display,
+        signup_id=signup.id,
+        organization_name=organization.name,
+        organization_slug=organization.slug,
+        event_title=signup.shift.event.title,
+        event_type=signup.shift.event.event_type,
+        shift_starts_at=signup.shift.starts_at,
+        shift_ends_at=signup.shift.ends_at,
+        organization_timezone=organization.timezone,
+        volunteer_public_name=signup.public_name_snapshot,
+        management_token=created.management_token,
+    )
+    return PublicSignupResponse(
+        message="Du bist eingetragen.",
+        signup=PublicSignupSummary(
+            public_name=signup.public_name_snapshot,
+            occupied_volunteers=created.occupied,
+            required_volunteers=created.required,
+        ),
+        management_url=f"/{organization.slug}/manage-signup/{created.management_token}",
     )
 
 

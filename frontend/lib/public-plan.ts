@@ -1,4 +1,4 @@
-import { apiBaseUrl } from "@/lib/api";
+import { apiBaseUrl, csrfHeaders, ensureCsrfToken } from "@/lib/api";
 
 export type PublicShift = {
   id: string;
@@ -89,6 +89,7 @@ export async function createPublicSignup(
   shiftId: string,
   input: PublicSignupInput,
 ): Promise<PublicSignupResult> {
+  await ensureCsrfToken();
   const response = await fetch(
     `${apiBaseUrl}/api/public/${encodeURIComponent(org)}/shifts/${encodeURIComponent(shiftId)}/signups`,
     {
@@ -100,6 +101,18 @@ export async function createPublicSignup(
   if (!response.ok) {
     throw new PublicSignupError("signup failed", response.status);
   }
+  return (await response.json()) as PublicSignupResult;
+}
+
+export async function createAuthenticatedSignup(
+  org: string,
+  shiftId: string,
+): Promise<PublicSignupResult> {
+  const response = await fetch(
+    `${apiBaseUrl}/api/public/${encodeURIComponent(org)}/shifts/${encodeURIComponent(shiftId)}/signups/account`,
+    { method: "POST", credentials: "include", headers: csrfHeaders(), body: "{}" },
+  );
+  if (!response.ok) throw new PublicSignupError("signup failed", response.status);
   return (await response.json()) as PublicSignupResult;
 }
 

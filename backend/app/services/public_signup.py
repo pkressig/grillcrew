@@ -23,6 +23,7 @@ from app.models.planning import (
     SignupSource,
     SignupStatus,
     Volunteer,
+    VolunteerStatus,
 )
 from app.schemas.planning import PublicSignupCreate
 
@@ -139,6 +140,62 @@ class PublicSignupService:
             shift=shift,
             volunteer=volunteer,
             public_name_snapshot=f"{first_name} {last_name}",
+            status=SignupStatus.ACTIVE,
+            outcome=SignupOutcome.OPEN,
+            source=SignupSource.PUBLIC_SIGNUP,
+            management_token_hash=hash_management_token(management_token),
+        )
+        self.db.add(signup)
+        self.db.commit()
+        self.db.refresh(signup)
+        return CreatedPublicSignup(
+            signup, occupied + 1, shift.required_volunteers, management_token
+        )
+
+    def create_for_volunteer(
+        self, shift_id: uuid.UUID, volunteer_id: uuid.UUID
+    ) -> CreatedPublicSignup:
+        """Reserve a shift for an already authenticated volunteer account."""
+        shift = self.db.scalar(
+            select(Shift)
+            .join(Event)
+            .join(Season)
+            .join(ClubYear)
+            .where(
+                Shift.id == shift_id,
+                ClubYear.organization_id == self.organization_id,
+                Event.status == EventStatus.PUBLISHED,
+            )
+            .with_for_update(of=Shift)
+        )
+        volunteer = self.db.scalar(
+            select(Volunteer).where(
+                Volunteer.id == volunteer_id,
+                Volunteer.organization_id == self.organization_id,
+                Volunteer.status == VolunteerStatus.ACTIVE,
+            )
+        )
+        if shift is None or volunteer is None:
+            raise PublicSignupNotFoundError
+        if shift.status != ShiftStatus.OPEN:
+            raise PublicSignupConflictError("shift unavailable")
+        occupied = self._occupied(shift.id)
+        if occupied >= shift.required_volunteers:
+            raise PublicSignupConflictError("shift full")
+        duplicate = self.db.scalar(
+            select(Signup.id).where(
+                Signup.shift_id == shift.id,
+                Signup.volunteer_id == volunteer.id,
+                Signup.status == SignupStatus.ACTIVE,
+            )
+        )
+        if duplicate is not None:
+            raise PublicSignupConflictError("duplicate signup")
+        management_token = secrets.token_urlsafe(32)
+        signup = Signup(
+            shift=shift,
+            volunteer=volunteer,
+            public_name_snapshot=f"{volunteer.first_name} {volunteer.last_name}",
             status=SignupStatus.ACTIVE,
             outcome=SignupOutcome.OPEN,
             source=SignupSource.PUBLIC_SIGNUP,
