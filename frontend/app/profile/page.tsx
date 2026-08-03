@@ -83,11 +83,43 @@ export default function ProfilePage() {
             <option value="PAYOUT">Bezahlt</option>
           </select>
         </label>
+        <div className="rounded border p-3">
+          <p className="font-medium">Zugeordnetes Kind</p>
+          <p className="text-sm text-muted-foreground">
+            {profile.compensation_family_member_name ?? "Noch kein Kind zugeordnet"}
+          </p>
+        </div>
+        <SignupList title="Kommende Einsätze" entries={profile.upcoming_signups} />
+        <SignupList title="Geleistete Einsätze" entries={profile.completed_signups} />
         {message ? <p role="status">{message}</p> : null}
         <button className="min-h-11 rounded bg-primary px-4 text-primary-foreground">
           Speichern
         </button>
       </form>
     </AuthCard>
+  );
+}
+
+function SignupList({
+  title,
+  entries,
+}: Readonly<{ title: string; entries: VolunteerProfile["upcoming_signups"] }>) {
+  return (
+    <section className="rounded border p-3" aria-label={title}>
+      <h2 className="font-medium">{title}</h2>
+      {entries.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">Keine Einträge.</p>
+      ) : (
+        <ul className="mt-2 space-y-2 text-sm">
+          {entries.map((entry) => (
+            <li key={entry.id} className="rounded bg-muted/40 p-2">
+              <p className="font-medium">{entry.event_title}</p>
+              <p>{entry.event_location} · {new Date(entry.shift_starts_at).toLocaleString("de-CH")}</p>
+              <p className="text-muted-foreground">Status: {entry.outcome}</p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

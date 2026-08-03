@@ -10,6 +10,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
+import { fetchVolunteerProfile, type VolunteerProfile } from "@/lib/volunteer-profile";
 import {
   createAuthenticatedSignup,
   fetchPublicPlan,
@@ -43,6 +44,7 @@ export function OrganizationLanding() {
   const [success, setSuccess] = useState<{ message: string; managementUrl: string | null } | null>(
     null,
   );
+  const [volunteerProfile, setVolunteerProfile] = useState<VolunteerProfile | null>(null);
 
   function openSignup(shiftId: string) {
     setSelectedShift(shiftId);
@@ -118,6 +120,16 @@ export function OrganizationLanding() {
       controller.abort();
     };
   }, [organization.slug]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated) {
+      setVolunteerProfile(null);
+      return;
+    }
+    void fetchVolunteerProfile()
+      .then(setVolunteerProfile)
+      .catch(() => setVolunteerProfile(null));
+  }, [auth.isAuthenticated]);
 
   const summary = useMemo(() => {
     const shifts = plan?.events.flatMap((event) => event.shifts) ?? [];
@@ -370,31 +382,32 @@ export function OrganizationLanding() {
                                     {formatTime(shift.ends_at, organization.timezone)} Uhr
                                   </h3>
                                   <p className="mt-0.5 text-xs text-muted-foreground">
-                                    Alle Angaben sind Pflichtfelder.
+                                    Bitte prüfe deine Angaben und bestätige die verbindliche
+                                    Anmeldung.
                                   </p>
                                 </div>
-                                <SignupField
-                                  id={`first_name-${shift.id}`}
-                                  name="first_name"
-                                  label="Vorname"
-                                />
-                                <SignupField
-                                  id={`last_name-${shift.id}`}
-                                  name="last_name"
-                                  label="Nachname"
-                                />
-                                <SignupField
-                                  id={`phone-${shift.id}`}
-                                  name="phone"
-                                  label="Telefon"
-                                  type="tel"
-                                />
-                                <SignupField
-                                  id={`email-${shift.id}`}
-                                  name="email"
-                                  label="E-Mail"
-                                  type="email"
-                                />
+                                {volunteerProfile ? (
+                                  <div className="space-y-2 rounded-lg border bg-background p-3 text-sm">
+                                    <p className="font-semibold">Deine Anmeldedaten</p>
+                                    <p>
+                                      {volunteerProfile.first_name} {volunteerProfile.last_name}
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                      {volunteerProfile.phone} · {volunteerProfile.email}
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                      Vergütung:{" "}
+                                      {compensationLabel(volunteerProfile.compensation_preference)}
+                                    </p>
+                                    <Link className="underline" href="/profile">
+                                      Profil bearbeiten
+                                    </Link>
+                                  </div>
+                                ) : (
+                                  <p role="status" className="text-sm text-muted-foreground">
+                                    Profildaten werden geladen …
+                                  </p>
+                                )}
                                 <div hidden aria-hidden="true" style={{ display: "none" }}>
                                   <label htmlFor={`website-${shift.id}`}>Website</label>
                                   <input
@@ -412,9 +425,9 @@ export function OrganizationLanding() {
                                     required
                                   />
                                   <span>
-                                    Ich bin einverstanden, dass mein Vor- und Nachname im
-                                    öffentlichen Einsatzplan angezeigt wird. Telefonnummer und
-                                    E-Mail sehen nur berechtigte Verantwortliche.
+                                    Ich bestätige die verbindliche Anmeldung mit den oben
+                                    aufgeführten Profildaten. Telefonnummer und E-Mail sehen nur
+                                    berechtigte Verantwortliche.
                                   </span>
                                 </label>
                                 {signupError ? (
@@ -423,7 +436,11 @@ export function OrganizationLanding() {
                                   </p>
                                 ) : null}
                                 <div className="flex flex-col gap-2 sm:flex-row">
-                                  <Button type="submit" disabled={submitting} className="flex-1">
+                                  <Button
+                                    type="submit"
+                                    disabled={submitting || !volunteerProfile}
+                                    className="flex-1"
+                                  >
                                     {submitting ? "Wird eingetragen …" : "Verbindlich eintragen"}
                                   </Button>
                                   <Button
@@ -452,32 +469,17 @@ export function OrganizationLanding() {
   );
 }
 
-function SignupField({
-  id,
-  name,
-  label,
-  type = "text",
-}: Readonly<{ id?: string; name: string; label: string; type?: string }>) {
-  return (
-    <label htmlFor={id} className="block text-sm font-semibold">
-      {label}
-      <input
-        id={id}
-        className="mt-1 min-h-11 w-full rounded-lg border bg-background px-3 font-normal text-base"
-        name={name}
-        type={type}
-        required
-      />
-    </label>
-  );
-}
-
 function formatTime(value: string, timeZone: string) {
   return new Intl.DateTimeFormat("de-CH", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone,
   }).format(new Date(value));
+}
+function compensationLabel(value: VolunteerProfile["compensation_preference"]) {
+  if (value === "VOLUNTARY") return "Unentgeltlich";
+  if (value === "PAYOUT") return "Bezahlt";
+  return "Sollstunden";
 }
 function Summary({ value, label }: Readonly<{ value: number; label: string }>) {
   return (

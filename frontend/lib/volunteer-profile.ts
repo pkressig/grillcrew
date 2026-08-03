@@ -7,6 +7,20 @@ export type VolunteerProfile = {
   email: string;
   compensation_preference: "WORK_HOURS" | "VOLUNTARY" | "PAYOUT";
   compensation_family_member_id: string | null;
+  compensation_family_member_name: string | null;
+  upcoming_signups: VolunteerSignupSummary[];
+  completed_signups: VolunteerSignupSummary[];
+};
+
+export type VolunteerSignupSummary = {
+  id: string;
+  event_title: string;
+  event_date: string;
+  event_location: string;
+  shift_starts_at: string;
+  shift_ends_at: string;
+  signup_status: string;
+  outcome: string;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

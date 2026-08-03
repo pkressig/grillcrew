@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.identity import StaffRole, UserStatus
-from app.models.planning import VolunteerCompensation
+from app.models.planning import SignupOutcome, SignupStatus, VolunteerCompensation
 
 
 class LoginRequest(BaseModel):  # type: ignore[explicit-any]
@@ -37,6 +39,20 @@ class VolunteerProfileResponse(BaseModel):  # type: ignore[explicit-any]
     email: str
     compensation_preference: VolunteerCompensation
     compensation_family_member_id: str | None
+    compensation_family_member_name: str | None = None
+    upcoming_signups: list[VolunteerSignupSummary] = []
+    completed_signups: list[VolunteerSignupSummary] = []
+
+
+class VolunteerSignupSummary(BaseModel):  # type: ignore[explicit-any]
+    id: str
+    event_title: str
+    event_date: date
+    event_location: str
+    shift_starts_at: datetime
+    shift_ends_at: datetime
+    signup_status: SignupStatus
+    outcome: SignupOutcome
 
 
 class AuthUserResponse(BaseModel):  # type: ignore[explicit-any]

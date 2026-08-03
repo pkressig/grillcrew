@@ -1,6 +1,7 @@
 """Self-service volunteer profile endpoints."""
 
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -12,8 +13,15 @@ from app.api.dependencies import CurrentUser, get_current_user, validate_csrf
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.family import Family, FamilyMember, FamilyMemberType
-from app.models.planning import Volunteer, VolunteerCompensation
-from app.schemas.auth import VolunteerProfileResponse
+from app.models.planning import (
+    Event,
+    Shift,
+    Signup,
+    SignupOutcome,
+    Volunteer,
+    VolunteerCompensation,
+)
+from app.schemas.auth import VolunteerProfileResponse, VolunteerSignupSummary
 
 router = APIRouter(prefix="/api/volunteer", tags=["volunteer"])
 
@@ -39,6 +47,52 @@ def get_profile(
     db: Session = Depends(get_db),  # noqa: B008
 ) -> VolunteerProfileResponse:
     volunteer = _get_profile(current_user.user.id, db)
+    return _profile_response(volunteer, db)
+
+
+def _profile_response(volunteer: Volunteer, db: Session) -> VolunteerProfileResponse:
+    member_name: str | None = None
+    if volunteer.compensation_family_member_id is not None:
+        member = db.scalar(
+            select(FamilyMember)
+            .join(Family, Family.id == FamilyMember.family_id)
+            .where(
+                FamilyMember.id == volunteer.compensation_family_member_id,
+                FamilyMember.member_type == FamilyMemberType.CHILD,
+                FamilyMember.family_id == volunteer_family_id(volunteer, db),
+            )
+        )
+        if member is not None:
+            member_name = f"{member.first_name} {member.last_name}"
+
+    rows = db.execute(
+        select(Signup, Shift)
+        .join(Shift, Shift.id == Signup.shift_id)
+        .where(Signup.volunteer_id == volunteer.id)
+        .order_by(Shift.starts_at.asc())
+    ).all()
+    now = datetime.now(UTC)
+    upcoming: list[VolunteerSignupSummary] = []
+    completed: list[VolunteerSignupSummary] = []
+    for signup, shift in rows:
+        event = db.get(Event, shift.event_id)
+        if event is None:
+            continue
+        summary = VolunteerSignupSummary(
+            id=str(signup.id),
+            event_title=event.title,
+            event_date=event.date,
+            event_location=event.location,
+            shift_starts_at=shift.starts_at,
+            shift_ends_at=shift.ends_at,
+            signup_status=signup.status,
+            outcome=signup.outcome,
+        )
+        if shift.ends_at < now or signup.outcome != SignupOutcome.OPEN:
+            completed.append(summary)
+        else:
+            upcoming.append(summary)
+
     return VolunteerProfileResponse(
         first_name=volunteer.first_name,
         last_name=volunteer.last_name,
@@ -50,6 +104,9 @@ def get_profile(
             if volunteer.compensation_family_member_id
             else None
         ),
+        compensation_family_member_name=member_name,
+        upcoming_signups=upcoming,
+        completed_signups=completed,
     )
 
 
