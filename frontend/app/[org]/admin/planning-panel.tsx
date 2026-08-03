@@ -9,6 +9,7 @@ import {
   cancelSignup,
   createEvent,
   createShift,
+  deleteEvent,
   loadShiftCrewSuggestion,
   updateEventStatus,
   updateShiftStatus,
@@ -99,6 +100,30 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" }).format(
     new Date(`${value}T00:00:00`),
   );
+}
+
+function serviceBadge(shifts: Shift[], type: Shift["shift_type"]) {
+  const active = shifts.filter(
+    (shift) => shift.shift_type === type && shift.status !== "CANCELLED",
+  );
+  if (active.length === 0)
+    return {
+      label: type === "KIOSK" ? "Kiosk nicht vorgesehen" : "Grill nicht vorgesehen",
+      variant: "neutral" as const,
+    };
+  const required = active.reduce((sum, shift) => sum + shift.required_volunteers, 0);
+  const occupied = active.reduce((sum, shift) => sum + shift.occupied_volunteers, 0);
+  if (occupied >= required && required > 0)
+    return {
+      label: type === "KIOSK" ? "Kiosk besetzt" : "Grill besetzt",
+      variant: "success" as const,
+    };
+  if (occupied > 0)
+    return {
+      label: type === "KIOSK" ? "Kiosk unterbesetzt" : "Grill unterbesetzt",
+      variant: "error" as const,
+    };
+  return { label: type === "KIOSK" ? "Kiosk offen" : "Grill offen", variant: "warning" as const };
 }
 
 function eventDateTile(value: string) {
@@ -394,6 +419,11 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
       () => updateEventStatus(org, planningEvent.id, next),
       "Anlassstatus wurde aktualisiert.",
     );
+  }
+
+  function removeHistoricalEvent(planningEvent: PlanningEvent) {
+    if (!window.confirm(`Anlass "${planningEvent.title}" endgültig löschen?`)) return;
+    void run(() => deleteEvent(org, planningEvent.id), "Der Anlass wurde endgültig gelöscht.");
   }
 
   function changeShiftStatus(shift: Shift, eventTitle: string, next: ShiftStatus) {
@@ -1008,30 +1038,25 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                             : ""}{" "}
                                           · {planningEvent.location}
                                         </p>
-                                        <Badge
-                                          className="mt-2 mr-2"
-                                          variant={
-                                            planningEvent.source_import_id ? "warning" : "neutral"
-                                          }
-                                        >
-                                          {planningEvent.source_import_id
-                                            ? "Importiert"
-                                            : "Manuell"}
-                                        </Badge>
-                                        <Badge className="mt-2 mr-2" variant="warning">
-                                          {planningEvent.kiosk_requested === true
-                                            ? "Kiosk vorgeschlagen"
-                                            : planningEvent.kiosk_requested === false
-                                              ? "Kiosk nicht vorgesehen"
-                                              : "Kiosk offen"}
-                                        </Badge>
-                                        <Badge className="mt-2 mr-2" variant="warning">
-                                          {planningEvent.grill_requested === true
-                                            ? "Grill vorgeschlagen"
-                                            : planningEvent.grill_requested === false
-                                              ? "Grill nicht vorgesehen"
-                                              : "Grill offen"}
-                                        </Badge>
+                                        {(() => {
+                                          const kiosk = serviceBadge(eventShifts, "KIOSK");
+                                          const grill = serviceBadge(eventShifts, "GRILL");
+                                          return (
+                                            <>
+                                              <Badge className="mt-2 mr-2" variant={kiosk.variant}>
+                                                {kiosk.label}
+                                              </Badge>
+                                              <Badge className="mt-2 mr-2" variant={grill.variant}>
+                                                {grill.label}
+                                              </Badge>
+                                            </>
+                                          );
+                                        })()}
+                                        {!planningEvent.source_import_id ? (
+                                          <Badge className="mt-2 mr-2" variant="neutral">
+                                            Manuell
+                                          </Badge>
+                                        ) : null}
                                         <Badge className="mt-2" variant="neutral">
                                           {eventShifts.length}{" "}
                                           {eventShifts.length === 1 ? "Einsatz" : "Einsätze"} ·{" "}
@@ -1083,6 +1108,17 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                         </Button>
                                       ))}
                                     </div>
+                                  ) : null}
+                                  {planningEvent.status === "CANCELLED" ||
+                                  planningEvent.status === "COMPLETED" ? (
+                                    <Button
+                                      className="mt-3"
+                                      variant="destructive"
+                                      onClick={() => removeHistoricalEvent(planningEvent)}
+                                      disabled={busy}
+                                    >
+                                      Anlass löschen
+                                    </Button>
                                   ) : null}
                                   <div className="mt-4 grid gap-3">
                                     <h6 className="font-semibold">Einsätze</h6>
