@@ -17,7 +17,13 @@ import {
   updatePlanningProposal,
   type PlanningProposalWindow,
 } from "@/lib/proposals";
-import { loadShifts, type Shift } from "@/lib/planning";
+import {
+  cancelSignup,
+  loadShifts,
+  updateSignupAttendance,
+  type Shift,
+  type SignupOutcome,
+} from "@/lib/planning";
 
 type EditableWindow = PlanningProposalWindow & {
   grill_required: boolean;
@@ -202,12 +208,16 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
             <GrillWindowCard
               key={window.id}
               window={window}
+              org={org}
               timezone={timezone}
               saving={savingId === window.id}
               onSave={save}
               onConfirm={confirm}
               comparison={comparisonRows.find((row) => row.proposal_window?.id === window.id)}
               shifts={shiftsByWindow[window.id] ?? []}
+              onShiftsChanged={(updated) =>
+                setShiftsByWindow((current) => ({ ...current, [window.id]: updated }))
+              }
             />
           ))}
         </div>
@@ -217,6 +227,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
 }
 
 function GrillWindowCard({
+  org,
   window,
   timezone,
   saving,
@@ -224,7 +235,9 @@ function GrillWindowCard({
   onConfirm,
   comparison,
   shifts,
+  onShiftsChanged,
 }: Readonly<{
+  org: string;
   window: PlanningProposalWindow;
   timezone: string;
   saving: boolean;
@@ -232,6 +245,7 @@ function GrillWindowCard({
   onConfirm: (window: EditableWindow) => Promise<void>;
   comparison?: ExternalPlanComparisonRow;
   shifts: Shift[];
+  onShiftsChanged: (shifts: Shift[]) => void;
 }>) {
   const [grillRequired, setGrillRequired] = useState(window.grill_required);
   const [slots, setSlots] = useState(window.proposed_grill_slots);
@@ -364,9 +378,59 @@ function GrillWindowCard({
                   {shift.occupied_volunteers} von {shift.required_volunteers} Helfer angemeldet
                 </p>
                 {shift.signups.length ? (
-                  <p className="text-muted-foreground">
-                    {shift.signups.map((signup) => signup.public_name).join(", ")}
-                  </p>
+                  <ul className="mt-2 grid gap-2">
+                    {shift.signups.map((signup) => (
+                      <li key={signup.id} className="rounded border p-3">
+                        <p className="font-medium">
+                          {signup.first_name} {signup.last_name}
+                        </p>
+                        <p className="text-muted-foreground">
+                          {signup.phone} · {signup.email}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          <select
+                            className="min-h-11 rounded border bg-background px-2"
+                            value={signup.outcome}
+                            onChange={async (event) => {
+                              const updated = await updateSignupAttendance(
+                                org,
+                                signup.id,
+                                event.target.value as SignupOutcome,
+                              );
+                              onShiftsChanged(
+                                shifts.map((item) =>
+                                  item.id === shift.id
+                                    ? {
+                                        ...item,
+                                        signups: item.signups.map((entry) =>
+                                          entry.id === updated.id ? updated : entry,
+                                        ),
+                                      }
+                                    : item,
+                                ),
+                              );
+                            }}
+                          >
+                            <option value="OPEN">Noch offen</option>
+                            <option value="ATTENDED">Anwesend</option>
+                            <option value="EXCUSED_CANCELLED">Entschuldigt</option>
+                            <option value="NO_SHOW">Nicht erschienen</option>
+                          </select>
+                          <Button
+                            variant="destructive"
+                            onClick={async () => {
+                              const updated = await cancelSignup(org, signup.id);
+                              onShiftsChanged(
+                                shifts.map((item) => (item.id === shift.id ? updated : item)),
+                              );
+                            }}
+                          >
+                            Eintragung entfernen
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 ) : (
                   <p className="text-status-error">Noch keine Helfer angemeldet</p>
                 )}
