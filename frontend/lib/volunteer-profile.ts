@@ -11,7 +11,16 @@ export type VolunteerProfile = {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(apiBaseUrl + path, { credentials: "include", ...init });
-  if (!response.ok) throw new Error("Die Anfrage konnte nicht verarbeitet werden.");
+  if (!response.ok) {
+    let detail = "Die Anfrage konnte nicht verarbeitet werden.";
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (typeof payload.detail === "string" && payload.detail.trim()) detail = payload.detail;
+    } catch {
+      // Keep the safe fallback for non-JSON responses.
+    }
+    throw new Error(detail);
+  }
   return (await response.json()) as T;
 }
 

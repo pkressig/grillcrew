@@ -28,8 +28,18 @@ export function RegisterForm({ organization }: Readonly<{ organization: PublicOr
         child_last_name: String(data.get("child_last_name") ?? "") || undefined,
       });
       router.replace(`/login?org=${encodeURIComponent(organization.slug)}&registered=1`);
-    } catch {
-      setError("Die Registrierung konnte nicht abgeschlossen werden. Bitte prüfe deine Angaben.");
+    } catch (caughtError) {
+      const detail = caughtError instanceof Error ? caughtError.message : "";
+      const message =
+        detail === "email already registered"
+          ? "Diese E-Mail-Adresse ist bereits registriert. Bitte melde dich an."
+          : detail === "password policy violation"
+            ? "Das Passwort muss mindestens 10 Zeichen lang sein."
+            : detail === "organization not found"
+              ? "Die Organisation wurde nicht gefunden."
+              : detail ||
+                "Die Registrierung konnte nicht abgeschlossen werden. Bitte prüfe deine Angaben.";
+      setError(message);
     } finally {
       setSaving(false);
     }
