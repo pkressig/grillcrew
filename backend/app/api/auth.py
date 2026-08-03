@@ -139,6 +139,7 @@ def register_volunteer(
             last_name=payload.child_last_name.strip(),
         )
         db.add(child)
+        db.flush()
         volunteer.compensation_family_member_id = child.id
     now = datetime.now(UTC)
     session = issue_session(db=db, user=user, settings=settings, now=now)

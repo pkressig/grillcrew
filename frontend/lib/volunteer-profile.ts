@@ -10,6 +10,7 @@ export type VolunteerProfile = {
   compensation_family_member_name: string | null;
   upcoming_signups: VolunteerSignupSummary[];
   completed_signups: VolunteerSignupSummary[];
+  family_children: { id: string; name: string }[];
 };
 
 export type VolunteerSignupSummary = {

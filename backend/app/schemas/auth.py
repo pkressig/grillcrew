@@ -42,6 +42,12 @@ class VolunteerProfileResponse(BaseModel):  # type: ignore[explicit-any]
     compensation_family_member_name: str | None = None
     upcoming_signups: list[VolunteerSignupSummary] = []
     completed_signups: list[VolunteerSignupSummary] = []
+    family_children: list[VolunteerFamilyChild] = []
+
+
+class VolunteerFamilyChild(BaseModel):  # type: ignore[explicit-any]
+    id: str
+    name: str
 
 
 class VolunteerSignupSummary(BaseModel):  # type: ignore[explicit-any]

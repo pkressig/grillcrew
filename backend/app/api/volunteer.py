@@ -21,7 +21,7 @@ from app.models.planning import (
     Volunteer,
     VolunteerCompensation,
 )
-from app.schemas.auth import VolunteerProfileResponse, VolunteerSignupSummary
+from app.schemas.auth import VolunteerFamilyChild, VolunteerProfileResponse, VolunteerSignupSummary
 
 router = APIRouter(prefix="/api/volunteer", tags=["volunteer"])
 
@@ -71,6 +71,14 @@ def _profile_response(volunteer: Volunteer, db: Session) -> VolunteerProfileResp
         .where(Signup.volunteer_id == volunteer.id)
         .order_by(Shift.starts_at.asc())
     ).all()
+    children = db.scalars(
+        select(FamilyMember)
+        .where(
+            FamilyMember.family_id == volunteer_family_id(volunteer, db),
+            FamilyMember.member_type == FamilyMemberType.CHILD,
+        )
+        .order_by(FamilyMember.last_name, FamilyMember.first_name)
+    )
     now = datetime.now(UTC)
     upcoming: list[VolunteerSignupSummary] = []
     completed: list[VolunteerSignupSummary] = []
@@ -107,6 +115,10 @@ def _profile_response(volunteer: Volunteer, db: Session) -> VolunteerProfileResp
         compensation_family_member_name=member_name,
         upcoming_signups=upcoming,
         completed_signups=completed,
+        family_children=[
+            VolunteerFamilyChild(id=str(child.id), name=f"{child.first_name} {child.last_name}")
+            for child in children
+        ],
     )
 
 

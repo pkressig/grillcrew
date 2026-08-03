@@ -93,11 +93,11 @@ export default function ProfilePage() {
             defaultValue={profile.compensation_family_member_id ?? ""}
           >
             <option value="">Keine Zuordnung</option>
-            {profile.compensation_family_member_id ? (
-              <option value={profile.compensation_family_member_id}>
-                {profile.compensation_family_member_name ?? "Zugeordnetes Kind"}
+            {profile.family_children.map((child) => (
+              <option key={child.id} value={child.id}>
+                {child.name}
               </option>
-            ) : null}
+            ))}
           </select>
         </label>
         <SignupList title="Kommende Einsätze" entries={profile.upcoming_signups} />
@@ -125,7 +125,9 @@ function SignupList({
           {entries.map((entry) => (
             <li key={entry.id} className="rounded bg-muted/40 p-2">
               <p className="font-medium">{entry.event_title}</p>
-              <p>{entry.event_location} · {new Date(entry.shift_starts_at).toLocaleString("de-CH")}</p>
+              <p>
+                {entry.event_location} · {new Date(entry.shift_starts_at).toLocaleString("de-CH")}
+              </p>
               <p className="text-muted-foreground">Status: {entry.outcome}</p>
             </li>
           ))}
