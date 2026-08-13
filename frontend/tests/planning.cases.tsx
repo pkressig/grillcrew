@@ -150,7 +150,7 @@ function planningFetch(
   includeEvents = false,
   includeShifts = includeEvents,
   returnedEvents = includeEvents ? [planningEvent] : [],
-  volunteers: typeof familyVolunteer[] = [],
+  volunteers: (typeof familyVolunteer)[] = [],
 ) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);

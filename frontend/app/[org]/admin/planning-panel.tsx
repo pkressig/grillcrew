@@ -846,8 +846,8 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                 role="alert"
                 className="mt-2 rounded-md border border-status-error p-3 text-sm text-status-error"
               >
-                Diese Aktion kann nicht rückgängig gemacht werden. Zugehörige Einsätze,
-                Anmeldungen und Arbeitsnachweise werden dauerhaft entfernt.
+                Diese Aktion kann nicht rückgängig gemacht werden. Zugehörige Einsätze, Anmeldungen
+                und Arbeitsnachweise werden dauerhaft entfernt.
               </p>
               {deleteEligibleEvents.length < selectedEventsForModal.length ? (
                 <p className="mt-1 text-sm text-muted-foreground">
