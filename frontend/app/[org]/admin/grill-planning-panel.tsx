@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { GameDayList } from "@/components/game-day-list";
 import {
   loadExternalPlanComparison,
   type ExternalPlanComparisonRow,
@@ -622,23 +623,15 @@ function GrillWindowCard({
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.65fr)]">
           <div>
-            <h3 className="font-semibold">Abgedeckte Spiele</h3>
-            <ul className="mt-2 grid gap-2">
-              {window.games.map((game) => (
-                <li
-                  className="rounded-md bg-muted p-3"
-                  key={`${game.kickoff_at}-${game.title}-${game.venue}`}
-                >
-                  <span className="font-medium">
-                    <time dateTime={game.kickoff_at}>{formatTime(game.kickoff_at, timezone)}</time>
-                    <span aria-hidden="true"> · </span>
-                    <span className="sr-only">: </span>
-                    <span>{game.title}</span>
-                  </span>
-                  <span className="mt-1 block text-sm text-muted-foreground">{game.venue}</span>
-                </li>
-              ))}
-            </ul>
+            <GameDayList
+              heading="Abgedeckte Spiele"
+              timezone={timezone}
+              games={window.games.map((game, index) => ({
+                id: `${game.kickoff_at}-${game.title}-${index}`,
+                title: game.title,
+                startsAt: game.kickoff_at || null,
+              }))}
+            />
           </div>
 
           <div className="rounded-md border p-4">

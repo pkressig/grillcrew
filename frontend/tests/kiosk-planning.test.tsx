@@ -31,8 +31,9 @@ const windowProposal = {
   venues: ["Sportplatz"],
   crew_rule_context: null,
   games: [
-    { title: "Junioren A – FC Beispiel", kickoff_at: "2026-09-12T09:00:00Z", venue: "Sportplatz" },
     { title: "Aktive – FC Muster", kickoff_at: "2026-09-12T12:00:00Z", venue: "Sportplatz" },
+    { title: "Junioren A – FC Beispiel", kickoff_at: "2026-09-12T09:00:00Z", venue: "Sportplatz" },
+    { title: "Frauen – FC Test", kickoff_at: "2026-09-12T10:30:00Z", venue: "Nebenplatz" },
   ],
 };
 
@@ -57,7 +58,19 @@ describe("Kiosk planning", () => {
     expect(within(section).getByText("Kiosk vorgeschlagen")).toBeInTheDocument();
     expect(within(section).getByText(/Entwurf aus dem Spielbetrieb/)).toBeInTheDocument();
     expect(within(section).getByText(/mehr als 240 Minuten/)).toBeInTheDocument();
-    expect(within(section).getAllByRole("listitem")).toHaveLength(2);
+    const games = within(section).getByRole("region", { name: "Abgedeckte Spiele" });
+    expect(within(games).getAllByRole("listitem")).toHaveLength(3);
+    expect(
+      within(games)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "11:00Junioren A – FC Beispiel",
+      "12:30Frauen – FC Test",
+      "14:00Aktive – FC Muster",
+    ]);
+    expect(within(section).queryByText("Sportplatz")).not.toBeInTheDocument();
+    expect(within(section).queryByText("Nebenplatz")).not.toBeInTheDocument();
     expect(screen.queryByText("window-1")).not.toBeInTheDocument();
   });
 

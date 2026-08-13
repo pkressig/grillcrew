@@ -45,6 +45,26 @@ const organization = {
 const plan = {
   events: [
     {
+      id: "e0",
+      title: "Frauen",
+      date: "2026-09-05",
+      location: "Platz C",
+      event_type: "Cup",
+      public_description: null,
+      shifts: [
+        {
+          id: "s0",
+          starts_at: "2026-09-05T07:00:00+02:00",
+          ends_at: "2026-09-05T08:00:00+02:00",
+          required_volunteers: 1,
+          occupied_volunteers: 0,
+          public_note: null,
+          status: "OPEN" as const,
+          volunteer_names: [],
+        },
+      ],
+    },
+    {
       id: "e1",
       title: "Junioren",
       date: "2026-09-05",
@@ -172,8 +192,16 @@ describe("mobile public plan", () => {
     fireEvent.click(firstDay);
     expect(screen.getByText("Junioren")).toBeInTheDocument();
     expect(screen.getByText("Aktive")).toBeInTheDocument();
-    expect(screen.getByText("Meisterschaft · 08:00–10:00 Uhr")).toBeInTheDocument();
-    expect(screen.getByText("Cup · 11:00–13:00 Uhr")).toBeInTheDocument();
+    const games = within(screen.getByRole("region", { name: "Spiele an diesem Tag" }));
+    expect(games.getAllByRole("listitem")).toHaveLength(3);
+    expect(games.getByText("07:00")).toBeInTheDocument();
+    expect(games.getByText("08:00")).toBeInTheDocument();
+    expect(games.getByText("11:00")).toBeInTheDocument();
+    expect(games.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "07:00FrauenCup",
+      "08:00JuniorenMeisterschaft",
+      "11:00AktiveCup",
+    ]);
     expect(screen.queryByText("Platz A")).not.toBeInTheDocument();
     fireEvent.click(secondDay);
     expect(firstDay).toHaveAttribute("aria-expanded", "false");
@@ -183,8 +211,8 @@ describe("mobile public plan", () => {
 
   it("shows calendar tiles on cards and no event or location rows in the compact list", async () => {
     renderPage();
-    expect(await screen.findAllByLabelText(/Kalender:/)).toHaveLength(3);
-    expect(screen.getAllByText("Samstag, 05. September 2026")).toHaveLength(2);
+    expect(await screen.findAllByLabelText(/Kalender:/)).toHaveLength(4);
+    expect(screen.getAllByText("Samstag, 05. September 2026")).toHaveLength(3);
     fireEvent.click(screen.getByRole("button", { name: "Kompakte Liste" }));
     expect(screen.getAllByLabelText(/Kalender:/)).toHaveLength(2);
     expect(screen.queryByText("Junioren")).not.toBeInTheDocument();

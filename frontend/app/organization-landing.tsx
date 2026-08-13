@@ -11,6 +11,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
 import { LogoutButton } from "@/components/logout-button";
+import { GameDayList } from "@/components/game-day-list";
 import { apiBaseUrl } from "@/lib/api";
 import { RegisterForm } from "./register/register-form";
 import {
@@ -486,27 +487,26 @@ function Day({
           />
         </button>
         {expanded ? (
-          <div id={`day-${day.date}`} className="divide-y border-t">
-            {day.events.map((event) => (
-              <section key={event.id} aria-labelledby={`event-${event.id}-title`}>
-                <div className="p-4 pb-3">
-                  <h3 id={`event-${event.id}-title`} className="font-bold">
-                    {event.title}
-                  </h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {event.event_type} · {eventTimeRange(event, shiftProps.organizationTimezone)}{" "}
-                    Uhr
-                  </p>
-                </div>
-                <div className="divide-y border-t">
-                  {[...event.shifts]
-                    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
-                    .map((shift) => (
-                      <Shift key={shift.id} event={event} shift={shift} compact {...shiftProps} />
-                    ))}
-                </div>
-              </section>
-            ))}
+          <div id={`day-${day.date}`} className="border-t">
+            <div className="p-4">
+              <GameDayList
+                timezone={shiftProps.organizationTimezone}
+                games={day.events.map((event) => ({
+                  id: event.id,
+                  title: event.title,
+                  type: event.event_type,
+                  startsAt: earliestShiftStart(event),
+                }))}
+              />
+            </div>
+            <div className="border-t">
+              <h3 className="px-4 pt-4 text-sm font-semibold text-muted-foreground">Schichten</h3>
+              <div className="divide-y">
+                {shifts.map(({ event, shift }) => (
+                  <Shift key={shift.id} event={event} shift={shift} compact {...shiftProps} />
+                ))}
+              </div>
+            </div>
           </div>
         ) : null}
       </section>
@@ -898,10 +898,10 @@ function formatTime(value: string, timeZone: string) {
     new Date(value),
   );
 }
-function eventTimeRange(event: PublicPlanEvent, timeZone: string) {
-  const shifts = [...event.shifts].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
-  if (shifts.length === 0) return "Keine Schichtzeit";
-  return `${formatTime(shifts[0]!.starts_at, timeZone)}–${formatTime(shifts.at(-1)!.ends_at, timeZone)}`;
+function earliestShiftStart(event: PublicPlanEvent): string | null {
+  return (
+    [...event.shifts].sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0]?.starts_at ?? null
+  );
 }
 function CalendarTile({ date }: Readonly<{ date: string }>) {
   const value = new Date(`${date}T00:00:00Z`);

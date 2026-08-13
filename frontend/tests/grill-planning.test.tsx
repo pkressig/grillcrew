@@ -48,8 +48,18 @@ const openWindow = {
   crew_rule_context: "Junioren (3 Personen)",
   games: [
     {
+      title: "Aktive – Gäste",
+      kickoff_at: "2026-08-08T14:00:00+02:00",
+      venue: "Sportplatz 2",
+    },
+    {
       title: "Junioren A – Gäste",
       kickoff_at: "2026-08-08T11:00:00+02:00",
+      venue: "Sportplatz",
+    },
+    {
+      title: "Frauen – Gäste",
+      kickoff_at: "2026-08-08T12:30:00+02:00",
       venue: "Sportplatz",
     },
   ],
@@ -71,6 +81,15 @@ describe("GrillPlanningPanel", () => {
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
     expect(screen.getByRole("status")).toHaveTextContent("werden geladen");
     expect(await screen.findByText("Junioren A – Gäste")).toBeInTheDocument();
+    const games = screen.getByRole("region", { name: "Abgedeckte Spiele" });
+    expect(games.querySelectorAll("li")).toHaveLength(3);
+    expect([...games.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
+      "11:00Junioren A – Gäste",
+      "12:30Frauen – Gäste",
+      "14:00Aktive – Gäste",
+    ]);
+    expect(screen.queryByText("Sportplatz")).not.toBeInTheDocument();
+    expect(screen.queryByText("Sportplatz 2")).not.toBeInTheDocument();
     expect(screen.getByText("Kiosk offen")).toBeInTheDocument();
     expect(screen.getByText("Vorschlag")).toBeInTheDocument();
     expect(screen.getByText("Crew-Regel: Junioren (3 Personen)")).toBeInTheDocument();

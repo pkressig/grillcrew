@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { ExternalPlanComparisonWorkspace } from "@/app/[org]/admin/external-plan-comparison";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { GameDayList } from "@/components/game-day-list";
 import {
   loadPlanningProposals,
   confirmPlanningProposal,
@@ -404,23 +405,15 @@ function KioskWindowCard({
           </div>
 
           <div>
-            <h3 className="font-semibold">Abgedeckte Spiele</h3>
-            <ul className="mt-2 grid gap-2" aria-label="Abgedeckte Spiele">
-              {window.games.map((game) => (
-                <li
-                  key={`${game.title}-${game.kickoff_at}`}
-                  className="rounded-sm bg-muted p-3 text-sm"
-                >
-                  <span className="font-medium">{game.title}</span>
-                  <span className="block text-muted-foreground">
-                    {dateTime(game.kickoff_at, timezone)} · {game.venue}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-sm text-muted-foreground">
-              Spielorte: {window.venues.join(", ")}
-            </p>
+            <GameDayList
+              heading="Abgedeckte Spiele"
+              timezone={timezone}
+              games={window.games.map((game, index) => ({
+                id: `${game.kickoff_at}-${game.title}-${index}`,
+                title: game.title,
+                startsAt: game.kickoff_at || null,
+              }))}
+            />
             {window.split_reason ? (
               <p className="mt-2 flex gap-2 text-sm text-muted-foreground">
                 <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
