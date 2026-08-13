@@ -786,7 +786,7 @@ function GrillWindowCard({
           >
             <p className="font-medium text-status-success">Grill geplant / bestätigt</p>
             {shifts
-              .filter((shift) => shift.status !== "CANCELLED")
+              .filter((shift) => shift.status !== "CANCELLED" && shift.shift_type === "GRILL")
               .map((shift) =>
                 editingShiftId === shift.id ? (
                   <ShiftEditRow

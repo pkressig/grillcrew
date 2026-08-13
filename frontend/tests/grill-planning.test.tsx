@@ -256,6 +256,58 @@ describe("GrillPlanningPanel", () => {
     expect(screen.queryByText("20:00–22:00 Uhr")).not.toBeInTheDocument();
   });
 
+  it("never shows a confirmed Kiosk shift in the Grill card's confirmed shift list", async () => {
+    // loadShifts returns every shift for the event regardless of kind, since
+    // a Kiosk and a Grill window can share the same underlying game/event —
+    // the card must filter down to its own shift_type, not just status.
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, grill_confirmed: true, covered_event_ids: ["event-1"] }],
+    });
+    loadShifts.mockResolvedValue([
+      {
+        id: "kiosk-shift",
+        event_id: "event-1",
+        starts_at: "2026-08-08T08:30:00Z",
+        ends_at: "2026-08-08T09:00:00Z",
+        required_volunteers: 1,
+        occupied_volunteers: 0,
+        open_places: 1,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "CLOSED",
+        sort_order: 0,
+        shift_type: "KIOSK",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+      {
+        id: "grill-shift",
+        event_id: "event-1",
+        starts_at: "2026-08-08T18:00:00Z",
+        ends_at: "2026-08-08T19:00:00Z",
+        required_volunteers: 1,
+        occupied_volunteers: 0,
+        open_places: 1,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "OPEN",
+        sort_order: 0,
+        shift_type: "GRILL",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Junioren A – Gäste");
+    expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
+    expect(screen.queryByText("10:30–11:00 Uhr")).not.toBeInTheDocument();
+  });
+
   it("lets an admin adjust a confirmed shift's time and headcount via Anpassen", async () => {
     loadPlanningProposals.mockResolvedValue({
       windows: [{ ...openWindow, grill_confirmed: true, covered_event_ids: ["event-1"] }],

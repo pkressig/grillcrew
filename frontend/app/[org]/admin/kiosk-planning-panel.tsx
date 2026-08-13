@@ -605,7 +605,7 @@ function KioskWindowCard({
           >
             <p className="font-medium text-status-success">Kiosk-Entwurf angelegt</p>
             {shifts
-              .filter((shift) => shift.status !== "CANCELLED")
+              .filter((shift) => shift.status !== "CANCELLED" && shift.shift_type === "KIOSK")
               .map((shift) =>
                 editingShiftId === shift.id ? (
                   <ShiftEditRow
