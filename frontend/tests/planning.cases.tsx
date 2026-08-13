@@ -331,7 +331,7 @@ describe("planning admin", () => {
       ...planningEvent,
       id: "event-early",
       title: "Früher Anlass",
-      date: "2026-08-01",
+      date: "2026-09-05",
     };
     const equalEvent = { ...planningEvent, id: "event-equal", title: "Gleicher Tag" };
     const base = planningFetch("ADMIN", false, [season], true, false, [
@@ -734,7 +734,7 @@ describe("planning admin", () => {
   it("renders clear event and shift empty states", async () => {
     renderAdmin("ADMIN");
     expect(
-      await screen.findByText("In dieser Saison sind noch keine Anlässe vorhanden."),
+      await screen.findByText("In dieser Saison sind noch keine bevorstehenden Anlässe vorhanden."),
     ).toBeInTheDocument();
 
     cleanup();
@@ -938,7 +938,7 @@ describe("planning admin", () => {
   it("creates an event with credentials and a CSRF header", async () => {
     document.cookie = "gc_csrf=event-token";
     const fetchMock = renderAdmin("ADMIN");
-    await screen.findByText("In dieser Saison sind noch keine Anlässe vorhanden.");
+    await screen.findByText("In dieser Saison sind noch keine bevorstehenden Anlässe vorhanden.");
     openEventForm();
     fireEvent.change(screen.getByLabelText("Anlass-Saison"), {
       target: { value: "season-1" },
@@ -1087,7 +1087,7 @@ describe("planning admin", () => {
       return baseFetch(input, init);
     });
     renderAdmin("ADMIN", fetchMock);
-    await screen.findByText("In dieser Saison sind noch keine Anlässe vorhanden.");
+    await screen.findByText("In dieser Saison sind noch keine bevorstehenden Anlässe vorhanden.");
     openEventForm();
     fireEvent.change(screen.getByLabelText("Anlass-Saison"), {
       target: { value: "season-1" },
@@ -1269,7 +1269,7 @@ describe("planning admin", () => {
 
   it("makes event creation discoverable with explicitly associated labels", async () => {
     renderAdmin("ADMIN");
-    await screen.findByText("In dieser Saison sind noch keine Anlässe vorhanden.");
+    await screen.findByText("In dieser Saison sind noch keine bevorstehenden Anlässe vorhanden.");
 
     const summary = screen.getByText("Anlass erstellen", { selector: "summary" });
     expect(summary).toBeInTheDocument();

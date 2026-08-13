@@ -10,7 +10,12 @@ from app.api.dependencies import CurrentStaffMembership, require_staff_role, val
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.identity import StaffRole
-from app.schemas.proposals import ProposalOverrideUpdate, ProposalResponse, ProposalWindowResponse
+from app.schemas.proposals import (
+    ProposalGrillSplitsUpdate,
+    ProposalOverrideUpdate,
+    ProposalResponse,
+    ProposalWindowResponse,
+)
 from app.services.proposals import ProposalNotFoundError, ProposalService, ProposalValidationError
 
 router = APIRouter(prefix="/api/admin/{organization_slug}/proposals", tags=["proposals"])
@@ -26,22 +31,28 @@ def _service(slug: str, current: CurrentStaffMembership, db: Session) -> Proposa
 @router.get("", response_model=ProposalResponse)
 def list_proposals(
     organization_slug: str,
+    include_past: bool = False,
     current: CurrentStaffMembership = Depends(manage),
     db: Session = Depends(get_db),
 ) -> ProposalResponse:
-    return ProposalResponse(windows=_service(organization_slug, current, db).list_windows())
+    return ProposalResponse(
+        windows=_service(organization_slug, current, db).list_windows(include_past)
+    )
 
 
 @router.post("/refresh", response_model=ProposalResponse)
 def refresh_proposals(
     organization_slug: str,
     request: Request,
+    include_past: bool = False,
     current: CurrentStaffMembership = Depends(manage),
     _: None = Depends(validate_csrf),
     db: Session = Depends(get_db),
 ) -> ProposalResponse:
     _ensure_origin_and_host(request, db, get_settings())
-    return ProposalResponse(windows=_service(organization_slug, current, db).list_windows())
+    return ProposalResponse(
+        windows=_service(organization_slug, current, db).list_windows(include_past)
+    )
 
 
 @router.patch("/{window_id}", response_model=ProposalWindowResponse)
@@ -57,6 +68,27 @@ def update_proposal(
     _ensure_origin_and_host(request, db, get_settings())
     try:
         return _service(organization_slug, current, db).update(window_id, payload, current.user.id)
+    except ProposalNotFoundError:
+        raise HTTPException(status_code=404, detail="proposal not found") from None
+    except ProposalValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+
+
+@router.put("/{window_id}/grill-shifts", response_model=ProposalWindowResponse)
+def update_grill_shift_splits(
+    organization_slug: str,
+    window_id: str,
+    payload: ProposalGrillSplitsUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> ProposalWindowResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        return _service(organization_slug, current, db).update_grill_shift_splits(
+            window_id, payload, current.user.id
+        )
     except ProposalNotFoundError:
         raise HTTPException(status_code=404, detail="proposal not found") from None
     except ProposalValidationError as error:

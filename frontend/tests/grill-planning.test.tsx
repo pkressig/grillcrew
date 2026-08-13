@@ -1,18 +1,26 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { loadPlanningProposals, updatePlanningProposal, confirmPlanningProposal } = vi.hoisted(
-  () => ({
-    loadPlanningProposals: vi.fn(),
-    updatePlanningProposal: vi.fn(),
-    confirmPlanningProposal: vi.fn(),
-  }),
-);
+const {
+  loadPlanningProposals,
+  refreshPlanningProposals,
+  updatePlanningProposal,
+  confirmPlanningProposal,
+  updateGrillShiftSplits,
+} = vi.hoisted(() => ({
+  loadPlanningProposals: vi.fn(),
+  refreshPlanningProposals: vi.fn(),
+  updatePlanningProposal: vi.fn(),
+  confirmPlanningProposal: vi.fn(),
+  updateGrillShiftSplits: vi.fn(),
+}));
 
 vi.mock("@/lib/proposals", () => ({
   loadPlanningProposals,
+  refreshPlanningProposals,
   updatePlanningProposal,
   confirmPlanningProposal,
+  updateGrillShiftSplits,
 }));
 
 import { GrillPlanningPanel } from "@/app/[org]/admin/grill-planning-panel";
@@ -45,6 +53,7 @@ describe("GrillPlanningPanel", () => {
       windows: [openWindow, { ...openWindow, id: "closed", kiosk_open: false }],
     });
     updatePlanningProposal.mockResolvedValue({ ...openWindow, override_state: "MANUAL" });
+    updateGrillShiftSplits.mockResolvedValue({ ...openWindow });
   });
 
   it("shows only open kiosk windows with games, rule context and proposal separation", async () => {
@@ -122,5 +131,60 @@ describe("GrillPlanningPanel", () => {
     expect(updateOrder).toBeDefined();
     expect(confirmOrder).toBeDefined();
     expect(updateOrder as number).toBeLessThan(confirmOrder as number);
+  });
+
+  it("saves a manual split into two timed shifts with their own headcounts", async () => {
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A – Gäste");
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Zeitfenster" }));
+    fireEvent.change(screen.getByLabelText("Von"), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText("Bis"), { target: { value: "14:00" } });
+    fireEvent.change(screen.getByLabelText("Helfer"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Aufteilung speichern" }));
+
+    // Europe/Zurich is UTC+2 in August (CEST): 10:00/14:00 local -> 08:00/12:00Z.
+    await waitFor(() =>
+      expect(updateGrillShiftSplits).toHaveBeenCalledWith("club", "window-1", [
+        {
+          starts_at: "2026-08-08T08:00:00.000Z",
+          ends_at: "2026-08-08T12:00:00.000Z",
+          required_volunteers: 1,
+        },
+      ]),
+    );
+  });
+
+  it("persists an unsaved shift split before confirming so it is never silently discarded", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    confirmPlanningProposal.mockResolvedValue({ ...openWindow, grill_confirmed: true });
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A – Gäste");
+
+    // Add a split but deliberately do NOT click "Aufteilung speichern" first.
+    fireEvent.click(screen.getByRole("button", { name: "+ Zeitfenster" }));
+    fireEvent.click(screen.getByRole("button", { name: "Grill-Vorschlag bestätigen" }));
+
+    await waitFor(() =>
+      expect(updateGrillShiftSplits).toHaveBeenCalledWith("club", "window-1", [
+        expect.objectContaining({ required_volunteers: 1 }),
+      ]),
+    );
+    await waitFor(() =>
+      expect(confirmPlanningProposal).toHaveBeenCalledWith("club", "window-1", { kind: "grill" }),
+    );
+    const [splitsOrder] = updateGrillShiftSplits.mock.invocationCallOrder;
+    const [confirmOrder] = confirmPlanningProposal.mock.invocationCallOrder;
+    expect(splitsOrder as number).toBeLessThan(confirmOrder as number);
+  });
+
+  it("switches to the past tab and requests past proposals separately", async () => {
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A – Gäste");
+    expect(loadPlanningProposals).toHaveBeenLastCalledWith("club", false);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Vergangene" }));
+
+    await waitFor(() => expect(loadPlanningProposals).toHaveBeenLastCalledWith("club", true));
   });
 });

@@ -9,7 +9,7 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.identity import AuditEvent
 from app.models.organization import CrewSizeRule, HomeVenue, Organization, OrganizationSettings
@@ -23,10 +23,12 @@ from app.models.planning import (
     ShiftStatus,
     ShiftType,
 )
-from app.models.proposal import ProposalOverride
+from app.models.proposal import ProposalOverride, ProposalShiftSplit
 from app.schemas.proposals import (
     ProposalGameResponse,
+    ProposalGrillSplitsUpdate,
     ProposalOverrideUpdate,
+    ProposalShiftSplitResponse,
     ProposalWindowResponse,
 )
 from app.services.imports import _matches_home_venue
@@ -116,13 +118,18 @@ def derive_proposal_windows(
     return result
 
 
+def exclude_past_windows(windows: list[ProposalWindow], today: date) -> list[ProposalWindow]:
+    """Drop windows dated before today; used by list_windows(include_past=False)."""
+    return [window for window in windows if window.date >= today]
+
+
 class ProposalService:
     def __init__(self, db: Session, organization_id: uuid.UUID, split_gap_minutes: int = 240):
         self.db = db
         self.organization_id = organization_id
         self.split_gap_minutes = split_gap_minutes
 
-    def list_windows(self) -> list[ProposalWindowResponse]:
+    def list_windows(self, include_past: bool = False) -> list[ProposalWindowResponse]:
         organization = self.db.get(Organization, self.organization_id)
         if organization is None:
             raise ProposalNotFoundError
@@ -172,12 +179,15 @@ class ProposalService:
             lead_minutes,
             trail_minutes,
         )
+        if not include_past:
+            today = datetime.now(ZoneInfo(organization.timezone)).date()
+            windows = exclude_past_windows(windows, today)
         overrides = {
             item.window_key: item
             for item in self.db.scalars(
-                select(ProposalOverride).where(
-                    ProposalOverride.organization_id == self.organization_id
-                )
+                select(ProposalOverride)
+                .options(selectinload(ProposalOverride.splits))
+                .where(ProposalOverride.organization_id == self.organization_id)
             )
         }
         rules = list(
@@ -195,7 +205,7 @@ class ProposalService:
     def update(
         self, window_id: str, payload: ProposalOverrideUpdate, actor_user_id: uuid.UUID
     ) -> ProposalWindowResponse:
-        windows = {window.id: window for window in self.list_windows()}
+        windows = {window.id: window for window in self.list_windows(include_past=True)}
         current = windows.get(window_id)
         if current is None:
             raise ProposalNotFoundError
@@ -241,7 +251,9 @@ class ProposalService:
             )
         )
         self.db.commit()
-        return next(window for window in self.list_windows() if window.id == window_id)
+        return next(
+            window for window in self.list_windows(include_past=True) if window.id == window_id
+        )
 
     def confirm(
         self, window_id: str, kind: str, actor_user_id: uuid.UUID
@@ -249,7 +261,7 @@ class ProposalService:
         """Confirm one derived window as a real, public signup-capable shift."""
         if kind not in {"kiosk", "grill"}:
             raise ProposalValidationError("unknown proposal type")
-        windows = {window.id: window for window in self.list_windows()}
+        windows = {window.id: window for window in self.list_windows(include_past=True)}
         current = windows.get(window_id)
         if current is None:
             raise ProposalNotFoundError
@@ -321,31 +333,43 @@ class ProposalService:
                 )
             )
             self.db.commit()
-            return next(window for window in self.list_windows() if window.id == window_id)
+            return next(
+                window for window in self.list_windows(include_past=True) if window.id == window_id
+            )
         event_id = current.covered_event_ids[0]
-        existing = self.db.scalar(
-            select(Shift)
-            .where(
-                Shift.event_id == event_id,
-                Shift.shift_type == shift_type,
-                Shift.starts_at == current.start_at,
-                Shift.ends_at == current.end_at,
-                Shift.status != ShiftStatus.CANCELLED,
-            )
-            .with_for_update()
+        # An admin who split this window into several timed sub-shifts (see
+        # update_grill_shift_splits) gets one real Shift per split instead of the
+        # single window-wide shift; each is deduped independently so re-confirming
+        # after adding one more split does not touch the already-materialised ones.
+        shift_specs = (
+            [(split.starts_at, split.ends_at, split.required_volunteers) for split in item.splits]
+            if item.splits
+            else [(current.start_at, current.end_at, required)]
         )
-        if existing is None:
-            self.db.add(
-                Shift(
-                    event_id=event_id,
-                    starts_at=current.start_at,
-                    ends_at=current.end_at,
-                    required_volunteers=required,
-                    status=ShiftStatus.OPEN,
-                    shift_type=shift_type,
-                    assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
+        for starts_at, ends_at, shift_required in shift_specs:
+            existing = self.db.scalar(
+                select(Shift)
+                .where(
+                    Shift.event_id == event_id,
+                    Shift.shift_type == shift_type,
+                    Shift.starts_at == starts_at,
+                    Shift.ends_at == ends_at,
+                    Shift.status != ShiftStatus.CANCELLED,
                 )
+                .with_for_update()
             )
+            if existing is None:
+                self.db.add(
+                    Shift(
+                        event_id=event_id,
+                        starts_at=starts_at,
+                        ends_at=ends_at,
+                        required_volunteers=shift_required,
+                        status=ShiftStatus.OPEN,
+                        shift_type=shift_type,
+                        assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
+                    )
+                )
         self.db.add(
             AuditEvent(
                 organization_id=self.organization_id,
@@ -353,11 +377,17 @@ class ProposalService:
                 action="PROPOSAL_CONFIRMED",
                 entity_type="proposal_override",
                 entity_id=item.id,
-                event_metadata={"window_key": window_id, "kind": kind},
+                event_metadata={
+                    "window_key": window_id,
+                    "kind": kind,
+                    "shift_count": len(shift_specs),
+                },
             )
         )
         self.db.commit()
-        return next(window for window in self.list_windows() if window.id == window_id)
+        return next(
+            window for window in self.list_windows(include_past=True) if window.id == window_id
+        )
 
     def _response(
         self, window: ProposalWindow, override: ProposalOverride | None, rules: list[CrewSizeRule]
@@ -418,4 +448,69 @@ class ProposalService:
             ],
             kiosk_confirmed=bool(override and override.kiosk_confirmed),
             grill_confirmed=bool(override and override.grill_confirmed),
+            grill_shift_splits=[
+                ProposalShiftSplitResponse.model_validate(split)
+                for split in (override.splits if override else [])
+            ],
+        )
+
+    def update_grill_shift_splits(
+        self,
+        window_id: str,
+        payload: ProposalGrillSplitsUpdate,
+        actor_user_id: uuid.UUID,
+    ) -> ProposalWindowResponse:
+        """Replace a window's admin-defined grill sub-shifts (full replace).
+
+        Splitting is scoped to the still-derived window date, mirroring update()'s
+        existing same-day guard, so a split cannot silently drift onto a different
+        calendar day than the proposal it belongs to.
+        """
+        windows = {window.id: window for window in self.list_windows(include_past=True)}
+        current = windows.get(window_id)
+        if current is None:
+            raise ProposalNotFoundError
+        for split in payload.shifts:
+            if split.starts_at.date() != current.date or split.ends_at.date() != current.date:
+                raise ProposalValidationError("split times must stay on the proposal date")
+        item = self.db.scalar(
+            select(ProposalOverride)
+            .options(selectinload(ProposalOverride.splits))
+            .where(
+                ProposalOverride.organization_id == self.organization_id,
+                ProposalOverride.window_key == window_id,
+            )
+            .with_for_update()
+        )
+        if item is None:
+            item = ProposalOverride(
+                organization_id=self.organization_id,
+                window_key=window_id,
+                proposal_date=current.date,
+            )
+            self.db.add(item)
+            self.db.flush()
+        item.splits.clear()
+        for index, split in enumerate(payload.shifts):
+            item.splits.append(
+                ProposalShiftSplit(
+                    starts_at=split.starts_at,
+                    ends_at=split.ends_at,
+                    required_volunteers=split.required_volunteers,
+                    sort_order=index,
+                )
+            )
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="PROPOSAL_GRILL_SPLITS_CHANGED",
+                entity_type="proposal_override",
+                entity_id=item.id,
+                event_metadata={"window_key": window_id, "split_count": len(payload.shifts)},
+            )
+        )
+        self.db.commit()
+        return next(
+            window for window in self.list_windows(include_past=True) if window.id == window_id
         )

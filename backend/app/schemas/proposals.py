@@ -11,6 +11,14 @@ class ProposalGameResponse(BaseModel):  # type: ignore[explicit-any]
     venue: str
 
 
+class ProposalShiftSplitResponse(BaseModel):  # type: ignore[explicit-any]
+    model_config = {"from_attributes": True}
+    id: uuid.UUID
+    starts_at: datetime
+    ends_at: datetime
+    required_volunteers: int
+
+
 class ProposalWindowResponse(BaseModel):  # type: ignore[explicit-any]
     id: str
     date: date
@@ -29,6 +37,7 @@ class ProposalWindowResponse(BaseModel):  # type: ignore[explicit-any]
     games: list[ProposalGameResponse]
     kiosk_confirmed: bool = False
     grill_confirmed: bool = False
+    grill_shift_splits: list[ProposalShiftSplitResponse] = []
 
 
 class ProposalResponse(BaseModel):  # type: ignore[explicit-any]
@@ -55,3 +64,23 @@ class ProposalOverrideUpdate(BaseModel):  # type: ignore[explicit-any]
         ):
             raise ValueError("starts_at must be before ends_at")
         return self
+
+
+class ProposalShiftSplitInput(BaseModel):  # type: ignore[explicit-any]
+    model_config = {"extra": "forbid"}
+    starts_at: datetime
+    ends_at: datetime
+    required_volunteers: int = Field(ge=1, le=20)
+
+    @model_validator(mode="after")
+    def validate_times(self) -> "ProposalShiftSplitInput":
+        if self.starts_at >= self.ends_at:
+            raise ValueError("starts_at must be before ends_at")
+        return self
+
+
+class ProposalGrillSplitsUpdate(BaseModel):  # type: ignore[explicit-any]
+    """Full replacement of a window's grill sub-shifts (empty list clears them)."""
+
+    model_config = {"extra": "forbid"}
+    shifts: list[ProposalShiftSplitInput] = Field(max_length=12)

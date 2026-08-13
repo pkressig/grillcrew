@@ -245,6 +245,7 @@ function KioskWindowCard({
 }
 
 export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; timezone: string }>) {
+  const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [windows, setWindows] = useState<ProposalWindow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -255,13 +256,13 @@ export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     setLoading(true);
     setError(null);
     try {
-      setWindows((await loadPlanningProposals(org)).windows);
+      setWindows((await loadPlanningProposals(org, tab === "past")).windows);
     } catch (caught) {
       setError(errorText(caught, "Die Kiosk-Vorschläge konnten nicht geladen werden."));
     } finally {
       setLoading(false);
     }
-  }, [org]);
+  }, [org, tab]);
 
   useEffect(() => {
     void load();
@@ -272,7 +273,7 @@ export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     setError(null);
     setSuccess(null);
     try {
-      const refreshed = await refreshPlanningProposals(org);
+      const refreshed = await refreshPlanningProposals(org, tab === "past");
       setWindows(refreshed.windows);
       setSuccess("Vorschläge aus dem Spielbetrieb wurden aktualisiert.");
     } catch (caught) {
@@ -282,7 +283,14 @@ export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     }
   }
 
-  const days = windows.reduce<Map<string, ProposalWindow[]>>((grouped, window) => {
+  // The "past" tab requests include_past=true (past AND upcoming), so it
+  // additionally filters down to past-only here; "upcoming" already gets a
+  // past-free list from the backend.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const visibleWindows = windows.filter((window) =>
+    tab === "past" ? window.date < todayStr : true,
+  );
+  const days = visibleWindows.reduce<Map<string, ProposalWindow[]>>((grouped, window) => {
     const current = grouped.get(window.date) ?? [];
     grouped.set(window.date, [...current, window]);
     return grouped;
@@ -304,6 +312,25 @@ export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
           </Button>
         }
       />
+
+      <div className="flex gap-2 border-b" role="tablist" aria-label="Zeitraum">
+        <Button
+          role="tab"
+          aria-selected={tab === "upcoming"}
+          variant={tab === "upcoming" ? "primary" : "ghost"}
+          onClick={() => setTab("upcoming")}
+        >
+          Aktuell
+        </Button>
+        <Button
+          role="tab"
+          aria-selected={tab === "past"}
+          variant={tab === "past" ? "primary" : "ghost"}
+          onClick={() => setTab("past")}
+        >
+          Vergangene
+        </Button>
+      </div>
 
       <ExternalPlanComparisonWorkspace org={org} timezone={timezone} />
 
@@ -327,13 +354,16 @@ export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
         <Card role="status" aria-live="polite">
           <CardBody>Kiosk-Vorschläge werden geladen …</CardBody>
         </Card>
-      ) : windows.length === 0 ? (
+      ) : visibleWindows.length === 0 ? (
         <Card role="status">
           <CardBody>
-            <h2 className="text-lg font-semibold">Keine Kiosk-Zeitfenster</h2>
+            <h2 className="text-lg font-semibold">
+              {tab === "past" ? "Keine vergangenen Kiosk-Zeitfenster" : "Keine Kiosk-Zeitfenster"}
+            </h2>
             <p className="mt-2 text-muted-foreground">
-              Für die konfigurierten Heimspielorte wurden keine Spiele gefunden. Es werden keine
-              Einsätze erfunden.
+              {tab === "past"
+                ? "Für vergangene Spiele an konfigurierten Heimspielorten gibt es keine Vorschläge."
+                : "Für die konfigurierten Heimspielorte wurden keine Spiele gefunden. Es werden keine Einsätze erfunden."}
             </p>
           </CardBody>
         </Card>

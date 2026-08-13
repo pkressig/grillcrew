@@ -8,6 +8,13 @@ export type ProposalGame = {
   venue: string;
 };
 
+export type ProposalGrillShiftSplit = {
+  id: string;
+  starts_at: string;
+  ends_at: string;
+  required_volunteers: number;
+};
+
 export type ProposalWindow = {
   id: string;
   date: string;
@@ -26,6 +33,7 @@ export type ProposalWindow = {
   games: ProposalGame[];
   kiosk_confirmed?: boolean;
   grill_confirmed?: boolean;
+  grill_shift_splits?: ProposalGrillShiftSplit[];
   /** Lifecycle fields are optional for backwards-compatible proposal responses. */
   status?: "DRAFT" | "CONFIRMED";
 };
@@ -74,16 +82,27 @@ function proposalPath(org: string): string {
   return `/api/admin/${encodeURIComponent(org)}/proposals`;
 }
 
-export function loadPlanningProposals(org: string): Promise<PlanningProposalResponse> {
-  return request<PlanningProposalResponse>(proposalPath(org));
+export function loadPlanningProposals(
+  org: string,
+  includePast = false,
+): Promise<PlanningProposalResponse> {
+  return request<PlanningProposalResponse>(
+    `${proposalPath(org)}${includePast ? "?include_past=true" : ""}`,
+  );
 }
 
-export async function refreshPlanningProposals(org: string): Promise<PlanningProposalResponse> {
+export async function refreshPlanningProposals(
+  org: string,
+  includePast = false,
+): Promise<PlanningProposalResponse> {
   await ensureCsrfToken();
-  return request<PlanningProposalResponse>(`${proposalPath(org)}/refresh`, {
-    method: "POST",
-    headers: csrfHeaders(),
-  });
+  return request<PlanningProposalResponse>(
+    `${proposalPath(org)}/refresh${includePast ? "?include_past=true" : ""}`,
+    {
+      method: "POST",
+      headers: csrfHeaders(),
+    },
+  );
 }
 
 export async function updatePlanningProposal(
@@ -96,6 +115,26 @@ export async function updatePlanningProposal(
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...csrfHeaders() },
     body: JSON.stringify(payload),
+  });
+}
+
+export type ProposalGrillShiftSplitInput = {
+  starts_at: string;
+  ends_at: string;
+  required_volunteers: number;
+};
+
+/** Full replacement of a window's admin-defined grill sub-shifts (empty clears them). */
+export async function updateGrillShiftSplits(
+  org: string,
+  id: string,
+  shifts: ProposalGrillShiftSplitInput[],
+): Promise<ProposalWindow> {
+  await ensureCsrfToken();
+  return request<ProposalWindow>(`${proposalPath(org)}/${encodeURIComponent(id)}/grill-shifts`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...csrfHeaders() },
+    body: JSON.stringify({ shifts }),
   });
 }
 

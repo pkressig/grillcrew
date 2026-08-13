@@ -225,6 +225,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [eventView, setEventView] = useState<"agenda" | "calendar">("agenda");
+  const [eventTab, setEventTab] = useState<"upcoming" | "past">("upcoming");
   const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -243,6 +244,10 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   const filteredEvents = useMemo(() => {
     const activeIds = new Set(activeSeasons.map((season) => season.id));
     const query = search.trim().toLocaleLowerCase("de-CH");
+    // Past events clutter the default view once a season has many imported
+    // games; they stay fully reachable via the separate "Vergangene Anlässe"
+    // tab instead of being mixed into the upcoming list.
+    const todayStr = new Date().toISOString().slice(0, 10);
     return events.filter((event) => {
       const haystack = [event.title, event.public_description, event.internal_note]
         .filter(Boolean)
@@ -250,6 +255,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
         .toLocaleLowerCase("de-CH");
       return (
         activeIds.has(event.season_id) &&
+        (eventTab === "past" ? event.date < todayStr : event.date >= todayStr) &&
         (!dateFrom || event.date >= dateFrom) &&
         (!dateTo || event.date <= dateTo) &&
         (!seasonFilter || event.season_id === seasonFilter) &&
@@ -263,6 +269,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     activeSeasons,
     dateFrom,
     dateTo,
+    eventTab,
     events,
     search,
     seasonFilter,
@@ -615,6 +622,26 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
               </Button>
             </div>
           </div>
+          <div className="flex gap-2 border-b" role="tablist" aria-label="Zeitraum">
+            <Button
+              type="button"
+              role="tab"
+              aria-selected={eventTab === "upcoming"}
+              variant={eventTab === "upcoming" ? "primary" : "ghost"}
+              onClick={() => setEventTab("upcoming")}
+            >
+              Kommende Anlässe
+            </Button>
+            <Button
+              type="button"
+              role="tab"
+              aria-selected={eventTab === "past"}
+              variant={eventTab === "past" ? "primary" : "ghost"}
+              onClick={() => setEventTab("past")}
+            >
+              Vergangene Anlässe
+            </Button>
+          </div>
           <section
             className="grid gap-3 rounded-lg border border-border/80 bg-background p-4"
             aria-labelledby="spielbetrieb-filter-title"
@@ -961,7 +988,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   </h4>
                   {seasonEvents.length === 0 ? (
                     <p className="text-muted-foreground">
-                      In dieser Saison sind noch keine Anlässe vorhanden.
+                      {eventTab === "past"
+                        ? "In dieser Saison gibt es keine vergangenen Anlässe."
+                        : "In dieser Saison sind noch keine bevorstehenden Anlässe vorhanden."}
                     </p>
                   ) : visibleSeasonEvents.length === 0 ? (
                     <p className="rounded-md border border-border/80 p-4 text-muted-foreground">

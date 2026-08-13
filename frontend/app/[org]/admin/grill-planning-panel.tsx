@@ -14,8 +14,10 @@ import {
   confirmPlanningProposal,
   loadPlanningProposals,
   refreshPlanningProposals,
+  updateGrillShiftSplits,
   updatePlanningProposal,
   type PlanningProposalWindow,
+  type ProposalGrillShiftSplitInput,
 } from "@/lib/proposals";
 import {
   cancelSignup,
@@ -28,9 +30,11 @@ import {
 type EditableWindow = PlanningProposalWindow & {
   grill_required: boolean;
   proposed_grill_slots: number;
+  grill_shift_splits_draft?: ProposalGrillShiftSplitInput[];
 };
 
 export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; timezone: string }>) {
+  const [tab, setTab] = useState<"upcoming" | "past">("upcoming");
   const [windows, setWindows] = useState<PlanningProposalWindow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +48,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     setLoading(true);
     setError(null);
     try {
-      const result = await loadPlanningProposals(org);
+      const result = await loadPlanningProposals(org, tab === "past");
       setWindows(result.windows);
       const loadedShifts = await Promise.all(
         result.windows.map(async (item) => {
@@ -73,7 +77,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     } finally {
       setLoading(false);
     }
-  }, [org]);
+  }, [org, tab]);
 
   useEffect(() => {
     void load();
@@ -83,7 +87,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     setRefreshing(true);
     setError(null);
     try {
-      const result = await refreshPlanningProposals(org);
+      const result = await refreshPlanningProposals(org, tab === "past");
       setWindows(result.windows);
       setSuccess("Grillvorschläge aus Spielbetrieb und Kiosk wurden aktualisiert.");
     } catch (caught) {
@@ -128,14 +132,17 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     setSavingId(window.id);
     setError(null);
     try {
-      // The confirm endpoint materialises the shift from the already-persisted
+      // The confirm endpoint materialises the shift(s) from the already-persisted
       // override, not from this request. Persist any unsaved "Grillplätze"/
-      // "Grillstatus" edits first so they are never silently discarded if the
-      // admin clicks "bestätigen" without first clicking "Anpassung speichern".
+      // "Grillstatus"/split edits first so they are never silently discarded if
+      // the admin clicks "bestätigen" without first clicking "speichern".
       await updatePlanningProposal(org, window.id, {
         grill_required: window.grill_required,
         proposed_grill_slots: window.grill_required ? window.proposed_grill_slots : 0,
       });
+      if (window.grill_shift_splits_draft) {
+        await updateGrillShiftSplits(org, window.id, window.grill_shift_splits_draft);
+      }
       const updated = await confirmPlanningProposal(org, window.id, { kind: "grill" });
       setWindows((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       if (updated.covered_event_ids?.[0]) {
@@ -160,9 +167,15 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
   // Grill proposals may only ever be offered for a window whose kiosk half has
   // actually been confirmed by an admin (D-041/D-042); an unconfirmed or
   // never-touched window must not be selectable here even though the backend
-  // also enforces this on confirm.
+  // also enforces this on confirm. The "past" tab requests include_past=true
+  // (past AND upcoming), so it additionally filters down to past-only here;
+  // the "upcoming" tab already gets a past-free list from the backend.
+  const todayStr = new Date().toISOString().slice(0, 10);
   const openWindows = windows.filter(
-    (window) => window.kiosk_open && window.kiosk_confirmed === true,
+    (window) =>
+      window.kiosk_open &&
+      window.kiosk_confirmed === true &&
+      (tab === "past" ? window.date < todayStr : true),
   );
 
   return (
@@ -177,6 +190,25 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
         }
         description="Grillvorschläge innerhalb geöffneter Kioskfenster – noch keine bestätigten Einsätze."
       />
+
+      <div className="flex gap-2 border-b" role="tablist" aria-label="Zeitraum">
+        <Button
+          role="tab"
+          aria-selected={tab === "upcoming"}
+          variant={tab === "upcoming" ? "primary" : "ghost"}
+          onClick={() => setTab("upcoming")}
+        >
+          Aktuell
+        </Button>
+        <Button
+          role="tab"
+          aria-selected={tab === "past"}
+          variant={tab === "past" ? "primary" : "ghost"}
+          onClick={() => setTab("past")}
+        >
+          Vergangene
+        </Button>
+      </div>
 
       {success ? (
         <p
@@ -204,10 +236,13 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
       ) : !error && openWindows.length === 0 ? (
         <Card role="status">
           <CardBody>
-            <h2 className="text-lg font-semibold">Keine offenen Kioskfenster</h2>
+            <h2 className="text-lg font-semibold">
+              {tab === "past" ? "Keine vergangenen Kioskfenster" : "Keine offenen Kioskfenster"}
+            </h2>
             <p className="mt-2 text-muted-foreground">
-              Für die Spiele an Heimplätzen ist derzeit kein Kiosk geöffnet. Deshalb gibt es keine
-              Grillvorschläge.
+              {tab === "past"
+                ? "Für vergangene Spiele an Heimplätzen gibt es keine Grillvorschläge."
+                : "Für die Spiele an Heimplätzen ist derzeit kein Kiosk geöffnet. Deshalb gibt es keine Grillvorschläge."}
             </p>
           </CardBody>
         </Card>
@@ -227,6 +262,11 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
               onShiftsChanged={(updated) =>
                 setShiftsByWindow((current) => ({ ...current, [window.id]: updated }))
               }
+              onWindowUpdated={(updated) =>
+                setWindows((current) =>
+                  current.map((item) => (item.id === updated.id ? updated : item)),
+                )
+              }
             />
           ))}
         </div>
@@ -234,6 +274,8 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     </section>
   );
 }
+
+type SplitDraft = { startTime: string; endTime: string; required: number };
 
 function GrillWindowCard({
   org,
@@ -245,6 +287,7 @@ function GrillWindowCard({
   comparison,
   shifts,
   onShiftsChanged,
+  onWindowUpdated,
 }: Readonly<{
   org: string;
   window: PlanningProposalWindow;
@@ -255,10 +298,21 @@ function GrillWindowCard({
   comparison?: ExternalPlanComparisonRow;
   shifts: Shift[];
   onShiftsChanged: (shifts: Shift[]) => void;
+  onWindowUpdated: (window: PlanningProposalWindow) => void;
 }>) {
   const [grillRequired, setGrillRequired] = useState(window.grill_required);
   const [slots, setSlots] = useState(window.proposed_grill_slots);
   const [confirmed, setConfirmed] = useState(window.grill_confirmed === true);
+  const [splits, setSplits] = useState<SplitDraft[]>(() =>
+    (window.grill_shift_splits ?? []).map((split) => ({
+      startTime: formatTime(split.starts_at, timezone),
+      endTime: formatTime(split.ends_at, timezone),
+      required: split.required_volunteers,
+    })),
+  );
+  const [splitsBusy, setSplitsBusy] = useState(false);
+  const [splitsError, setSplitsError] = useState<string | null>(null);
+  const [splitsSaved, setSplitsSaved] = useState(true);
   const confirming = saving;
   const headingId = `grill-window-${window.id}`;
 
@@ -266,7 +320,46 @@ function GrillWindowCard({
     setGrillRequired(window.grill_required);
     setSlots(window.proposed_grill_slots);
     setConfirmed(window.grill_confirmed === true);
-  }, [window]);
+    setSplits(
+      (window.grill_shift_splits ?? []).map((split) => ({
+        startTime: formatTime(split.starts_at, timezone),
+        endTime: formatTime(split.ends_at, timezone),
+        required: split.required_volunteers,
+      })),
+    );
+    setSplitsSaved(true);
+  }, [window, timezone]);
+
+  function splitsToPayload(): ProposalGrillShiftSplitInput[] {
+    return splits.map((split) => ({
+      starts_at: localTimeToIso(window.date, split.startTime, timezone),
+      ends_at: localTimeToIso(window.date, split.endTime, timezone),
+      required_volunteers: split.required,
+    }));
+  }
+
+  async function saveSplits() {
+    setSplitsBusy(true);
+    setSplitsError(null);
+    try {
+      const payload = splitsToPayload();
+      const orderingProblem = payload.find((split) => split.starts_at >= split.ends_at);
+      if (orderingProblem) {
+        throw new Error("Die Startzeit muss vor der Endzeit liegen.");
+      }
+      const updated = await updateGrillShiftSplits(org, window.id, payload);
+      onWindowUpdated(updated);
+      setSplitsSaved(true);
+    } catch (caught) {
+      setSplitsError(
+        caught instanceof Error
+          ? caught.message
+          : "Die Aufteilung konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setSplitsBusy(false);
+    }
+  }
 
   return (
     <Card>
@@ -355,6 +448,130 @@ function GrillWindowCard({
           </div>
         </div>
         {!confirmed ? (
+          <div className="grid gap-3 border-t pt-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">Schicht aufteilen (optional)</h3>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                disabled={!grillRequired}
+                onClick={() => {
+                  setSplits((current) => [
+                    ...current,
+                    {
+                      startTime: current.length
+                        ? current[current.length - 1]!.endTime
+                        : formatTime(window.start_at, timezone),
+                      endTime: formatTime(window.end_at, timezone),
+                      required: 1,
+                    },
+                  ]);
+                  setSplitsSaved(false);
+                }}
+              >
+                + Zeitfenster
+              </Button>
+            </div>
+            {splits.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Ohne Aufteilung wird eine einzelne Schicht über das ganze Zeitfenster{" "}
+                {formatTime(window.start_at, timezone)}–{formatTime(window.end_at, timezone)} Uhr
+                mit {slots} {slots === 1 ? "Grillplatz" : "Grillplätzen"} angelegt.
+              </p>
+            ) : (
+              <ul className="grid gap-2">
+                {splits.map((split, index) => (
+                  <li
+                    key={index}
+                    className="grid grid-cols-2 gap-2 rounded-md border p-3 sm:grid-cols-[6rem_6rem_6rem_auto]"
+                  >
+                    <label className="grid gap-1 text-sm">
+                      Von
+                      <input
+                        className="min-h-11 rounded-md border bg-background px-2"
+                        type="time"
+                        value={split.startTime}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setSplits((current) =>
+                            current.map((item, i) =>
+                              i === index ? { ...item, startTime: value } : item,
+                            ),
+                          );
+                          setSplitsSaved(false);
+                        }}
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm">
+                      Bis
+                      <input
+                        className="min-h-11 rounded-md border bg-background px-2"
+                        type="time"
+                        value={split.endTime}
+                        onChange={(event) => {
+                          const value = event.target.value;
+                          setSplits((current) =>
+                            current.map((item, i) =>
+                              i === index ? { ...item, endTime: value } : item,
+                            ),
+                          );
+                          setSplitsSaved(false);
+                        }}
+                      />
+                    </label>
+                    <label className="grid gap-1 text-sm">
+                      Helfer
+                      <input
+                        className="min-h-11 rounded-md border bg-background px-2"
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={split.required}
+                        onChange={(event) => {
+                          const value = Math.max(1, Number(event.target.value));
+                          setSplits((current) =>
+                            current.map((item, i) =>
+                              i === index ? { ...item, required: value } : item,
+                            ),
+                          );
+                          setSplitsSaved(false);
+                        }}
+                      />
+                    </label>
+                    <Button
+                      className="self-end"
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => {
+                        setSplits((current) => current.filter((_, i) => i !== index));
+                        setSplitsSaved(false);
+                      }}
+                    >
+                      Entfernen
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {splitsError ? (
+              <p className="text-sm text-status-error" role="alert">
+                {splitsError}
+              </p>
+            ) : null}
+            <Button
+              className="justify-self-start"
+              type="button"
+              variant="secondary"
+              disabled={splitsBusy || splitsSaved}
+              onClick={() => void saveSplits()}
+            >
+              {splitsBusy ? "Wird gespeichert …" : "Aufteilung speichern"}
+            </Button>
+          </div>
+        ) : null}
+        {!confirmed ? (
           <Button
             className="justify-self-start"
             disabled={saving || !grillRequired}
@@ -367,6 +584,7 @@ function GrillWindowCard({
                   ...window,
                   grill_required: grillRequired,
                   proposed_grill_slots: slots,
+                  ...(splits.length > 0 ? { grill_shift_splits_draft: splitsToPayload() } : {}),
                 });
               } finally {
                 // callback owns persistence state
@@ -383,6 +601,9 @@ function GrillWindowCard({
             <p className="font-medium text-status-success">Grill geplant / bestätigt</p>
             {shifts.map((shift) => (
               <div key={shift.id} className="text-sm">
+                <p className="font-medium">
+                  {formatTime(shift.starts_at, timezone)}–{formatTime(shift.ends_at, timezone)} Uhr
+                </p>
                 <p>
                   {shift.occupied_volunteers} von {shift.required_volunteers} Helfer angemeldet
                 </p>
@@ -511,4 +732,43 @@ function formatTime(value: string, timezone: string): string {
     hour12: false,
     timeZone: timezone,
   }).format(new Date(value));
+}
+
+/** Combine a "YYYY-MM-DD" proposal date with an "HH:MM" local time input into
+ * an ISO instant, resolving the offset for the given IANA timezone. Mirrors
+ * PlanningPanel's organizationDateTimeToIso (kept local to each panel like the
+ * other date/time helpers in this file). */
+function localTimeToIso(dateStr: string, timeStr: string, timezone: string): string {
+  const [year, month, day] = dateStr.split("-").map(Number);
+  const [hour, minute] = timeStr.split(":").map(Number);
+  const target = Date.UTC(year!, month! - 1, day!, hour!, minute!);
+  let instant = target;
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  for (let pass = 0; pass < 2; pass += 1) {
+    const parts = Object.fromEntries(
+      formatter
+        .formatToParts(new Date(instant))
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, Number(part.value)]),
+    );
+    const represented = Date.UTC(
+      parts.year!,
+      parts.month! - 1,
+      parts.day!,
+      parts.hour!,
+      parts.minute!,
+      parts.second!,
+    );
+    instant += target - represented;
+  }
+  return new Date(instant).toISOString();
 }

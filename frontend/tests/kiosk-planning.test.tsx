@@ -58,7 +58,7 @@ describe("Kiosk planning", () => {
       screen.getByRole("button", { name: /Vorschläge aus Spielbetrieb aktualisieren/ }),
     );
     await screen.findByText("Vorschläge aus dem Spielbetrieb wurden aktualisiert.");
-    expect(proposals.refreshPlanningProposals).toHaveBeenCalledWith("example");
+    expect(proposals.refreshPlanningProposals).toHaveBeenCalledWith("example", false);
     expect(screen.getByText("Kiosk vorgeschlagen")).toBeInTheDocument();
   });
 
@@ -129,6 +129,27 @@ describe("Kiosk planning", () => {
     expect(await screen.findByText("Kiosk-Entwurf angelegt")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Kiosk-Vorschlag bestätigen" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("switches to a separate past tab that requests and shows only past windows", async () => {
+    const pastWindow = { ...windowProposal, id: "window-past", date: "2020-01-04" };
+    vi.mocked(proposals.loadPlanningProposals).mockImplementation((_org, includePast) =>
+      Promise.resolve({ windows: includePast ? [windowProposal, pastWindow] : [windowProposal] }),
+    );
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    await screen.findByRole("heading", { level: 2, name: /12. September 2026/i });
+    expect(proposals.loadPlanningProposals).toHaveBeenLastCalledWith("example", false);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Vergangene" }));
+
+    await waitFor(() =>
+      expect(proposals.loadPlanningProposals).toHaveBeenLastCalledWith("example", true),
+    );
+    await screen.findByRole("heading", { level: 2, name: /4. Januar 2020/i });
+    expect(
+      screen.queryByRole("heading", { level: 2, name: /12. September 2026/i }),
     ).not.toBeInTheDocument();
   });
 });
