@@ -31,9 +31,24 @@ const windowProposal = {
   venues: ["Sportplatz"],
   crew_rule_context: null,
   games: [
-    { title: "Aktive – FC Muster", kickoff_at: "2026-09-12T12:00:00Z", venue: "Sportplatz" },
-    { title: "Junioren A – FC Beispiel", kickoff_at: "2026-09-12T09:00:00Z", venue: "Sportplatz" },
-    { title: "Frauen – FC Test", kickoff_at: "2026-09-12T10:30:00Z", venue: "Nebenplatz" },
+    {
+      title: "Aktive",
+      match_description: "FC Heim – FC Muster",
+      kickoff_at: "2026-09-12T12:00:00Z",
+      venue: "Sportplatz",
+    },
+    {
+      title: "Junioren A",
+      match_description: "FC Heim – FC Beispiel",
+      kickoff_at: "2026-09-12T09:00:00Z",
+      venue: "Sportplatz",
+    },
+    {
+      title: "Frauen",
+      match_description: "FC Heim – FC Test",
+      kickoff_at: "2026-09-12T10:30:00Z",
+      venue: "Nebenplatz",
+    },
   ],
 };
 
@@ -65,9 +80,9 @@ describe("Kiosk planning", () => {
         .getAllByRole("listitem")
         .map((item) => item.textContent),
     ).toEqual([
-      "11:00Junioren A – FC Beispiel",
-      "12:30Frauen – FC Test",
-      "14:00Aktive – FC Muster",
+      "11:00Junioren A – FC Heim – FC Beispiel",
+      "12:30Frauen – FC Heim – FC Test",
+      "14:00Aktive – FC Heim – FC Muster",
     ]);
     expect(within(section).queryByText("Sportplatz")).not.toBeInTheDocument();
     expect(within(section).queryByText("Nebenplatz")).not.toBeInTheDocument();
@@ -114,6 +129,9 @@ describe("Kiosk planning", () => {
     );
     expect(await screen.findByText(/Manuell angepasst/)).toBeInTheDocument();
     expect(screen.getByText("Kiosk nicht vorgesehen")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Abgedeckte Spiele" }).querySelectorAll("li"),
+    ).toHaveLength(3);
   });
 
   it("offers retry after a loading error", async () => {

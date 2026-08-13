@@ -54,6 +54,7 @@ class ProposalGame:
     # Duration is optional because legacy imported games only carry a kickoff.
     # A zero duration preserves the historical proposal behaviour.
     duration_minutes: int = 0
+    match_description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -162,12 +163,13 @@ class ProposalService:
         ).all()
         games = [
             ProposalGame(
-                event.id,
-                event.title,
-                event.date,
-                event.kickoff_time,
-                event.location,
-                event.duration_minutes or default_duration,
+                id=event.id,
+                title=event.title,
+                date=event.date,
+                kickoff_time=event.kickoff_time,
+                venue=event.location,
+                duration_minutes=event.duration_minutes or default_duration,
+                match_description=event.public_description,
             )
             for event in events
             if event.kickoff_time is not None
@@ -581,6 +583,7 @@ class ProposalService:
             games=[
                 ProposalGameResponse(
                     title=game.title,
+                    match_description=game.match_description,
                     kickoff_at=datetime.combine(game.date, game.kickoff_time, zone),
                     venue=game.venue,
                 )

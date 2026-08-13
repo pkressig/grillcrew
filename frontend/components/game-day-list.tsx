@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 export type GameDayListItem = {
   id: string;
   title: string;
+  matchDescription?: string | null;
   startsAt: string | null;
   type?: string | null;
 };
@@ -32,7 +33,10 @@ export function GameDayList({
                 <span className="text-muted-foreground">Zeit nicht angegeben</span>
               )}
             </span>
-            <span className="min-w-0 flex-1 font-medium">{game.title}</span>
+            <span className="min-w-0 flex-1 font-medium">
+              {game.title}
+              {game.matchDescription ? ` – ${game.matchDescription}` : null}
+            </span>
             {game.type ? <Badge variant="neutral">{game.type}</Badge> : null}
           </li>
         ))}

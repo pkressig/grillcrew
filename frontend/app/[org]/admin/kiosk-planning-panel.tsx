@@ -411,6 +411,7 @@ function KioskWindowCard({
               games={window.games.map((game, index) => ({
                 id: `${game.kickoff_at}-${game.title}-${index}`,
                 title: game.title,
+                matchDescription: game.match_description,
                 startsAt: game.kickoff_at || null,
               }))}
             />

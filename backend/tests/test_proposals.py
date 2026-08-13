@@ -756,6 +756,41 @@ def test_response_places_splits_under_their_matching_kind_list() -> None:
     assert [split.required_volunteers for split in response.grill_shift_splits] == [2]
 
 
+def test_response_includes_match_description_for_every_game() -> None:
+    games = tuple(
+        ProposalGame(
+            UUID(int=index),
+            title,
+            date(2026, 8, 2),
+            kickoff,
+            "Sportplatz",
+            match_description=description,
+        )
+        for index, title, description, kickoff in [
+            (1, "Junioren A", "FC Beispiel vs. FC Gast", time(9)),
+            (2, "Frauen", "FC Beispiel vs. FC Test", time(10, 30)),
+            (3, "Aktive", "FC Beispiel vs. FC Muster", time(12)),
+        ]
+    )
+    window = ProposalWindow(
+        id="window-games",
+        date=date(2026, 8, 2),
+        start_at=datetime(2026, 8, 2, 8, 30, tzinfo=ZoneInfo("UTC")),
+        end_at=datetime(2026, 8, 2, 13, 30, tzinfo=ZoneInfo("UTC")),
+        games=games,
+        split_reason=None,
+    )
+    service = ProposalService(cast(object, None), uuid4())  # type: ignore[arg-type]
+
+    response = service._response(window, None, [])
+
+    assert [(game.title, game.match_description) for game in response.games] == [
+        ("Junioren A", "FC Beispiel vs. FC Gast"),
+        ("Frauen", "FC Beispiel vs. FC Test"),
+        ("Aktive", "FC Beispiel vs. FC Muster"),
+    ]
+
+
 def test_grill_and_kiosk_splits_on_same_window_are_independent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

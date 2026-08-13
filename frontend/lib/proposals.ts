@@ -4,6 +4,7 @@ export type ProposalOverrideState = "PROPOSAL" | "MANUAL";
 
 export type ProposalGame = {
   title: string;
+  match_description: string | null;
   kickoff_at: string;
   venue: string;
 };

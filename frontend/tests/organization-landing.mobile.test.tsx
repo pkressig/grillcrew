@@ -50,7 +50,7 @@ const plan = {
       date: "2026-09-05",
       location: "Platz C",
       event_type: "Cup",
-      public_description: null,
+      public_description: "FC Beispiel – FC Alpha",
       shifts: [
         {
           id: "s0",
@@ -70,7 +70,7 @@ const plan = {
       date: "2026-09-05",
       location: "Platz A",
       event_type: "Meisterschaft",
-      public_description: "Erstes Spiel",
+      public_description: "FC Beispiel – FC Beta",
       shifts: [
         {
           id: "s1",
@@ -90,7 +90,7 @@ const plan = {
       date: "2026-09-05",
       location: "Platz B",
       event_type: "Cup",
-      public_description: null,
+      public_description: "FC Beispiel – FC Gamma",
       shifts: [
         {
           id: "s2",
@@ -180,7 +180,7 @@ describe("mobile public plan", () => {
     expect(dayButton).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(dayButton);
     expect(dayButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Junioren")).toBeInTheDocument();
+    expect(screen.getByText("Junioren – FC Beispiel – FC Beta")).toBeInTheDocument();
   });
 
   it("shows all games and their times in a single-open-day accordion", async () => {
@@ -190,23 +190,23 @@ describe("mobile public plan", () => {
     const firstDay = screen.getByRole("button", { name: /Samstag, 05. September 2026/ });
     const secondDay = screen.getByRole("button", { name: /Sonntag, 06. September 2026/ });
     fireEvent.click(firstDay);
-    expect(screen.getByText("Junioren")).toBeInTheDocument();
-    expect(screen.getByText("Aktive")).toBeInTheDocument();
+    expect(screen.getByText("Junioren – FC Beispiel – FC Beta")).toBeInTheDocument();
+    expect(screen.getByText("Aktive – FC Beispiel – FC Gamma")).toBeInTheDocument();
     const games = within(screen.getByRole("region", { name: "Spiele an diesem Tag" }));
     expect(games.getAllByRole("listitem")).toHaveLength(3);
     expect(games.getByText("07:00")).toBeInTheDocument();
     expect(games.getByText("08:00")).toBeInTheDocument();
     expect(games.getByText("11:00")).toBeInTheDocument();
     expect(games.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "07:00FrauenCup",
-      "08:00JuniorenMeisterschaft",
-      "11:00AktiveCup",
+      "07:00Frauen – FC Beispiel – FC AlphaCup",
+      "08:00Junioren – FC Beispiel – FC BetaMeisterschaft",
+      "11:00Aktive – FC Beispiel – FC GammaCup",
     ]);
     expect(screen.queryByText("Platz A")).not.toBeInTheDocument();
     fireEvent.click(secondDay);
     expect(firstDay).toHaveAttribute("aria-expanded", "false");
     expect(secondDay).toHaveAttribute("aria-expanded", "true");
-    expect(screen.queryByText("Junioren")).not.toBeInTheDocument();
+    expect(screen.queryByText("Junioren – FC Beispiel – FC Beta")).not.toBeInTheDocument();
   });
 
   it("shows calendar tiles on cards and no event or location rows in the compact list", async () => {

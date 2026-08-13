@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 class ProposalGameResponse(BaseModel):  # type: ignore[explicit-any]
     title: str
+    match_description: str | None = None
     kickoff_at: datetime
     venue: str
 

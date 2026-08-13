@@ -48,17 +48,20 @@ const openWindow = {
   crew_rule_context: "Junioren (3 Personen)",
   games: [
     {
-      title: "Aktive – Gäste",
+      title: "Aktive",
+      match_description: "FC Heim – Gäste",
       kickoff_at: "2026-08-08T14:00:00+02:00",
       venue: "Sportplatz 2",
     },
     {
-      title: "Junioren A – Gäste",
+      title: "Junioren A",
+      match_description: "FC Heim – Gäste A",
       kickoff_at: "2026-08-08T11:00:00+02:00",
       venue: "Sportplatz",
     },
     {
-      title: "Frauen – Gäste",
+      title: "Frauen",
+      match_description: "FC Heim – Gäste F",
       kickoff_at: "2026-08-08T12:30:00+02:00",
       venue: "Sportplatz",
     },
@@ -80,13 +83,13 @@ describe("GrillPlanningPanel", () => {
   it("shows only open kiosk windows with games, rule context and proposal separation", async () => {
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
     expect(screen.getByRole("status")).toHaveTextContent("werden geladen");
-    expect(await screen.findByText("Junioren A – Gäste")).toBeInTheDocument();
+    expect(await screen.findByText("Junioren A – FC Heim – Gäste A")).toBeInTheDocument();
     const games = screen.getByRole("region", { name: "Abgedeckte Spiele" });
     expect(games.querySelectorAll("li")).toHaveLength(3);
     expect([...games.querySelectorAll("li")].map((item) => item.textContent)).toEqual([
-      "11:00Junioren A – Gäste",
-      "12:30Frauen – Gäste",
-      "14:00Aktive – Gäste",
+      "11:00Junioren A – FC Heim – Gäste A",
+      "12:30Frauen – FC Heim – Gäste F",
+      "14:00Aktive – FC Heim – Gäste",
     ]);
     expect(screen.queryByText("Sportplatz")).not.toBeInTheDocument();
     expect(screen.queryByText("Sportplatz 2")).not.toBeInTheDocument();
@@ -101,7 +104,7 @@ describe("GrillPlanningPanel", () => {
 
   it("saves a manual grill override", async () => {
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
     fireEvent.change(screen.getByLabelText("Grillstatus"), { target: { value: "no" } });
     fireEvent.click(screen.getByRole("button", { name: "Anpassung speichern" }));
     await waitFor(() =>
@@ -111,6 +114,9 @@ describe("GrillPlanningPanel", () => {
       }),
     );
     expect(await screen.findByRole("status")).toHaveTextContent("gespeichert");
+    expect(
+      screen.getByRole("region", { name: "Abgedeckte Spiele" }).querySelectorAll("li"),
+    ).toHaveLength(3);
   });
 
   it("renders the honest empty state when no kiosk window is open", async () => {
@@ -124,7 +130,9 @@ describe("GrillPlanningPanel", () => {
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Netzwerkfehler");
     fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
-    expect((await screen.findAllByText("Junioren A – Gäste")).at(-1)).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText("Junioren A – FC Heim – Gäste A")).at(-1),
+    ).toBeInTheDocument();
   });
 
   it("never offers a grill proposal for a kiosk window that has not been confirmed", async () => {
@@ -133,14 +141,14 @@ describe("GrillPlanningPanel", () => {
     });
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
     expect(await screen.findByText("Keine offenen Kioskfenster")).toBeInTheDocument();
-    expect(screen.queryByText("Junioren A – Gäste")).not.toBeInTheDocument();
+    expect(screen.queryByText("Junioren A – FC Heim – Gäste A")).not.toBeInTheDocument();
   });
 
   it("persists an edited grill slot count before confirming so it is never silently discarded", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     confirmPlanningProposal.mockResolvedValue({ ...openWindow, grill_confirmed: true });
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
 
     // Edit the slot count but deliberately do NOT click "Anpassung speichern"
     // first — confirming directly must still use the freshly typed value.
@@ -165,7 +173,7 @@ describe("GrillPlanningPanel", () => {
 
   it("saves a manual split into two timed shifts with their own headcounts", async () => {
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
 
     fireEvent.click(screen.getByRole("button", { name: "+ Zeitfenster" }));
     fireEvent.change(screen.getByLabelText("Von"), { target: { value: "10:00" } });
@@ -189,7 +197,7 @@ describe("GrillPlanningPanel", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     confirmPlanningProposal.mockResolvedValue({ ...openWindow, grill_confirmed: true });
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
 
     // Add a split but deliberately do NOT click "Aufteilung speichern" first.
     fireEvent.click(screen.getByRole("button", { name: "+ Zeitfenster" }));
@@ -215,7 +223,7 @@ describe("GrillPlanningPanel", () => {
     });
     confirmPlanningProposal.mockResolvedValue({ ...openWindow, grill_confirmed: true });
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
 
     fireEvent.click(screen.getByRole("button", { name: "Schichten abgleichen" }));
 
@@ -273,7 +281,7 @@ describe("GrillPlanningPanel", () => {
     ]);
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
 
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
     expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
     expect(screen.queryByText("20:00–22:00 Uhr")).not.toBeInTheDocument();
   });
@@ -325,7 +333,7 @@ describe("GrillPlanningPanel", () => {
     ]);
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
 
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
     expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
     expect(screen.queryByText("10:30–11:00 Uhr")).not.toBeInTheDocument();
   });
@@ -374,7 +382,7 @@ describe("GrillPlanningPanel", () => {
     });
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
 
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
     expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Anpassen" }));
@@ -393,7 +401,7 @@ describe("GrillPlanningPanel", () => {
 
   it("switches to the past tab and requests past proposals separately", async () => {
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
     expect(loadPlanningProposals).toHaveBeenLastCalledWith("club", false);
 
     fireEvent.click(screen.getByRole("tab", { name: "Vergangene" }));
@@ -432,7 +440,7 @@ describe("GrillPlanningPanel", () => {
       covered_event_ids: ["event-1"],
     });
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
     expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Einsatz löschen" }));
@@ -484,7 +492,7 @@ describe("GrillPlanningPanel", () => {
     ]);
     deleteConfirmedWindow.mockResolvedValue({ ...openWindow, grill_confirmed: false });
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
-    await screen.findByText("Junioren A – Gäste");
+    await screen.findByText("Junioren A – FC Heim – Gäste A");
     expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Einsatz löschen" }));
