@@ -164,6 +164,40 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     }
   }
 
+  async function reconcile(window: PlanningProposalWindow) {
+    if (
+      !globalThis.window.confirm(
+        "Schichten mit der aktuell gespeicherten Aufteilung abgleichen? Nicht mehr passende " +
+          "Schichten ohne Anmeldungen werden storniert.",
+      )
+    )
+      return;
+    setSavingId(window.id);
+    setError(null);
+    try {
+      // Re-runs the same materialisation confirm() already performs — useful
+      // for a window that was confirmed before a later split change, whose
+      // now-orphaned shift was never cleaned up because confirming again is
+      // otherwise not offered once a window is already confirmed.
+      const updated = await confirmPlanningProposal(org, window.id, { kind: "grill" });
+      setWindows((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (updated.covered_event_ids?.[0]) {
+        const confirmedShifts = await loadShifts(org, updated.covered_event_ids[0]);
+        setShiftsByWindow((current) => ({
+          ...current,
+          [updated.id]: confirmedShifts,
+        }));
+      }
+      setSuccess(`Schichten für ${formatDate(updated.date)} wurden abgeglichen.`);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Die Schichten konnten nicht abgeglichen werden.",
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   // Grill proposals may only ever be offered for a window whose kiosk half has
   // actually been confirmed by an admin (D-041/D-042); an unconfirmed or
   // never-touched window must not be selectable here even though the backend
@@ -257,6 +291,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
               saving={savingId === window.id}
               onSave={save}
               onConfirm={confirm}
+              onReconcile={reconcile}
               comparison={comparisonRows.find((row) => row.proposal_window?.id === window.id)}
               shifts={shiftsByWindow[window.id] ?? []}
               onShiftsChanged={(updated) =>
@@ -321,6 +356,7 @@ function GrillWindowCard({
   saving,
   onSave,
   onConfirm,
+  onReconcile,
   comparison,
   shifts,
   onShiftsChanged,
@@ -332,6 +368,7 @@ function GrillWindowCard({
   saving: boolean;
   onSave: (window: EditableWindow) => Promise<void>;
   onConfirm: (window: EditableWindow) => Promise<void>;
+  onReconcile: (window: PlanningProposalWindow) => Promise<void>;
   comparison?: ExternalPlanComparisonRow;
   shifts: Shift[];
   onShiftsChanged: (shifts: Shift[]) => void;
@@ -716,6 +753,21 @@ function GrillWindowCard({
             ))}
             <p className="text-xs text-muted-foreground">
               Zuordnung, Bearbeitung und Entfernung erfolgen im Bereich Anwesenheit.
+            </p>
+            <Button
+              className="justify-self-start"
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={saving}
+              onClick={() => void onReconcile(window)}
+            >
+              Schichten abgleichen
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Storniert Schichten, die zu keiner aktuell gespeicherten Aufteilung mehr passen (z. B.
+              nach nachträglicher Änderung der Zeitfenster) — nur solange keine Helfer angemeldet
+              sind.
             </p>
           </div>
         )}

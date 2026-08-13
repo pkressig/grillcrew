@@ -315,6 +315,34 @@ function KioskWindowCard({
     }
   }
 
+  async function reconcile() {
+    if (
+      !globalThis.window.confirm(
+        "Schichten mit der aktuell gespeicherten Aufteilung abgleichen? Nicht mehr passende " +
+          "Schichten ohne Anmeldungen werden storniert.",
+      )
+    )
+      return;
+    setConfirming(true);
+    setError(null);
+    try {
+      // Re-runs the same materialisation confirm() already performs — useful
+      // for a window that was confirmed before a later split change, whose
+      // now-orphaned shift was never cleaned up because confirming again is
+      // otherwise not offered once a window is already confirmed.
+      const updated = await confirmPlanningProposal(org, window.id, { kind: "kiosk" });
+      onUpdated(updated);
+      if (updated.covered_event_ids?.[0]) {
+        const confirmedShifts = await loadShifts(org, updated.covered_event_ids[0]);
+        onShiftsChanged(confirmedShifts);
+      }
+    } catch (caught) {
+      setError(errorText(caught, "Die Schichten konnten nicht abgeglichen werden."));
+    } finally {
+      setConfirming(false);
+    }
+  }
+
   return (
     <Card>
       <CardBody className="grid gap-5">
@@ -614,6 +642,21 @@ function KioskWindowCard({
                 </div>
               ),
             )}
+            <Button
+              className="justify-self-start"
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={confirming}
+              onClick={() => void reconcile()}
+            >
+              Schichten abgleichen
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Storniert Schichten, die zu keiner aktuell gespeicherten Aufteilung mehr passen (z. B.
+              nach nachträglicher Änderung der Zeitfenster) — nur solange keine Helfer angemeldet
+              sind.
+            </p>
           </div>
         ) : null}
       </CardBody>

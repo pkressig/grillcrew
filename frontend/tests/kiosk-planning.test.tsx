@@ -285,4 +285,22 @@ describe("Kiosk planning", () => {
     );
     expect(await screen.findByText("1 von 3 Helfer angemeldet")).toBeInTheDocument();
   });
+
+  it("offers a reconcile action for an already-confirmed window that re-runs confirm", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirmedWindow = { ...windowProposal, kiosk_confirmed: true };
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [confirmedWindow] });
+    vi.mocked(proposals.confirmPlanningProposal).mockResolvedValue(confirmedWindow);
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Kiosk-Entwurf angelegt");
+    fireEvent.click(screen.getByRole("button", { name: "Schichten abgleichen" }));
+
+    await waitFor(() =>
+      expect(proposals.confirmPlanningProposal).toHaveBeenCalledWith("example", "window-1", {
+        kind: "kiosk",
+      }),
+    );
+    expect(proposals.updateKioskShiftSplits).not.toHaveBeenCalled();
+  });
 });

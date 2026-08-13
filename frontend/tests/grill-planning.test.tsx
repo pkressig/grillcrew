@@ -178,6 +178,27 @@ describe("GrillPlanningPanel", () => {
     expect(splitsOrder as number).toBeLessThan(confirmOrder as number);
   });
 
+  it("offers a reconcile action for an already-confirmed window that re-runs confirm", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, grill_confirmed: true }],
+    });
+    confirmPlanningProposal.mockResolvedValue({ ...openWindow, grill_confirmed: true });
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A – Gäste");
+
+    fireEvent.click(screen.getByRole("button", { name: "Schichten abgleichen" }));
+
+    await waitFor(() =>
+      expect(confirmPlanningProposal).toHaveBeenCalledWith("club", "window-1", { kind: "grill" }),
+    );
+    // Reconciling must never re-send grill_required/proposed_grill_slots or
+    // splits — it only re-runs the server-side shift materialisation against
+    // whatever is already saved.
+    expect(updatePlanningProposal).not.toHaveBeenCalled();
+    expect(updateGrillShiftSplits).not.toHaveBeenCalled();
+  });
+
   it("switches to the past tab and requests past proposals separately", async () => {
     render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
     await screen.findByText("Junioren A – Gäste");
