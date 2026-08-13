@@ -195,6 +195,7 @@ def test_member_api_returns_exact_private_fields(
         first_name="Mia",
         last_name="Andere",
         volunteer_id=None,
+        team_name=None,
         phone="must not leak",
         team="must not leak",
     )
@@ -225,13 +226,21 @@ def test_member_api_returns_exact_private_fields(
         )
     finally:
         app.dependency_overrides.clear()
-    expected = {"id", "family_id", "member_type", "first_name", "last_name", "volunteer_id"}
+    expected = {
+        "id",
+        "family_id",
+        "member_type",
+        "first_name",
+        "last_name",
+        "volunteer_id",
+        "team_name",
+    }
     assert listed.status_code == 200
     assert created.status_code == 201
     assert set(listed.json()[0]) == expected
     assert set(created.json()) == expected
     assert "phone" not in listed.text
-    assert "team" not in listed.text
+    assert '"team":' not in listed.text
 
 
 class _LinkDb:
@@ -262,7 +271,9 @@ class _LinkDb:
         pass
 
 
-def _helper(family_id: UUID, volunteer_id: UUID | None = None) -> FamilyMember:
+def _helper(
+    family_id: UUID, volunteer_id: UUID | None = None, team_name: str | None = None
+) -> FamilyMember:
     return cast(
         FamilyMember,
         SimpleNamespace(
@@ -272,6 +283,7 @@ def _helper(family_id: UUID, volunteer_id: UUID | None = None) -> FamilyMember:
             first_name="Snapshot",
             last_name="Name",
             volunteer_id=volunteer_id,
+            team_name=team_name,
         ),
     )
 
@@ -409,7 +421,7 @@ def test_children_route_lists_across_families_and_rejects_foreign_slug(
 ) -> None:
     current = _current()
     family = _family()
-    member = _helper(family.id)
+    member = _helper(family.id, team_name="U12")
     member.member_type = FamilyMemberType.CHILD
     member.first_name = "Mia"
     member.last_name = "Muster"
@@ -438,6 +450,7 @@ def test_children_route_lists_across_families_and_rejects_foreign_slug(
             "family_display_name": "Familie Muster",
             "first_name": "Mia",
             "last_name": "Muster",
+            "team_name": "U12",
         }
     ]
     assert foreign.status_code == 403
@@ -465,6 +478,8 @@ def _volunteer() -> Volunteer:
             last_name="Name",
             phone_normalized="+41791234567",
             phone_display="+41 79 123 45 67",
+            email_normalized="old@example.invalid",
+            email_display="old@example.invalid",
             compensation_preference=VolunteerCompensation.WORK_HOURS,
             compensation_family_member_id=None,
             internal_note=None,
@@ -487,6 +502,7 @@ def test_update_volunteer_applies_changes_and_audits() -> None:
             first_name="New",
             last_name="Name",
             phone="079 999 88 77",
+            email="new@example.invalid",
             compensation_preference=VolunteerCompensation.PAYOUT,
             compensation_family_member_id=child_id,
             internal_note="  Notiz  ",
@@ -497,6 +513,7 @@ def test_update_volunteer_applies_changes_and_audits() -> None:
 
     assert updated.first_name == "New"
     assert updated.phone_normalized == "0799998877"
+    assert updated.email_normalized == "new@example.invalid"
     assert updated.compensation_preference == VolunteerCompensation.PAYOUT
     assert updated.compensation_family_member_id == child_id
     assert updated.internal_note == "Notiz"
@@ -509,6 +526,7 @@ def test_update_volunteer_applies_changes_and_audits() -> None:
     assert set(cast(list[str], audit.event_metadata["changed_fields"])) == {
         "first_name",
         "phone",
+        "email",
         "compensation_preference",
         "compensation_family_member_id",
         "internal_note",
@@ -526,6 +544,7 @@ def test_update_volunteer_identical_payload_skips_commit_and_audit() -> None:
             first_name=volunteer.first_name,
             last_name=volunteer.last_name,
             phone=volunteer.phone_normalized,
+            email=volunteer.email_normalized,
             compensation_preference=volunteer.compensation_preference,
             compensation_family_member_id=None,
             internal_note=None,
@@ -545,6 +564,7 @@ def test_update_volunteer_rejects_missing_volunteer() -> None:
                 first_name="New",
                 last_name="Name",
                 phone="0799998877",
+                email="new@example.invalid",
                 compensation_preference=VolunteerCompensation.VOLUNTARY,
                 compensation_family_member_id=None,
                 internal_note=None,
@@ -565,6 +585,7 @@ def test_update_volunteer_rejects_invalid_child() -> None:
                 first_name="New",
                 last_name="Name",
                 phone="0799998877",
+                email="new@example.invalid",
                 compensation_preference=VolunteerCompensation.VOLUNTARY,
                 compensation_family_member_id=uuid4(),
                 internal_note=None,
@@ -587,6 +608,7 @@ def test_volunteer_update_route_requires_csrf_and_origin(
         "first_name": "New",
         "last_name": "Name",
         "phone": "0799998877",
+        "email": "new@example.invalid",
         "compensation_preference": "WORK_HOURS",
         "compensation_family_member_id": None,
         "internal_note": None,
@@ -631,6 +653,7 @@ def test_volunteer_update_route_returns_404_for_unknown_volunteer(
         "first_name": "New",
         "last_name": "Name",
         "phone": "0799998877",
+        "email": "new@example.invalid",
         "compensation_preference": "WORK_HOURS",
         "compensation_family_member_id": None,
         "internal_note": None,

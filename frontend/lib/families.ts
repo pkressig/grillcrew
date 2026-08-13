@@ -28,8 +28,14 @@ export type FamilyMember = {
   first_name: string;
   last_name: string;
   volunteer_id: string | null;
+  team_name: string | null;
 };
-export type FamilyMemberInput = Omit<FamilyMember, "id" | "family_id" | "volunteer_id">;
+export type FamilyMemberInput = {
+  member_type: FamilyMemberType;
+  first_name: string;
+  last_name: string;
+  team_name?: string | null;
+};
 export type VolunteerCompensation = "WORK_HOURS" | "VOLUNTARY" | "PAYOUT";
 export type VolunteerStatus = "ACTIVE" | "INACTIVE";
 export type FamilyVolunteer = {
@@ -47,10 +53,29 @@ export type FamilyVolunteerUpdate = {
   first_name: string;
   last_name: string;
   phone: string;
+  email: string;
   compensation_preference: VolunteerCompensation;
   compensation_family_member_id: string | null;
   internal_note: string | null;
   status: VolunteerStatus;
+};
+
+/** Direct admin creation, without first creating a family member. */
+export type VolunteerCreateInput = {
+  first_name: string;
+  last_name: string;
+  phone: string;
+  email: string;
+  compensation_preference: VolunteerCompensation;
+  compensation_family_member_id?: string | null;
+  internal_note?: string | null;
+  status?: VolunteerStatus;
+};
+
+/** Broader admin browse row: every org volunteer, plus account/family badges. */
+export type VolunteerDirectoryEntry = FamilyVolunteer & {
+  has_account: boolean;
+  family_display_name: string | null;
 };
 
 export type FamilyChild = {
@@ -59,20 +84,43 @@ export type FamilyChild = {
   family_display_name: string;
   first_name: string;
   last_name: string;
+  team_name: string | null;
+};
+
+/** One member row within a volunteer's reverse family lookup. */
+export type VolunteerFamilyMember = {
+  id: string;
+  member_type: FamilyMemberType;
+  first_name: string;
+  last_name: string;
+  team_name: string | null;
+  volunteer_id: string | null;
+  volunteer_first_name: string | null;
+  volunteer_last_name: string | null;
+};
+
+export type VolunteerFamily = {
+  family_id: string;
+  family_display_name: string;
+  family_internal_note: string | null;
+  members: VolunteerFamilyMember[];
 };
 
 async function request<T>(path: string, init?: RequestInit, errorMessage?: string): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, { credentials: "include", ...init });
   if (!response.ok) throw new Error(errorMessage ?? "Die Familien konnten nicht geladen werden.");
-  return (await response.json()) as T;
+  if (response.status === 204) return undefined as T;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
-export const loadFamilies = (org: string) =>
-  request<FamilyListItem[]>(`/api/admin/${encodeURIComponent(org)}/families`);
+const familiesPath = (org: string) => `/api/admin/${encodeURIComponent(org)}/families`;
+
+export const loadFamilies = (org: string) => request<FamilyListItem[]>(familiesPath(org));
 
 export const createFamily = (org: string, payload: FamilyInput) =>
   request<Family>(
-    `/api/admin/${encodeURIComponent(org)}/families`,
+    familiesPath(org),
     {
       method: "POST",
       headers: { "Content-Type": "application/json", ...csrfHeaders() },
@@ -82,7 +130,7 @@ export const createFamily = (org: string, payload: FamilyInput) =>
   );
 
 const memberPath = (org: string, familyId: string) =>
-  `/api/admin/${encodeURIComponent(org)}/families/${encodeURIComponent(familyId)}/members`;
+  `${familiesPath(org)}/${encodeURIComponent(familyId)}/members`;
 
 export const loadFamilyMembers = (org: string, familyId: string) =>
   request<FamilyMember[]>(
@@ -104,14 +152,32 @@ export const createFamilyMember = (org: string, familyId: string, payload: Famil
 
 export const loadFamilyVolunteers = (org: string) =>
   request<FamilyVolunteer[]>(
-    `/api/admin/${encodeURIComponent(org)}/families/volunteers`,
+    `${familiesPath(org)}/volunteers`,
     undefined,
     "Die Volunteers konnten nicht geladen werden.",
   );
 
+export const loadAllVolunteers = (org: string) =>
+  request<VolunteerDirectoryEntry[]>(
+    `${familiesPath(org)}/all-volunteers`,
+    undefined,
+    "Die Helfer konnten nicht geladen werden.",
+  );
+
+export const createVolunteer = (org: string, payload: VolunteerCreateInput) =>
+  request<FamilyVolunteer>(
+    `${familiesPath(org)}/volunteers`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+      body: JSON.stringify(payload),
+    },
+    "Der Helfer konnte nicht erstellt werden.",
+  );
+
 export const loadFamilyChildren = (org: string) =>
   request<FamilyChild[]>(
-    `/api/admin/${encodeURIComponent(org)}/families/children`,
+    `${familiesPath(org)}/children`,
     undefined,
     "Die Kinder konnten nicht geladen werden.",
   );
@@ -122,13 +188,41 @@ export const updateFamilyVolunteer = (
   payload: FamilyVolunteerUpdate,
 ) =>
   request<FamilyVolunteer>(
-    `/api/admin/${encodeURIComponent(org)}/families/volunteers/${encodeURIComponent(volunteerId)}`,
+    `${familiesPath(org)}/volunteers/${encodeURIComponent(volunteerId)}`,
     {
       method: "PATCH",
       headers: { "Content-Type": "application/json", ...csrfHeaders() },
       body: JSON.stringify(payload),
     },
     "Die Helferdaten konnten nicht gespeichert werden.",
+  );
+
+export const loadVolunteerFamily = (org: string, volunteerId: string) =>
+  request<VolunteerFamily | null>(
+    `${familiesPath(org)}/volunteers/${encodeURIComponent(volunteerId)}/family`,
+    undefined,
+    "Die Familie des Helfers konnte nicht geladen werden.",
+  );
+
+export const sendVolunteerPasswordReset = (org: string, volunteerId: string) =>
+  request<{ ok: boolean }>(
+    `${familiesPath(org)}/volunteers/${encodeURIComponent(volunteerId)}/send-password-reset`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+    },
+    "Der Reset-Link konnte nicht gesendet werden.",
+  );
+
+export const setVolunteerPassword = (org: string, volunteerId: string, newPassword: string) =>
+  request<{ ok: boolean }>(
+    `${familiesPath(org)}/volunteers/${encodeURIComponent(volunteerId)}/set-password`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+      body: JSON.stringify({ new_password: newPassword }),
+    },
+    "Das Passwort konnte nicht gesetzt werden.",
   );
 
 export const updateFamilyMemberVolunteer = (

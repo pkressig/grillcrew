@@ -10,6 +10,7 @@ vi.mock("@/lib/proposals", () => ({
   updatePlanningProposal: vi.fn(),
   confirmPlanningProposal: vi.fn(),
   updateKioskShiftSplits: vi.fn(),
+  deleteConfirmedWindow: vi.fn(),
 }));
 
 vi.mock("@/lib/planning", () => ({
@@ -409,5 +410,107 @@ describe("Kiosk planning", () => {
     await screen.findByText("Kiosk-Entwurf angelegt");
     expect(await screen.findByText("10:30–11:00 Uhr")).toBeInTheDocument();
     expect(screen.queryByText("20:00–21:00 Uhr")).not.toBeInTheDocument();
+  });
+
+  it("deletes a confirmed kiosk window, resetting the card back to the unconfirmed proposal form", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirmedWindow = {
+      ...windowProposal,
+      kiosk_confirmed: true,
+      covered_event_ids: ["event-1"],
+    };
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [confirmedWindow] });
+    vi.mocked(planningLib.loadShifts).mockResolvedValue([
+      {
+        id: "kiosk-shift",
+        event_id: "event-1",
+        starts_at: "2026-09-12T08:30:00Z",
+        ends_at: "2026-09-12T12:30:00Z",
+        required_volunteers: 2,
+        occupied_volunteers: 0,
+        open_places: 2,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "CLOSED",
+        sort_order: 0,
+        shift_type: "KIOSK",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    vi.mocked(proposals.deleteConfirmedWindow).mockResolvedValue({
+      ...windowProposal,
+      kiosk_confirmed: false,
+      covered_event_ids: ["event-1"],
+    });
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Kiosk-Entwurf angelegt");
+    fireEvent.click(screen.getByRole("button", { name: "Einsatz löschen" }));
+
+    await waitFor(() =>
+      expect(proposals.deleteConfirmedWindow).toHaveBeenCalledWith("example", "window-1", "kiosk"),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Kiosk-Vorschlag bestätigen" }),
+    ).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it("warns about existing signups before deleting a confirmed kiosk window", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirmedWindow = {
+      ...windowProposal,
+      kiosk_confirmed: true,
+      covered_event_ids: ["event-1"],
+    };
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [confirmedWindow] });
+    vi.mocked(planningLib.loadShifts).mockResolvedValue([
+      {
+        id: "kiosk-shift",
+        event_id: "event-1",
+        starts_at: "2026-09-12T08:30:00Z",
+        ends_at: "2026-09-12T12:30:00Z",
+        required_volunteers: 2,
+        occupied_volunteers: 1,
+        open_places: 1,
+        signups: [
+          {
+            id: "signup-1",
+            public_name: "Mia Muster",
+            first_name: "Mia",
+            last_name: "Muster",
+            phone: "+41 79 123 45 67",
+            email: "mia@example.test",
+            outcome: "OPEN",
+            created_at: "2026-07-21T10:00:00Z",
+          },
+        ],
+        public_note: null,
+        internal_note: null,
+        status: "CLOSED",
+        sort_order: 0,
+        shift_type: "KIOSK",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    vi.mocked(proposals.deleteConfirmedWindow).mockResolvedValue({
+      ...windowProposal,
+      kiosk_confirmed: false,
+    });
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Kiosk-Entwurf angelegt");
+    fireEvent.click(screen.getByRole("button", { name: "Einsatz löschen" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringContaining("1 bereits bestehenden Anmeldung"),
+    );
+    await waitFor(() => expect(proposals.deleteConfirmedWindow).toHaveBeenCalled());
+    confirmSpy.mockRestore();
   });
 });

@@ -30,7 +30,9 @@ from app.models.planning import (
     ShiftAssignmentMode,
     ShiftStatus,
     ShiftType,
+    Signup,
     SignupOutcome,
+    SignupSource,
     SignupStatus,
 )
 from app.schemas.planning import (
@@ -1020,6 +1022,158 @@ def test_wrong_tenant_or_missing_signup_attendance_returns_not_found() -> None:
         )
 
 
+def test_assign_volunteer_creates_active_admin_signup_and_returns_shift() -> None:
+    shift = SimpleNamespace(id=uuid4(), status=ShiftStatus.OPEN, required_volunteers=2)
+    volunteer = SimpleNamespace(id=uuid4(), first_name="Lea", last_name="Beispiel")
+    db = _AssignVolunteerDb(shift, volunteer, occupied=1, duplicate=None)
+
+    result = PlanningService(cast(object, db), uuid4()).assign_volunteer(  # type: ignore[arg-type]
+        shift.id, volunteer.id
+    )
+
+    assert result.id == shift.id
+    assert db.commits == 1
+    assert db.refreshes == 1
+    assert len(db.added) == 1
+    signup = db.added[0]
+    assert isinstance(signup, Signup)
+    assert signup.shift_id == shift.id
+    assert signup.volunteer_id == volunteer.id
+    assert signup.public_name_snapshot == "Lea Beispiel"
+    assert signup.status == SignupStatus.ACTIVE
+    assert signup.outcome == SignupOutcome.OPEN
+    assert signup.source == SignupSource.ADMIN
+
+
+def test_assign_volunteer_works_for_a_closed_shift_regardless_of_assignment_mode() -> None:
+    """Admin-assign bypasses public self-signup entirely: CLOSED shifts (used to lock the
+    public flow while staff allocate manually) and assignment_mode are irrelevant here."""
+    shift = SimpleNamespace(id=uuid4(), status=ShiftStatus.CLOSED, required_volunteers=1)
+    volunteer = SimpleNamespace(id=uuid4(), first_name="Lea", last_name="Beispiel")
+    db = _AssignVolunteerDb(shift, volunteer, occupied=0, duplicate=None)
+
+    result = PlanningService(cast(object, db), uuid4()).assign_volunteer(  # type: ignore[arg-type]
+        shift.id, volunteer.id
+    )
+
+    assert result.id == shift.id
+    assert db.commits == 1
+
+
+def test_assign_volunteer_rejects_cancelled_shift() -> None:
+    shift = SimpleNamespace(id=uuid4(), status=ShiftStatus.CANCELLED, required_volunteers=3)
+    db = _AssignVolunteerDb(shift, None, occupied=0, duplicate=None)
+
+    with pytest.raises(PlanningConflictError, match="abgesagte"):
+        PlanningService(cast(object, db), uuid4()).assign_volunteer(  # type: ignore[arg-type]
+            shift.id, uuid4()
+        )
+    assert db.commits == 0
+
+
+def test_assign_volunteer_rejects_full_shift() -> None:
+    shift = SimpleNamespace(id=uuid4(), status=ShiftStatus.OPEN, required_volunteers=2)
+    volunteer = SimpleNamespace(id=uuid4(), first_name="Lea", last_name="Beispiel")
+    db = _AssignVolunteerDb(shift, volunteer, occupied=2, duplicate=None)
+
+    with pytest.raises(PlanningConflictError, match="vollständig besetzt"):
+        PlanningService(cast(object, db), uuid4()).assign_volunteer(  # type: ignore[arg-type]
+            shift.id, volunteer.id
+        )
+    assert db.commits == 0
+
+
+def test_assign_volunteer_rejects_duplicate_signup() -> None:
+    shift = SimpleNamespace(id=uuid4(), status=ShiftStatus.OPEN, required_volunteers=3)
+    volunteer = SimpleNamespace(id=uuid4(), first_name="Lea", last_name="Beispiel")
+    db = _AssignVolunteerDb(shift, volunteer, occupied=1, duplicate=uuid4())
+
+    with pytest.raises(PlanningConflictError, match="bereits eingetragen"):
+        PlanningService(cast(object, db), uuid4()).assign_volunteer(  # type: ignore[arg-type]
+            shift.id, volunteer.id
+        )
+    assert db.commits == 0
+
+
+def test_assign_volunteer_rejects_missing_shift() -> None:
+    db = _AssignVolunteerDb(None, None, occupied=0, duplicate=None)
+
+    with pytest.raises(PlanningNotFoundError):
+        PlanningService(cast(object, db), uuid4()).assign_volunteer(  # type: ignore[arg-type]
+            uuid4(), uuid4()
+        )
+    assert db.commits == 0
+
+
+def test_assign_volunteer_is_tenant_isolated_for_a_volunteer_in_another_organization() -> None:
+    """The volunteer lookup is scoped by organization_id, so a volunteer id that belongs to
+    another tenant (or does not exist at all) is indistinguishable from "not found" here."""
+    shift = SimpleNamespace(id=uuid4(), status=ShiftStatus.OPEN, required_volunteers=3)
+    db = _AssignVolunteerDb(shift, None, occupied=0, duplicate=None)
+
+    with pytest.raises(PlanningNotFoundError):
+        PlanningService(cast(object, db), uuid4()).assign_volunteer(  # type: ignore[arg-type]
+            shift.id, uuid4()
+        )
+    assert db.commits == 0
+
+
+def test_assign_volunteer_route_calls_service_and_returns_admin_shift_response(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
+    current = cast(CurrentStaffMembership, SimpleNamespace(organization=organization))
+    now = datetime.now(UTC)
+    shift_id = uuid4()
+    volunteer_id = uuid4()
+    returned_shift = SimpleNamespace(
+        id=shift_id,
+        event_id=uuid4(),
+        starts_at=now,
+        ends_at=now + timedelta(hours=1),
+        required_volunteers=2,
+        public_note=None,
+        internal_note=None,
+        status=ShiftStatus.OPEN,
+        sort_order=0,
+        shift_type=ShiftType.GRILL,
+        assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
+        menu_type=None,
+        crew_suggestion_overridden=False,
+        created_at=now,
+        updated_at=now,
+        signups=[],
+    )
+    calls: list[tuple[object, object]] = []
+
+    class FakePlanningService:
+        def __init__(self, _db: object, _organization_id: object) -> None:
+            pass
+
+        def assign_volunteer(
+            self, received_shift_id: object, received_volunteer_id: object
+        ) -> object:
+            calls.append((received_shift_id, received_volunteer_id))
+            return returned_shift
+
+    app.dependency_overrides[planning.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: _ListDb()
+    monkeypatch.setattr(planning, "PlanningService", FakePlanningService)
+    monkeypatch.setattr(planning, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.post(
+            f"/api/admin/tenant-a/shifts/{shift_id}/assign",
+            json={"volunteer_id": str(volunteer_id)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert calls == [(shift_id, volunteer_id)]
+    assert response.json()["id"] == str(shift_id)
+
+
 def test_admin_shift_response_includes_only_active_contact_details_in_stable_order() -> None:
     now = datetime.now(UTC)
     volunteer = SimpleNamespace(
@@ -1209,6 +1363,40 @@ class _SignupDb:
 
     def scalar(self, _statement: object) -> object | None:
         return self.signup
+
+    def add(self, item: object) -> None:
+        self.added.append(item)
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def refresh(self, _item: object) -> None:
+        self.refreshes += 1
+
+
+class _AssignVolunteerDb:
+    """Fake session for PlanningService.assign_volunteer.
+
+    scalar() is called in a fixed order by the service: shift lookup, volunteer lookup,
+    occupied-count, duplicate-signup lookup. Each test supplies exactly those results; a
+    rejection raised partway through simply means the later values are never consumed.
+    """
+
+    def __init__(
+        self,
+        shift: object | None,
+        volunteer: object | None,
+        *,
+        occupied: int,
+        duplicate: object | None,
+    ) -> None:
+        self.results = iter([shift, volunteer, occupied, duplicate])
+        self.added: list[object] = []
+        self.commits = 0
+        self.refreshes = 0
+
+    def scalar(self, _statement: object) -> object:
+        return next(self.results)
 
     def add(self, item: object) -> None:
         self.added.append(item)

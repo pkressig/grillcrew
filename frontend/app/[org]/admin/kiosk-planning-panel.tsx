@@ -9,6 +9,7 @@ import { Card, CardBody } from "@/components/ui/card";
 import {
   loadPlanningProposals,
   confirmPlanningProposal,
+  deleteConfirmedWindow,
   refreshPlanningProposals,
   updateKioskShiftSplits,
   updatePlanningProposal,
@@ -343,6 +344,38 @@ function KioskWindowCard({
     }
   }
 
+  async function deleteConfirmed() {
+    const kioskShifts = shifts.filter(
+      (shift) => shift.status !== "CANCELLED" && shift.shift_type === "KIOSK",
+    );
+    const affectedSignups = kioskShifts.reduce((total, shift) => total + shift.signups.length, 0);
+    const warning =
+      affectedSignups > 0
+        ? `Diesen Kiosk-Einsatz vollständig löschen? Dabei werden alle zugehörigen Schichten storniert, ` +
+          `einschließlich ${affectedSignups} ${
+            affectedSignups === 1
+              ? "bereits bestehenden Anmeldung"
+              : "bereits bestehender Anmeldungen"
+          }.`
+        : "Diesen Kiosk-Einsatz vollständig löschen? Alle zugehörigen Schichten werden storniert.";
+    if (!globalThis.window.confirm(warning)) return;
+    setConfirming(true);
+    setError(null);
+    try {
+      const updated = await deleteConfirmedWindow(org, window.id, "kiosk");
+      setConfirmed(false);
+      onUpdated(updated);
+      if (updated.covered_event_ids?.[0]) {
+        const remainingShifts = await loadShifts(org, updated.covered_event_ids[0]);
+        onShiftsChanged(remainingShifts);
+      }
+    } catch (caught) {
+      setError(errorText(caught, "Der Kiosk-Einsatz konnte nicht gelöscht werden."));
+    } finally {
+      setConfirming(false);
+    }
+  }
+
   return (
     <Card>
       <CardBody className="grid gap-5">
@@ -659,6 +692,21 @@ function KioskWindowCard({
               Storniert Schichten, die zu keiner aktuell gespeicherten Aufteilung mehr passen (z. B.
               nach nachträglicher Änderung der Zeitfenster) — nur solange keine Helfer angemeldet
               sind.
+            </p>
+            <Button
+              className="justify-self-start"
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={confirming}
+              onClick={() => void deleteConfirmed()}
+            >
+              Einsatz löschen
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Löscht den gesamten bestätigten Kiosk-Einsatz: Alle zugehörigen Schichten werden
+              storniert (inklusive bestehender Anmeldungen) und das Fenster kehrt wieder in den
+              unbestätigten Vorschlagszustand zurück.
             </p>
           </div>
         ) : null}

@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from app.models.identity import AuditEvent
 from app.models.planning import Shift, ShiftStatus, ShiftType, Signup
 from app.models.proposal import ProposalOverride, ProposalShiftSplit
 from app.schemas.proposals import (
@@ -823,3 +824,201 @@ def test_grill_and_kiosk_splits_on_same_window_are_independent(
     assert len(grill_created) == 1
     assert grill_created[0].shift_type == ShiftType.GRILL
     assert grill_created[0].required_volunteers == 3
+
+
+def test_delete_confirmed_window_cancels_grill_shifts_and_resets_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=True,
+        grill_confirmed=True,
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=2,
+            shift_type=ShiftType.GRILL,
+            sort_order=0,
+        )
+    ]
+    grill_shift_a = Shift(
+        event_id=window.covered_event_ids[0],
+        starts_at=window.start_at,
+        ends_at=window.end_at,
+        required_volunteers=1,
+        status=ShiftStatus.OPEN,
+        shift_type=ShiftType.GRILL,
+    )
+    grill_shift_a.signups = [
+        Signup(shift_id=uuid4(), volunteer_id=uuid4(), public_name_snapshot="Helfer A")
+    ]
+    grill_shift_b = Shift(
+        event_id=window.covered_event_ids[0],
+        starts_at=window.start_at,
+        ends_at=window.end_at,
+        required_volunteers=1,
+        status=ShiftStatus.OPEN,
+        shift_type=ShiftType.GRILL,
+    )
+    # scalar() resolves the ProposalOverride row; scalars() resolves the
+    # "every non-cancelled shift of this event/kind" lookup that gets
+    # unconditionally cancelled (unlike _materialize_shifts's reconciliation).
+    db = _ConfirmDb([override], scalars_responses=[[grill_shift_a, grill_shift_b]])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    service.delete_confirmed_window("window-1", "grill", uuid4())
+
+    assert grill_shift_a.status == ShiftStatus.CANCELLED
+    assert grill_shift_b.status == ShiftStatus.CANCELLED
+    assert override.grill_confirmed is False
+    assert override.kiosk_confirmed is True
+    assert override.splits == []
+    audit = next(item for item in db.added if isinstance(item, AuditEvent))
+    assert audit.action == "PROPOSAL_CONFIRMATION_DELETED"
+    assert audit.event_metadata["cancelled_shift_count"] == 2
+    assert audit.event_metadata["affected_signup_count"] == 1
+    assert db.committed is True
+
+
+def test_delete_confirmed_window_rejects_an_unconfirmed_kind(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=False,
+        grill_confirmed=False,
+    )
+    db = _ConfirmDb([override])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    with pytest.raises(ProposalValidationError, match="nicht bestätigt"):
+        service.delete_confirmed_window("window-1", "grill", uuid4())
+
+    assert db.added == []
+    assert db.committed is False
+
+
+def test_delete_confirmed_window_blocks_kiosk_delete_while_grill_still_confirmed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D-041/D-042: grill may only be confirmed on top of an already-confirmed
+    kiosk, so deleting kiosk's confirmation while grill is still confirmed
+    would leave grill in an invalid state — blocked, not cascaded."""
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=True,
+        grill_confirmed=True,
+    )
+    db = _ConfirmDb([override])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    with pytest.raises(ProposalValidationError, match="Grill-Einsatz muss zuerst gelöscht"):
+        service.delete_confirmed_window("window-1", "kiosk", uuid4())
+
+    assert override.kiosk_confirmed is True
+    assert db.added == []
+    assert db.committed is False
+
+
+def test_delete_confirmed_window_grill_leaves_kiosk_confirmation_and_splits_untouched(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=True,
+        grill_confirmed=True,
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 9, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.KIOSK,
+            sort_order=0,
+        ),
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=2,
+            shift_type=ShiftType.GRILL,
+            sort_order=0,
+        ),
+    ]
+    grill_shift = Shift(
+        event_id=window.covered_event_ids[0],
+        starts_at=window.start_at,
+        ends_at=window.end_at,
+        required_volunteers=2,
+        status=ShiftStatus.OPEN,
+        shift_type=ShiftType.GRILL,
+    )
+    db = _ConfirmDb([override], scalars_responses=[[grill_shift]])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    service.delete_confirmed_window("window-1", "grill", uuid4())
+
+    assert grill_shift.status == ShiftStatus.CANCELLED
+    assert override.grill_confirmed is False
+    assert override.kiosk_confirmed is True
+    remaining = [split.shift_type for split in override.splits]
+    assert remaining == [ShiftType.KIOSK]
+    assert db.committed is True
+
+
+def test_delete_confirmed_window_kiosk_after_grill_already_deleted_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Once grill's confirmation has already been deleted (grill_confirmed is
+    False again), deleting kiosk's confirmation is no longer blocked."""
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=True,
+        grill_confirmed=False,
+    )
+    kiosk_shift = Shift(
+        event_id=window.covered_event_ids[0],
+        starts_at=window.start_at,
+        ends_at=window.end_at,
+        required_volunteers=1,
+        status=ShiftStatus.CLOSED,
+        shift_type=ShiftType.KIOSK,
+    )
+    db = _ConfirmDb([override], scalars_responses=[[kiosk_shift]])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    service.delete_confirmed_window("window-1", "kiosk", uuid4())
+
+    assert kiosk_shift.status == ShiftStatus.CANCELLED
+    assert override.kiosk_confirmed is False
+    assert db.committed is True
+
+
+def test_delete_confirmed_window_rejects_unknown_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _ConfirmDb([])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [])
+
+    with pytest.raises(ProposalNotFoundError):
+        service.delete_confirmed_window("missing-window", "grill", uuid4())

@@ -261,3 +261,9 @@ export const updateSignupAttendance = (org: string, signupId: string, outcome: S
     writeInit("PATCH", { outcome }),
     "Die Anwesenheit konnte nicht gespeichert werden.",
   );
+export const assignVolunteer = (org: string, shiftId: string, volunteerId: string) =>
+  request<Shift>(
+    `/api/admin/${encodeURIComponent(org)}/shifts/${encodeURIComponent(shiftId)}/assign`,
+    writeInit("POST", { volunteer_id: volunteerId }),
+    "Der Helfer konnte nicht zugewiesen werden.",
+  );

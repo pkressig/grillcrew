@@ -167,3 +167,22 @@ export async function confirmPlanningProposal(
     body: JSON.stringify(payload),
   });
 }
+
+/**
+ * Undo a confirmation entirely: cancels every materialised Shift of the given
+ * kind and resets the override back to unconfirmed "proposal" state. The
+ * returned window has kiosk_confirmed/grill_confirmed false again for that
+ * kind, so callers can feed it straight into the same onUpdated/onWindowUpdated
+ * callback confirmPlanningProposal's result already goes through.
+ */
+export async function deleteConfirmedWindow(
+  org: string,
+  id: string,
+  kind: "kiosk" | "grill",
+): Promise<ProposalWindow> {
+  await ensureCsrfToken();
+  return request<ProposalWindow>(`${proposalPath(org)}/${encodeURIComponent(id)}/confirm/${kind}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json", ...csrfHeaders() },
+  });
+}

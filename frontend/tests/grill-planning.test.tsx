@@ -7,12 +7,14 @@ const {
   updatePlanningProposal,
   confirmPlanningProposal,
   updateGrillShiftSplits,
+  deleteConfirmedWindow,
 } = vi.hoisted(() => ({
   loadPlanningProposals: vi.fn(),
   refreshPlanningProposals: vi.fn(),
   updatePlanningProposal: vi.fn(),
   confirmPlanningProposal: vi.fn(),
   updateGrillShiftSplits: vi.fn(),
+  deleteConfirmedWindow: vi.fn(),
 }));
 
 vi.mock("@/lib/proposals", () => ({
@@ -21,6 +23,7 @@ vi.mock("@/lib/proposals", () => ({
   updatePlanningProposal,
   confirmPlanningProposal,
   updateGrillShiftSplits,
+  deleteConfirmedWindow,
 }));
 
 const { loadShifts, updateShift } = vi.hoisted(() => ({
@@ -377,5 +380,100 @@ describe("GrillPlanningPanel", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Vergangene" }));
 
     await waitFor(() => expect(loadPlanningProposals).toHaveBeenLastCalledWith("club", true));
+  });
+
+  it("deletes a confirmed grill window, resetting the card back to the unconfirmed proposal form", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, grill_confirmed: true, covered_event_ids: ["event-1"] }],
+    });
+    loadShifts.mockResolvedValue([
+      {
+        id: "grill-shift",
+        event_id: "event-1",
+        starts_at: "2026-08-08T18:00:00Z",
+        ends_at: "2026-08-08T19:00:00Z",
+        required_volunteers: 1,
+        occupied_volunteers: 0,
+        open_places: 1,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "OPEN",
+        sort_order: 0,
+        shift_type: "GRILL",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    deleteConfirmedWindow.mockResolvedValue({
+      ...openWindow,
+      grill_confirmed: false,
+      covered_event_ids: ["event-1"],
+    });
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A – Gäste");
+    expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Einsatz löschen" }));
+
+    await waitFor(() =>
+      expect(deleteConfirmedWindow).toHaveBeenCalledWith("club", "window-1", "grill"),
+    );
+    expect(
+      await screen.findByRole("button", { name: "Grill-Vorschlag bestätigen" }),
+    ).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it("warns about existing signups before deleting a confirmed grill window", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, grill_confirmed: true, covered_event_ids: ["event-1"] }],
+    });
+    loadShifts.mockResolvedValue([
+      {
+        id: "grill-shift",
+        event_id: "event-1",
+        starts_at: "2026-08-08T18:00:00Z",
+        ends_at: "2026-08-08T19:00:00Z",
+        required_volunteers: 1,
+        occupied_volunteers: 1,
+        open_places: 0,
+        signups: [
+          {
+            id: "signup-1",
+            public_name: "Mia Muster",
+            first_name: "Mia",
+            last_name: "Muster",
+            phone: "+41 79 123 45 67",
+            email: "mia@example.test",
+            outcome: "OPEN",
+            created_at: "2026-07-21T10:00:00Z",
+          },
+        ],
+        public_note: null,
+        internal_note: null,
+        status: "OPEN",
+        sort_order: 0,
+        shift_type: "GRILL",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    deleteConfirmedWindow.mockResolvedValue({ ...openWindow, grill_confirmed: false });
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A – Gäste");
+    expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Einsatz löschen" }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      expect.stringContaining("1 bereits bestehenden Anmeldung"),
+    );
+    await waitFor(() => expect(deleteConfirmedWindow).toHaveBeenCalled());
+    confirmSpy.mockRestore();
   });
 });

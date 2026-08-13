@@ -134,3 +134,29 @@ def confirm_proposal(
         raise HTTPException(status_code=404, detail="proposal not found") from None
     except ProposalValidationError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
+
+
+@router.delete("/{window_id}/confirm/{kind}", response_model=ProposalWindowResponse)
+def delete_confirmed_proposal(
+    organization_slug: str,
+    window_id: str,
+    kind: str,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> ProposalWindowResponse:
+    """Undo a confirmation: cancel every materialised Shift of this kind and
+    reset the override back to unconfirmed "proposal" state. The admin's own
+    native confirm dialog on the frontend is the only confirmation gate here,
+    matching the lightweight cancel-with-confirm pattern already used
+    elsewhere in this codebase (e.g. changeShiftStatus)."""
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        return _service(organization_slug, current, db).delete_confirmed_window(
+            window_id, kind, current.user.id
+        )
+    except ProposalNotFoundError:
+        raise HTTPException(status_code=404, detail="proposal not found") from None
+    except ProposalValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None

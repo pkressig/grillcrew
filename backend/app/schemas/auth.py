@@ -25,6 +25,7 @@ class VolunteerRegisterRequest(BaseModel):  # type: ignore[explicit-any]
     compensation_preference: VolunteerCompensation = VolunteerCompensation.WORK_HOURS
     child_first_name: str | None = Field(default=None, max_length=100)
     child_last_name: str | None = Field(default=None, max_length=100)
+    child_team_name: str | None = Field(default=None, max_length=100)
 
 
 class VolunteerRegisterResponse(BaseModel):  # type: ignore[explicit-any]

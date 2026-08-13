@@ -163,13 +163,13 @@ describe("import admin navigation and role gating", () => {
 
   it("does not mount OneDrive synchronization outside the import workspace", async () => {
     renderAdmin("KOORDINATION", "families");
-    await screen.findByRole("heading", { name: "Familien" });
+    await screen.findByRole("heading", { name: "Helfer" });
     expect(loadOneDriveConfig).not.toHaveBeenCalled();
   });
 
   it("hides the nav link and denies direct access for KOORDINATION", async () => {
     renderAdmin("KOORDINATION", "families");
-    await screen.findByRole("heading", { name: "Familien" });
+    await screen.findByRole("heading", { name: "Helfer" });
     expect(screen.queryByRole("link", { name: "Spielplan-Import" })).not.toBeInTheDocument();
   });
 

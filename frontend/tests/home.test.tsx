@@ -5,6 +5,8 @@ import { platformFallbackOrganization } from "@/lib/organization";
 import { createPublicSignup, fetchPublicPlan } from "@/lib/public-plan";
 import { OrganizationLanding } from "@/app/organization-landing";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+
 vi.mock("@/lib/public-plan", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/public-plan")>();
   return { ...actual, fetchPublicPlan: vi.fn(), createPublicSignup: vi.fn() };
@@ -201,5 +203,43 @@ describe("OrganizationLanding", () => {
       await screen.findByRole("heading", { name: "Plan nicht verfügbar" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Bitte versuche es später nochmals.")).toBeInTheDocument();
+  });
+
+  describe("account modal", () => {
+    beforeEach(() => {
+      mockedFetch.mockResolvedValue({ events: [] });
+      window.sessionStorage.clear();
+    });
+
+    it("has an icon-only close button with an accessible name that closes the modal", async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole("link", { name: "Registrieren" }));
+      const dialog = screen.getByRole("dialog");
+      expect(dialog).toHaveAttribute("aria-hidden", "false");
+      const closeButton = screen.getByRole("button", { name: "Schliessen" });
+      expect(closeButton).toBeInTheDocument();
+      expect(closeButton).not.toHaveTextContent("Schliessen");
+      expect(closeButton).toHaveClass("min-h-11", "min-w-11");
+      fireEvent.click(closeButton);
+      expect(screen.getByRole("dialog", { hidden: true })).toHaveAttribute("aria-hidden", "true");
+    });
+
+    it("still closes when clicking the backdrop", async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole("link", { name: "Login" }));
+      const dialog = screen.getByRole("dialog");
+      expect(dialog).toHaveAttribute("aria-hidden", "false");
+      fireEvent.click(dialog);
+      expect(screen.getByRole("dialog", { hidden: true })).toHaveAttribute("aria-hidden", "true");
+    });
+
+    it("keeps a typed registration draft across a close and reopen of the modal", async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole("link", { name: "Registrieren" }));
+      fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Mia" } });
+      fireEvent.click(screen.getByRole("button", { name: "Schliessen" }));
+      fireEvent.click(screen.getByRole("link", { name: "Registrieren" }));
+      await waitFor(() => expect(screen.getByLabelText("Vorname")).toHaveValue("Mia"));
+    });
   });
 });

@@ -12,6 +12,7 @@ import {
 } from "@/lib/external-kiosk-plan";
 import {
   confirmPlanningProposal,
+  deleteConfirmedWindow,
   loadPlanningProposals,
   refreshPlanningProposals,
   updateGrillShiftSplits,
@@ -201,6 +202,46 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     }
   }
 
+  async function deleteConfirmed(window: PlanningProposalWindow) {
+    const grillShifts = (shiftsByWindow[window.id] ?? []).filter(
+      (shift) => shift.status !== "CANCELLED" && shift.shift_type === "GRILL",
+    );
+    const affectedSignups = grillShifts.reduce((total, shift) => total + shift.signups.length, 0);
+    const warning =
+      affectedSignups > 0
+        ? `Diesen Grill-Einsatz vollständig löschen? Dabei werden alle zugehörigen Schichten storniert, ` +
+          `einschließlich ${affectedSignups} ${
+            affectedSignups === 1
+              ? "bereits bestehenden Anmeldung"
+              : "bereits bestehender Anmeldungen"
+          }.`
+        : "Diesen Grill-Einsatz vollständig löschen? Alle zugehörigen Schichten werden storniert.";
+    if (!globalThis.window.confirm(warning)) return;
+    setSavingId(window.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      const updated = await deleteConfirmedWindow(org, window.id, "grill");
+      setWindows((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      if (updated.covered_event_ids?.[0]) {
+        const remainingShifts = await loadShifts(org, updated.covered_event_ids[0]);
+        setShiftsByWindow((current) => ({
+          ...current,
+          [updated.id]: remainingShifts,
+        }));
+      }
+      setSuccess(`Grill-Einsatz für ${formatDate(updated.date)} wurde gelöscht.`);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Der Grill-Einsatz konnte nicht gelöscht werden.",
+      );
+    } finally {
+      setSavingId(null);
+    }
+  }
+
   // Grill proposals may only ever be offered for a window whose kiosk half has
   // actually been confirmed by an admin (D-041/D-042); an unconfirmed or
   // never-touched window must not be selectable here even though the backend
@@ -295,6 +336,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
               onSave={save}
               onConfirm={confirm}
               onReconcile={reconcile}
+              onDelete={deleteConfirmed}
               comparison={comparisonRows.find((row) => row.proposal_window?.id === window.id)}
               shifts={shiftsByWindow[window.id] ?? []}
               onShiftsChanged={(updated) =>
@@ -453,6 +495,7 @@ function GrillWindowCard({
   onSave,
   onConfirm,
   onReconcile,
+  onDelete,
   comparison,
   shifts,
   onShiftsChanged,
@@ -465,6 +508,7 @@ function GrillWindowCard({
   onSave: (window: EditableWindow) => Promise<void>;
   onConfirm: (window: EditableWindow) => Promise<void>;
   onReconcile: (window: PlanningProposalWindow) => Promise<void>;
+  onDelete: (window: PlanningProposalWindow) => Promise<void>;
   comparison?: ExternalPlanComparisonRow;
   shifts: Shift[];
   onShiftsChanged: (shifts: Shift[]) => void;
@@ -899,6 +943,21 @@ function GrillWindowCard({
               Storniert Schichten, die zu keiner aktuell gespeicherten Aufteilung mehr passen (z. B.
               nach nachträglicher Änderung der Zeitfenster) — nur solange keine Helfer angemeldet
               sind.
+            </p>
+            <Button
+              className="justify-self-start"
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={saving}
+              onClick={() => void onDelete(window)}
+            >
+              Einsatz löschen
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Löscht den gesamten bestätigten Grill-Einsatz: Alle zugehörigen Schichten werden
+              storniert (inklusive bestehender Anmeldungen) und das Fenster kehrt wieder in den
+              unbestätigten Vorschlagszustand zurück.
             </p>
           </div>
         )}

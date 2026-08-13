@@ -81,5 +81,6 @@ class FamilyMember(Base):
     volunteer_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("volunteer.id", ondelete="RESTRICT"), nullable=True
     )
+    team_name: Mapped[str | None] = mapped_column(String(100))
 
     family: Mapped[Family] = relationship(back_populates="members")

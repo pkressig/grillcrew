@@ -30,6 +30,7 @@ from app.schemas.planning import (
     SeasonCreate,
     SeasonResponse,
     SeasonUpdate,
+    ShiftAssignVolunteer,
     ShiftCreate,
     ShiftCrewSuggestion,
     ShiftResponse,
@@ -481,6 +482,25 @@ def update_shift(
             _write_service(organization_slug, current, db, request).update_shift(shift_id, payload)
         )
     except (PlanningNotFoundError, PlanningValidationError) as error:
+        raise _translate(error) from None
+
+
+@router.post("/shifts/{shift_id}/assign", response_model=AdminShiftResponse)
+def assign_volunteer(
+    organization_slug: str,
+    shift_id: uuid.UUID,
+    payload: ShiftAssignVolunteer,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> AdminShiftResponse:
+    try:
+        shift = _write_service(organization_slug, current, db, request).assign_volunteer(
+            shift_id, payload.volunteer_id
+        )
+        return _admin_shift_response(shift)
+    except (PlanningNotFoundError, PlanningConflictError) as error:
         raise _translate(error) from None
 
 

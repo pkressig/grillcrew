@@ -66,6 +66,27 @@ const draftEventTwo = {
   event_type: "Auswärtsspiel",
   status: "DRAFT",
 };
+const postponedEvent = {
+  ...planningEvent,
+  id: "event-postponed",
+  title: "Verschobenes Spiel",
+  date: "2026-09-07",
+  status: "POSTPONED",
+};
+const cancelledSelectableEvent = {
+  ...planningEvent,
+  id: "event-cancelled-selectable",
+  title: "Abgesagtes Spiel",
+  date: "2026-09-08",
+  status: "CANCELLED",
+};
+const completedSelectableEvent = {
+  ...planningEvent,
+  id: "event-completed-selectable",
+  title: "Erledigtes Spiel",
+  date: "2026-09-09",
+  status: "COMPLETED",
+};
 const shift = {
   id: "shift-1",
   event_id: "event-1",
@@ -90,6 +111,17 @@ const shift = {
   internal_note: "Kasse bereitstellen",
   status: "OPEN",
   sort_order: 0,
+};
+const familyVolunteer = {
+  id: "volunteer-9",
+  first_name: "Noah",
+  last_name: "Helfer",
+  phone: "+41 79 987 65 43",
+  email: "noah@example.test",
+  compensation_preference: "WORK_HOURS",
+  compensation_family_member_id: null,
+  internal_note: null,
+  status: "ACTIVE",
 };
 
 function session(role: "ADMIN" | "KOORDINATION" | "KIOSK" | "VORSTAND_LESEN"): AuthSession {
@@ -118,6 +150,7 @@ function planningFetch(
   includeEvents = false,
   includeShifts = includeEvents,
   returnedEvents = includeEvents ? [planningEvent] : [],
+  volunteers: typeof familyVolunteer[] = [],
 ) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -125,6 +158,7 @@ function planningFetch(
     if (url.endsWith("/api/auth/me")) return Response.json(session(role));
     if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "memory-token" });
     if (url.endsWith("/families") && method === "GET") return Response.json([]);
+    if (url.endsWith("/families/volunteers") && method === "GET") return Response.json(volunteers);
     if (url.endsWith("/members") && method === "GET") return Response.json([]);
     if (url.endsWith("/club-years") && method === "GET") return Response.json(empty ? [] : [year]);
     if (url.endsWith("/seasons") && method === "GET")
@@ -584,7 +618,14 @@ describe("planning admin", () => {
     const fetchMock = renderAdmin(role);
     expect(await screen.findByRole("heading", { name: "Planung" })).toBeInTheDocument();
     expect(document.querySelector("#attendance")).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([url]) => String(url).includes("/families"))).toBe(false);
+    // The volunteer list backing "Helfer zuweisen" is loaded once for the whole panel (not
+    // once per shift, and not from the plain "/families" list used elsewhere).
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/families/volunteers")),
+      ).toHaveLength(1),
+    );
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/families"))).toBe(false);
     expect(screen.getByRole("link", { name: "Vereinsjahr/Saisonverwaltung" })).toHaveAttribute(
       "href",
       "/example/admin/planning/periods",
@@ -1525,17 +1566,32 @@ describe("planning admin", () => {
     ]);
   });
 
-  it("shows selection checkboxes only for draft events", async () => {
+  it("shows selection checkboxes for every status a bulk action can touch, but not for postponed events", async () => {
     renderAdmin(
       "ADMIN",
-      planningFetch("ADMIN", false, [season], true, false, [planningEvent, draftEventOne]),
+      planningFetch("ADMIN", false, [season], true, false, [
+        planningEvent,
+        draftEventOne,
+        postponedEvent,
+        cancelledSelectableEvent,
+        completedSelectableEvent,
+      ]),
     );
     await screen.findByText("Sommerfest");
     expect(
       screen.getByLabelText(`Anlass ${draftEventOne.title} am 11.09.2026 auswählen`),
     ).toBeInTheDocument();
     expect(
-      screen.queryByLabelText(`Anlass ${planningEvent.title} am 12.09.2026 auswählen`),
+      screen.getByLabelText(`Anlass ${planningEvent.title} am 12.09.2026 auswählen`),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(`Anlass ${cancelledSelectableEvent.title} am 08.09.2026 auswählen`),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(`Anlass ${completedSelectableEvent.title} am 09.09.2026 auswählen`),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(`Anlass ${postponedEvent.title} am 07.09.2026 auswählen`),
     ).not.toBeInTheDocument();
   });
 
@@ -1669,5 +1725,204 @@ describe("planning admin", () => {
     expect(screen.getByRole("region", { name: "Mehrfachauswahl Anlässe" })).toHaveTextContent(
       "1 Anlass ausgewählt",
     );
+  });
+
+  it("confirms bulk cancel by calling updateEventStatus with CANCELLED once per eligible id", async () => {
+    document.cookie = "gc_csrf=bulk-cancel-token";
+    const baseFetch = planningFetch("ADMIN", false, [season], true, false, [
+      draftEventOne,
+      planningEvent,
+    ]);
+    const patchedIds: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const match = url.match(/\/events\/([\w-]+)$/);
+      if (match && init?.method === "PATCH") {
+        patchedIds.push(match[1]!);
+        return Response.json({ ...draftEventOne, id: match[1]!, status: "CANCELLED" });
+      }
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByText(draftEventOne.title);
+    fireEvent.click(screen.getByLabelText(`Anlass ${draftEventOne.title} am 11.09.2026 auswählen`));
+    fireEvent.click(screen.getByLabelText(`Anlass ${planningEvent.title} am 12.09.2026 auswählen`));
+    fireEvent.click(screen.getByRole("button", { name: "Ausgewählte absagen (2)" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "2 Anlässe absagen" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "2 Anlässe absagen" }));
+
+    await waitFor(() => expect([...patchedIds].sort()).toEqual(["event-1", "event-draft-1"]));
+    expect(
+      fetchMock.mock.calls
+        .filter(([url, init]) => /\/events\/[\w-]+$/.test(String(url)) && init?.method === "PATCH")
+        .every(([, init]) => init?.body === JSON.stringify({ status: "CANCELLED" })),
+    ).toBe(true);
+    expect(await screen.findByRole("status")).toHaveTextContent("2 Anlässe wurden abgesagt.");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Mehrfachauswahl Anlässe" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("confirms bulk delete with explicit irreversibility copy and calls deleteEvent (force-delete) once per eligible id", async () => {
+    document.cookie = "gc_csrf=bulk-delete-token";
+    const baseFetch = planningFetch("ADMIN", false, [season], true, false, [
+      cancelledSelectableEvent,
+      completedSelectableEvent,
+    ]);
+    const deletedIds: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const match = url.match(/\/events\/([\w-]+)\/force-delete$/);
+      if (match && init?.method === "POST") {
+        deletedIds.push(match[1]!);
+        return new Response(null, { status: 204 });
+      }
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByText(cancelledSelectableEvent.title);
+    fireEvent.click(
+      screen.getByLabelText(`Anlass ${cancelledSelectableEvent.title} am 08.09.2026 auswählen`),
+    );
+    fireEvent.click(
+      screen.getByLabelText(`Anlass ${completedSelectableEvent.title} am 09.09.2026 auswählen`),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Ausgewählte endgültig löschen (2)" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "2 Anlässe endgültig löschen" });
+    expect(dialog).toHaveTextContent(
+      "Diese Aktion kann nicht rückgängig gemacht werden. Zugehörige Einsätze, Anmeldungen und Arbeitsnachweise werden dauerhaft entfernt.",
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "2 Anlässe endgültig löschen" }));
+
+    await waitFor(() =>
+      expect([...deletedIds].sort()).toEqual(
+        ["event-cancelled-selectable", "event-completed-selectable"].sort(),
+      ),
+    );
+    expect(
+      fetchMock.mock.calls
+        .filter(([url]) => String(url).includes("/force-delete"))
+        .every(
+          ([, init]) =>
+            init?.body === JSON.stringify({ confirmation: "ANLASS_ENDGUELTIG_LOESCHEN" }),
+        ),
+    ).toBe(true);
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "2 Anlässe wurden endgültig gelöscht.",
+    );
+  });
+
+  it("narrows a mixed-eligibility selection down to the events each bulk action actually touches", async () => {
+    const baseFetch = planningFetch("ADMIN", false, [season], true, false, [
+      draftEventOne,
+      cancelledSelectableEvent,
+    ]);
+    const patchedIds: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const match = url.match(/\/events\/([\w-]+)$/);
+      if (match && init?.method === "PATCH") {
+        patchedIds.push(match[1]!);
+        return Response.json({ ...draftEventOne, id: match[1]!, status: "CANCELLED" });
+      }
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByText(draftEventOne.title);
+    fireEvent.click(screen.getByLabelText(`Anlass ${draftEventOne.title} am 11.09.2026 auswählen`));
+    fireEvent.click(
+      screen.getByLabelText(`Anlass ${cancelledSelectableEvent.title} am 08.09.2026 auswählen`),
+    );
+
+    const bar = screen.getByRole("region", { name: "Mehrfachauswahl Anlässe" });
+    expect(bar).toHaveTextContent("2 Anlässe ausgewählt");
+    // Only the draft is eligible to be published or cancelled; only the already-cancelled
+    // event is eligible for the hard delete. Every button label reflects its own subset.
+    expect(within(bar).getByRole("button", { name: "1 Anlass veröffentlichen" })).toBeEnabled();
+    const cancelButton = within(bar).getByRole("button", { name: "1 Anlass absagen" });
+    const deleteButton = within(bar).getByRole("button", { name: "1 Anlass endgültig löschen" });
+    expect(cancelButton).toBeEnabled();
+    expect(deleteButton).toBeEnabled();
+
+    fireEvent.click(cancelButton);
+    const dialog = await screen.findByRole("dialog", { name: "1 Anlass absagen" });
+    expect(dialog).toHaveTextContent("1 von 2 ausgewählten Anlässen betroffen");
+    expect(within(dialog).getAllByRole("row")).toHaveLength(2);
+    expect(within(dialog).getByText(draftEventOne.title)).toBeInTheDocument();
+    expect(within(dialog).queryByText(cancelledSelectableEvent.title)).not.toBeInTheDocument();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "1 Anlass absagen" }));
+
+    await waitFor(() => expect(patchedIds).toEqual(["event-draft-1"]));
+  });
+
+  it("assigns a volunteer to a shift via the admin dropdown and shows the resulting signup", async () => {
+    document.cookie = "gc_csrf=assign-token";
+    let assigned = false;
+    const newSignup = {
+      id: "signup-assigned",
+      public_name: "Noah Helfer",
+      first_name: "Noah",
+      last_name: "Helfer",
+      phone: "+41 79 987 65 43",
+      email: "noah@example.test",
+      outcome: "OPEN",
+      created_at: "2026-08-01T09:00:00Z",
+    };
+    const assignedShift = {
+      ...shift,
+      occupied_volunteers: 2,
+      open_places: 1,
+      signups: [...shift.signups, newSignup],
+    };
+    const baseFetch = planningFetch(
+      "ADMIN",
+      false,
+      [season],
+      true,
+      true,
+      [planningEvent],
+      [familyVolunteer],
+    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/shifts/shift-1/assign") && init?.method === "POST") {
+        assigned = true;
+        return Response.json(assignedShift);
+      }
+      if (url.endsWith("/seasons/season-1/events-with-shifts") && (init?.method ?? "GET") === "GET")
+        return Response.json([{ ...planningEvent, shifts: [assigned ? assignedShift : shift] }]);
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    const assignSelect = await screen.findByRole("combobox", {
+      name: /Helfer für Einsatz .* für Sommerfest zuweisen/,
+    });
+    fireEvent.change(assignSelect, { target: { value: familyVolunteer.id } });
+    fireEvent.click(screen.getByRole("button", { name: "Zuweisen" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/api\/admin\/example\/shifts\/shift-1\/assign$/),
+        expect.objectContaining({
+          method: "POST",
+          credentials: "include",
+          headers: expect.objectContaining({ "X-CSRF-Token": "assign-token" }),
+          body: JSON.stringify({ volunteer_id: familyVolunteer.id }),
+        }),
+      ),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Noah Helfer wurde dem Einsatz zugewiesen.",
+    );
+    expect(screen.getByText("Noah Helfer", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("2 von 3 belegt")).toBeInTheDocument();
   });
 });

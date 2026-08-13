@@ -15,6 +15,13 @@
 - systemgestützter WorkRecord-Split
 - Same-Site-BFF-/Proxy-Architektur fuer Auth-Cookies (Next.js-Rewrite zu Render), falls der
   Wartungsaufwand des dynamischen Origin-Allowlists (D-039) real spuerbar wird
+- "Konto einladen"-Aktion fuer einen admin-angelegten Helfer ohne `user_id`: die bestehende
+  `Invitation`-Infrastruktur (`backend/app/services/invitation.py`) ist an eine `StaffRole` und
+  `StaffMembership` gebunden und daher fuer ein reines Helferkonto ohne Admin-/Koordinationsrechte
+  nicht direkt wiederverwendbar; ein eigener, rollenloser Token-/Akzeptanzfluss (oder eine explizite
+  Erweiterung von `Invitation` um einen optionalen Rollen-Wert) braucht eine eigene Produktentscheidung,
+  bevor er umgesetzt wird. Bis dahin zeigt die Helfer-Detailansicht bei fehlendem Konto nur einen
+  Hinweistext statt einer Aktion.
 
 ## Später
 - Kiosk-Modul: feste Zuteilungsmatrix (Datum x Person), eigene Schichterzeugung aus

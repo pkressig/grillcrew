@@ -23,7 +23,9 @@ from app.models.planning import (
     ShiftType,
     Signup,
     SignupOutcome,
+    SignupSource,
     SignupStatus,
+    Volunteer,
 )
 from app.models.proposal import ProposalOverride
 from app.models.work_record import WorkRecord
@@ -849,6 +851,70 @@ class PlanningService:
         self.db.commit()
         self.db.refresh(signup)
         return signup
+
+    def assign_volunteer(self, shift_id: uuid.UUID, volunteer_id: uuid.UUID) -> Shift:
+        """Directly reserve a shift slot for a volunteer chosen by staff.
+
+        This bypasses public self-signup entirely: it works regardless of the shift's
+        ``assignment_mode`` (a separate, currently-unused concept that only gates the public
+        signup flow) and does not require the shift to be OPEN — CLOSED shifts exist precisely
+        so staff can lock public signups while allocating helpers manually. A CANCELLED shift
+        still rejects new signups. Capacity and duplicate-signup checks mirror
+        ``PublicSignupService.create_for_volunteer``.
+        """
+        shift = self.db.scalar(
+            select(Shift)
+            .join(Event)
+            .join(Season)
+            .join(ClubYear)
+            .where(Shift.id == shift_id, ClubYear.organization_id == self.organization_id)
+            .with_for_update(of=Shift)
+        )
+        if shift is None:
+            raise PlanningNotFoundError
+        if shift.status == ShiftStatus.CANCELLED:
+            raise PlanningConflictError(
+                "Für abgesagte Einsätze können keine Helfenden zugewiesen werden."
+            )
+        volunteer = self.db.scalar(
+            select(Volunteer).where(
+                Volunteer.id == volunteer_id,
+                Volunteer.organization_id == self.organization_id,
+            )
+        )
+        if volunteer is None:
+            raise PlanningNotFoundError
+        occupied = (
+            self.db.scalar(
+                select(func.count())
+                .select_from(Signup)
+                .where(Signup.shift_id == shift.id, Signup.status == SignupStatus.ACTIVE)
+            )
+            or 0
+        )
+        if occupied >= shift.required_volunteers:
+            raise PlanningConflictError("Der Einsatz ist bereits vollständig besetzt.")
+        duplicate = self.db.scalar(
+            select(Signup.id).where(
+                Signup.shift_id == shift.id,
+                Signup.volunteer_id == volunteer.id,
+                Signup.status == SignupStatus.ACTIVE,
+            )
+        )
+        if duplicate is not None:
+            raise PlanningConflictError("Dieser Helfer ist für diesen Einsatz bereits eingetragen.")
+        signup = Signup(
+            shift_id=shift.id,
+            volunteer_id=volunteer.id,
+            public_name_snapshot=f"{volunteer.first_name} {volunteer.last_name}",
+            status=SignupStatus.ACTIVE,
+            outcome=SignupOutcome.OPEN,
+            source=SignupSource.ADMIN,
+        )
+        self.db.add(signup)
+        self.db.commit()
+        self.db.refresh(shift)
+        return shift
 
     def _get_season(self, season_id: uuid.UUID) -> Season:
         item = self.db.scalar(

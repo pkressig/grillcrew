@@ -270,3 +270,27 @@ werden dadurch nicht gelockert.
 **Abgrenzung:** Bereits vor diesem Entscheid erstellte anonyme Anmeldungen bleiben gültig; es findet keine rückwirkende Migration bestehender Datensätze statt. Admin- und Koordinationsflows sind von diesem Entscheid nicht betroffen.
 
 **Entschieden von:** Product Owner, 2026-08-03.
+
+## D-047 – Löschen einer bestätigten Kiosk-/Grill-Bestätigung
+
+**Entscheid:** ADMIN und KOORDINATION können eine bereits bestätigte Kiosk- oder Grill-Bestätigung
+eines Vorschlagsfensters vollständig rückgängig machen. Dabei werden alle nicht bereits stornierten
+`Shift`-Zeilen dieser Art (Kiosk oder Grill) für das Fenster unbedingt storniert – anders als beim
+Abgleichen (`_materialize_shifts`), das nur abweichende oder doppelte Schichten storniert und bei
+bestehenden Anmeldungen blockiert. Bestehende Anmeldungen auf den stornierten Schichten werden
+bewusst mit storniert, da der Admin explizit die gesamte Bestätigung inklusive ihrer Schichten
+löschen möchte. Die zugehörige `kiosk_confirmed`/`grill_confirmed`-Markierung und die Splits dieser
+Art auf dem `ProposalOverride` werden zurückgesetzt; das Fenster erscheint danach wieder als
+unbestätigter Vorschlag. Die Bestätigung im Frontend erfolgt über einen einfachen nativen
+`window.confirm()`-Dialog (wie beim bestehenden "Schichten abgleichen"), nicht über die strengere
+getippte Bestätigungszeichenkette aus D-045, da hier keine Datensätze endgültig (hart) gelöscht,
+sondern nur storniert werden.
+
+**Abgrenzung:** Wegen der D-041/D-042-Reihenfolgeregel (Grill darf nur auf einem bereits bestätigten
+Kiosk aufbauen) blockiert das Löschen der Kiosk-Bestätigung, solange die Grill-Bestätigung desselben
+Fensters noch besteht; die Grill-Bestätigung muss zuerst gelöscht werden. Das Löschen der
+Grill-Bestätigung allein ist jederzeit möglich und lässt die Kiosk-Bestätigung sowie deren Splits
+unberührt. Ein `PROPOSAL_CONFIRMATION_DELETED`-Audit-Ereignis mit Fenster-Schlüssel, Art sowie
+Anzahl stornierter Schichten und betroffener Anmeldungen (ohne PII) wird geschrieben.
+
+**Entschieden von:** Product Owner, 2026-08-12 (im Rahmen von Live-Tests der Kiosk-/Grill-Bestätigung angefordert).

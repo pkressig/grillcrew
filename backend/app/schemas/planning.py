@@ -249,6 +249,11 @@ class SignupAttendanceUpdate(BaseModel):  # type: ignore[explicit-any]
     outcome: SignupOutcome
 
 
+class ShiftAssignVolunteer(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+    volunteer_id: uuid.UUID
+
+
 class AdminShiftResponse(ShiftResponse):  # type: ignore[explicit-any]
     occupied_volunteers: int
     open_places: int

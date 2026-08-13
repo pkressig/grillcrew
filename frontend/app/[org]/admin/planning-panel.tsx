@@ -6,6 +6,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import {
+  assignVolunteer,
   cancelSignup,
   createEvent,
   createShift,
@@ -25,6 +26,7 @@ import {
   type SignupOutcome,
 } from "@/lib/planning";
 import { loadAdminPlanningData } from "@/lib/admin-planning-data";
+import { loadFamilyVolunteers, type FamilyVolunteer } from "@/lib/families";
 
 const eventStatusLabels: Record<EventStatus, string> = {
   DRAFT: "Entwurf",
@@ -84,6 +86,15 @@ const eventActionLabels: Partial<Record<EventStatus, string>> = {
   COMPLETED: "Erledigen",
   DRAFT: "Wiedereröffnen",
 };
+// Statuses a bulk action can touch: publish (DRAFT), cancel (DRAFT/PUBLISHED), or hard-delete
+// (CANCELLED/COMPLETED). POSTPONED is deliberately excluded — no bulk action covers it today,
+// so offering its checkbox would just invite a selection nothing can be done with.
+const selectableEventStatuses = new Set<EventStatus>([
+  "DRAFT",
+  "PUBLISHED",
+  "CANCELLED",
+  "COMPLETED",
+]);
 const shiftActions: Record<ShiftStatus, ShiftStatus[]> = {
   OPEN: ["CLOSED", "CANCELLED"],
   CLOSED: ["OPEN"],
@@ -95,6 +106,14 @@ const shiftActionLabels: Record<ShiftStatus, string> = {
   CANCELLED: "Absagen",
 };
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
+
+type BulkEventActionMessages = {
+  successOne: string;
+  successMany: (succeeded: number) => string;
+  partial: (succeeded: number, total: number, failed: number) => string;
+  failOne: string;
+  failMany: string;
+};
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("de-CH", { dateStyle: "medium" }).format(
@@ -236,7 +255,10 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   const [search, setSearch] = useState("");
   const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
   const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
+  const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [volunteers, setVolunteers] = useState<FamilyVolunteer[]>([]);
   const requestId = useRef(0);
   const selectedCalendarWeek = useRef<HTMLHeadingElement | null>(null);
 
@@ -320,10 +342,22 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     const currentRequest = ++requestId.current;
     setError(null);
     try {
-      const data = await loadAdminPlanningData(org, (planning) => {
-        if (currentRequest !== requestId.current) return;
-        setSeasons(planning.seasons);
-      });
+      const [data] = await Promise.all([
+        loadAdminPlanningData(org, (planning) => {
+          if (currentRequest !== requestId.current) return;
+          setSeasons(planning.seasons);
+        }),
+        // Loaded once for the whole panel (not per shift) so the "Helfer zuweisen" dropdowns
+        // don't each fire their own request; a failure here must not block the rest of the
+        // planning data, since assignment is a secondary action on this page.
+        loadFamilyVolunteers(org)
+          .then((items) => {
+            if (currentRequest === requestId.current) setVolunteers(items);
+          })
+          .catch(() => {
+            if (currentRequest === requestId.current) setVolunteers([]);
+          }),
+      ]);
       if (currentRequest !== requestId.current) return;
       setEvents(data.events);
       setShifts(data.shifts);
@@ -354,7 +388,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     setSelectedEventIds((current) => {
       if (current.size === 0) return current;
       const selectableIds = new Set(
-        events.filter((event) => event.status === "DRAFT").map((event) => event.id),
+        events
+          .filter((event) => selectableEventStatuses.has(event.status))
+          .map((event) => event.id),
       );
       const next = new Set([...current].filter((id) => selectableIds.has(id)));
       return next.size === current.size ? current : next;
@@ -455,37 +491,74 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     setSelectedEventIds(new Set());
   }
 
-  async function publishSelectedEvents() {
-    const ids = [...selectedEventIds];
+  async function runBulkEventAction(
+    ids: string[],
+    action: (id: string) => Promise<unknown>,
+    messages: BulkEventActionMessages,
+    closeDialog: () => void,
+  ) {
     setBulkBusy(true);
     setError(null);
     setSuccess(null);
-    const results = await Promise.allSettled(
-      ids.map((id) => updateEventStatus(org, id, "PUBLISHED")),
-    );
+    const results = await Promise.allSettled(ids.map((id) => action(id)));
     const failedCount = results.filter((result) => result.status === "rejected").length;
     const succeededCount = ids.length - failedCount;
     if (failedCount === 0) {
-      setSuccess(
-        succeededCount === 1
-          ? "1 Anlass wurde veröffentlicht."
-          : `${succeededCount} Anlässe wurden veröffentlicht.`,
-      );
+      setSuccess(succeededCount === 1 ? messages.successOne : messages.successMany(succeededCount));
     } else if (succeededCount > 0) {
-      setError(
-        `${succeededCount} von ${ids.length} Anlässen veröffentlicht — ${failedCount} Fehler.`,
-      );
+      setError(messages.partial(succeededCount, ids.length, failedCount));
     } else {
-      setError(
-        ids.length === 1
-          ? "Der Anlass konnte nicht veröffentlicht werden."
-          : "Die Anlässe konnten nicht veröffentlicht werden.",
-      );
+      setError(ids.length === 1 ? messages.failOne : messages.failMany);
     }
     setSelectedEventIds(new Set());
-    setBulkPublishOpen(false);
+    closeDialog();
     await refresh();
     setBulkBusy(false);
+  }
+
+  function publishSelectedEvents() {
+    return runBulkEventAction(
+      publishEligibleEvents.map((event) => event.id),
+      (id) => updateEventStatus(org, id, "PUBLISHED"),
+      {
+        successOne: "1 Anlass wurde veröffentlicht.",
+        successMany: (n) => `${n} Anlässe wurden veröffentlicht.`,
+        partial: (s, t, f) => `${s} von ${t} Anlässen veröffentlicht — ${f} Fehler.`,
+        failOne: "Der Anlass konnte nicht veröffentlicht werden.",
+        failMany: "Die Anlässe konnten nicht veröffentlicht werden.",
+      },
+      () => setBulkPublishOpen(false),
+    );
+  }
+
+  function cancelSelectedEvents() {
+    return runBulkEventAction(
+      cancelEligibleEvents.map((event) => event.id),
+      (id) => updateEventStatus(org, id, "CANCELLED"),
+      {
+        successOne: "1 Anlass wurde abgesagt.",
+        successMany: (n) => `${n} Anlässe wurden abgesagt.`,
+        partial: (s, t, f) => `${s} von ${t} Anlässen abgesagt — ${f} Fehler.`,
+        failOne: "Der Anlass konnte nicht abgesagt werden.",
+        failMany: "Die Anlässe konnten nicht abgesagt werden.",
+      },
+      () => setBulkCancelOpen(false),
+    );
+  }
+
+  function deleteSelectedEvents() {
+    return runBulkEventAction(
+      deleteEligibleEvents.map((event) => event.id),
+      (id) => deleteEvent(org, id),
+      {
+        successOne: "1 Anlass wurde endgültig gelöscht.",
+        successMany: (n) => `${n} Anlässe wurden endgültig gelöscht.`,
+        partial: (s, t, f) => `${s} von ${t} Anlässen endgültig gelöscht — ${f} Fehler.`,
+        failOne: "Der Anlass konnte nicht endgültig gelöscht werden.",
+        failMany: "Die Anlässe konnten nicht endgültig gelöscht werden.",
+      },
+      () => setBulkDeleteOpen(false),
+    );
   }
 
   function removeHistoricalEvent(planningEvent: PlanningEvent) {
@@ -497,6 +570,16 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     if (next === "CANCELLED" && !window.confirm(`Einsatz für "${eventTitle}" wirklich absagen?`))
       return;
     void run(() => updateShiftStatus(org, shift.id, next), "Einsatzstatus wurde aktualisiert.");
+  }
+
+  function assignShiftVolunteer(shift: Shift, volunteerId: string): Promise<boolean> {
+    const volunteer = volunteers.find((item) => item.id === volunteerId);
+    return run(
+      () => assignVolunteer(org, shift.id, volunteerId),
+      volunteer
+        ? `${volunteer.first_name} ${volunteer.last_name} wurde dem Einsatz zugewiesen.`
+        : "Der Helfer wurde dem Einsatz zugewiesen.",
+    );
   }
 
   function cancelVolunteerSignup(signup: AdminSignup) {
@@ -535,6 +618,17 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   }
 
   const selectedEventsForModal = events.filter((event) => selectedEventIds.has(event.id));
+  // Eligibility differs per bulk action, and a selection can be mixed (e.g. some DRAFT, some
+  // already CANCELLED). Each action only ever touches its own eligible subset — never the
+  // untouched rest of the selection — and every dialog below states plainly when that subset
+  // is smaller than what the admin actually selected.
+  const publishEligibleEvents = selectedEventsForModal.filter((event) => event.status === "DRAFT");
+  const cancelEligibleEvents = selectedEventsForModal.filter(
+    (event) => event.status === "DRAFT" || event.status === "PUBLISHED",
+  );
+  const deleteEligibleEvents = selectedEventsForModal.filter(
+    (event) => event.status === "CANCELLED" || event.status === "COMPLETED",
+  );
 
   const now = new Date();
   const unresolvedItems = loading
@@ -586,13 +680,19 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
           <Card className="w-full max-w-2xl">
             <CardBody>
               <h2 id="bulk-publish-title" className="text-xl font-semibold">
-                {selectedEventsForModal.length === 1
+                {publishEligibleEvents.length === 1
                   ? "1 Anlass veröffentlichen"
-                  : `${selectedEventsForModal.length} Anlässe veröffentlichen`}
+                  : `${publishEligibleEvents.length} Anlässe veröffentlichen`}
               </h2>
               <p className="mt-2 text-sm">
                 Die ausgewählten Anlässe werden veröffentlicht und damit öffentlich sichtbar.
               </p>
+              {publishEligibleEvents.length < selectedEventsForModal.length ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {publishEligibleEvents.length} von {selectedEventsForModal.length} ausgewählten
+                  Anlässen betroffen — nur Entwürfe können veröffentlicht werden.
+                </p>
+              ) : null}
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[28rem] text-left text-sm">
                   <caption className="sr-only">Zur Veröffentlichung ausgewählte Anlässe</caption>
@@ -613,7 +713,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedEventsForModal.map((item) => (
+                    {publishEligibleEvents.map((item) => (
                       <tr className="border-b last:border-0" key={item.id}>
                         <td className="py-2 pr-3">{formatDate(item.date)}</td>
                         <td className="py-2 pr-3">
@@ -640,9 +740,173 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   disabled={bulkBusy}
                   onClick={() => void publishSelectedEvents()}
                 >
-                  {selectedEventsForModal.length === 1
+                  {publishEligibleEvents.length === 1
                     ? "1 Anlass veröffentlichen"
-                    : `${selectedEventsForModal.length} Anlässe veröffentlichen`}
+                    : `${publishEligibleEvents.length} Anlässe veröffentlichen`}
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      ) : null}
+      {bulkCancelOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bulk-cancel-title"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+        >
+          <Card className="w-full max-w-2xl">
+            <CardBody>
+              <h2 id="bulk-cancel-title" className="text-xl font-semibold">
+                {cancelEligibleEvents.length === 1
+                  ? "1 Anlass absagen"
+                  : `${cancelEligibleEvents.length} Anlässe absagen`}
+              </h2>
+              <p className="mt-2 text-sm">Die ausgewählten Anlässe werden abgesagt.</p>
+              {cancelEligibleEvents.length < selectedEventsForModal.length ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {cancelEligibleEvents.length} von {selectedEventsForModal.length} ausgewählten
+                  Anlässen betroffen — nur Entwürfe und veröffentlichte Anlässe können abgesagt
+                  werden.
+                </p>
+              ) : null}
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[28rem] text-left text-sm">
+                  <caption className="sr-only">Zur Absage ausgewählte Anlässe</caption>
+                  <thead>
+                    <tr className="border-b">
+                      <th className="py-2 pr-3 font-semibold" scope="col">
+                        Datum
+                      </th>
+                      <th className="py-2 pr-3 font-semibold" scope="col">
+                        Uhrzeit
+                      </th>
+                      <th className="py-2 pr-3 font-semibold" scope="col">
+                        Kategorie
+                      </th>
+                      <th className="py-2 font-semibold" scope="col">
+                        Mannschaften
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cancelEligibleEvents.map((item) => (
+                      <tr className="border-b last:border-0" key={item.id}>
+                        <td className="py-2 pr-3">{formatDate(item.date)}</td>
+                        <td className="py-2 pr-3">
+                          {item.kickoff_time ? item.kickoff_time.slice(0, 5) : "–"}
+                        </td>
+                        <td className="py-2 pr-3">{item.event_type}</td>
+                        <td className="py-2">{item.title}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-5 flex flex-wrap justify-end gap-3">
+                <Button
+                  className="min-h-11"
+                  variant="secondary"
+                  disabled={bulkBusy}
+                  onClick={() => setBulkCancelOpen(false)}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  className="min-h-11"
+                  variant="destructive"
+                  disabled={bulkBusy}
+                  onClick={() => void cancelSelectedEvents()}
+                >
+                  {cancelEligibleEvents.length === 1
+                    ? "1 Anlass absagen"
+                    : `${cancelEligibleEvents.length} Anlässe absagen`}
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
+      ) : null}
+      {bulkDeleteOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bulk-delete-title"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+        >
+          <Card className="w-full max-w-2xl">
+            <CardBody>
+              <h2 id="bulk-delete-title" className="text-xl font-semibold">
+                {deleteEligibleEvents.length === 1
+                  ? "1 Anlass endgültig löschen"
+                  : `${deleteEligibleEvents.length} Anlässe endgültig löschen`}
+              </h2>
+              <p
+                role="alert"
+                className="mt-2 rounded-md border border-status-error p-3 text-sm text-status-error"
+              >
+                Diese Aktion kann nicht rückgängig gemacht werden. Zugehörige Einsätze,
+                Anmeldungen und Arbeitsnachweise werden dauerhaft entfernt.
+              </p>
+              {deleteEligibleEvents.length < selectedEventsForModal.length ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {deleteEligibleEvents.length} von {selectedEventsForModal.length} ausgewählten
+                  Anlässen betroffen — nur abgesagte oder erledigte Anlässe können endgültig
+                  gelöscht werden.
+                </p>
+              ) : null}
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[28rem] text-left text-sm">
+                  <caption className="sr-only">Zum endgültigen Löschen ausgewählte Anlässe</caption>
+                  <thead>
+                    <tr className="border-b">
+                      <th className="py-2 pr-3 font-semibold" scope="col">
+                        Datum
+                      </th>
+                      <th className="py-2 pr-3 font-semibold" scope="col">
+                        Uhrzeit
+                      </th>
+                      <th className="py-2 pr-3 font-semibold" scope="col">
+                        Kategorie
+                      </th>
+                      <th className="py-2 font-semibold" scope="col">
+                        Mannschaften
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deleteEligibleEvents.map((item) => (
+                      <tr className="border-b last:border-0" key={item.id}>
+                        <td className="py-2 pr-3">{formatDate(item.date)}</td>
+                        <td className="py-2 pr-3">
+                          {item.kickoff_time ? item.kickoff_time.slice(0, 5) : "–"}
+                        </td>
+                        <td className="py-2 pr-3">{item.event_type}</td>
+                        <td className="py-2">{item.title}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-5 flex flex-wrap justify-end gap-3">
+                <Button
+                  className="min-h-11"
+                  variant="secondary"
+                  disabled={bulkBusy}
+                  onClick={() => setBulkDeleteOpen(false)}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  className="min-h-11"
+                  variant="destructive"
+                  disabled={bulkBusy}
+                  onClick={() => void deleteSelectedEvents()}
+                >
+                  {deleteEligibleEvents.length === 1
+                    ? "1 Anlass endgültig löschen"
+                    : `${deleteEligibleEvents.length} Anlässe endgültig löschen`}
                 </Button>
               </div>
             </CardBody>
@@ -932,10 +1196,37 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                 >
                   Auswahl aufheben
                 </Button>
-                <Button className="min-h-11" type="button" onClick={() => setBulkPublishOpen(true)}>
-                  {selectedEventIds.size === 1
+                <Button
+                  className="min-h-11"
+                  type="button"
+                  disabled={publishEligibleEvents.length === 0}
+                  onClick={() => setBulkPublishOpen(true)}
+                >
+                  {publishEligibleEvents.length === 1
                     ? "1 Anlass veröffentlichen"
-                    : `Ausgewählte veröffentlichen (${selectedEventIds.size})`}
+                    : `Ausgewählte veröffentlichen (${publishEligibleEvents.length})`}
+                </Button>
+                <Button
+                  className="min-h-11"
+                  variant="destructive"
+                  type="button"
+                  disabled={cancelEligibleEvents.length === 0}
+                  onClick={() => setBulkCancelOpen(true)}
+                >
+                  {cancelEligibleEvents.length === 1
+                    ? "1 Anlass absagen"
+                    : `Ausgewählte absagen (${cancelEligibleEvents.length})`}
+                </Button>
+                <Button
+                  className="min-h-11"
+                  variant="destructive"
+                  type="button"
+                  disabled={deleteEligibleEvents.length === 0}
+                  onClick={() => setBulkDeleteOpen(true)}
+                >
+                  {deleteEligibleEvents.length === 1
+                    ? "1 Anlass endgültig löschen"
+                    : `Ausgewählte endgültig löschen (${deleteEligibleEvents.length})`}
                 </Button>
               </div>
             </div>
@@ -1198,7 +1489,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                           ) : null,
                           <li key={planningEvent.id}>
                             <div className="flex items-start gap-2">
-                              {planningEvent.status === "DRAFT" ? (
+                              {selectableEventStatuses.has(planningEvent.status) ? (
                                 <div className="flex min-h-11 min-w-11 shrink-0 items-center justify-center">
                                   <input
                                     aria-label={`Anlass ${planningEvent.title} am ${formatDate(planningEvent.date)} auswählen`}
@@ -1467,6 +1758,16 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                         ))}
                                                       </ul>
                                                     )}
+                                                    <ShiftVolunteerAssignment
+                                                      shift={shift}
+                                                      eventTitle={planningEvent.title}
+                                                      volunteers={volunteers}
+                                                      timezone={timezone}
+                                                      busy={busy}
+                                                      onAssign={(volunteerId) =>
+                                                        assignShiftVolunteer(shift, volunteerId)
+                                                      }
+                                                    />
                                                   </div>
                                                   {shiftActions[shift.status].length ? (
                                                     <div className="mt-3 flex flex-wrap gap-2">
@@ -1684,5 +1985,61 @@ function ShiftCreateForm({
         </Button>
       </form>
     </details>
+  );
+}
+
+function ShiftVolunteerAssignment({
+  shift,
+  eventTitle,
+  volunteers,
+  timezone,
+  busy,
+  onAssign,
+}: Readonly<{
+  shift: Shift;
+  eventTitle: string;
+  volunteers: FamilyVolunteer[];
+  timezone: string;
+  busy: boolean;
+  onAssign: (volunteerId: string) => Promise<boolean>;
+}>) {
+  const [volunteerId, setVolunteerId] = useState("");
+
+  async function handleAssign() {
+    if (!volunteerId) return;
+    const assigned = await onAssign(volunteerId);
+    if (assigned) setVolunteerId("");
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
+      <label className="grid gap-1 text-xs font-medium" htmlFor={`assign-volunteer-${shift.id}`}>
+        <span>Helfer zuweisen</span>
+        <select
+          className="min-h-11 rounded-md border bg-background px-3 py-1"
+          id={`assign-volunteer-${shift.id}`}
+          value={volunteerId}
+          disabled={busy || volunteers.length === 0}
+          aria-label={`Helfer für Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${eventTitle} zuweisen`}
+          onChange={(event) => setVolunteerId(event.target.value)}
+        >
+          <option value="">Bitte wählen</option>
+          {volunteers.map((volunteer) => (
+            <option key={volunteer.id} value={volunteer.id}>
+              {volunteer.first_name} {volunteer.last_name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <Button
+        className="min-h-11"
+        size="sm"
+        variant="secondary"
+        disabled={busy || !volunteerId}
+        onClick={() => void handleAssign()}
+      >
+        Zuweisen
+      </Button>
+    </div>
   );
 }

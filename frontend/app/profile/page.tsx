@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { AuthCard } from "@/components/auth-card";
 import {
@@ -12,6 +13,7 @@ import {
 
 export default function ProfilePage() {
   const auth = useAuth();
+  const router = useRouter();
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   useEffect(() => {
@@ -20,10 +22,17 @@ export default function ProfilePage() {
         .then(setProfile)
         .catch(() => setMessage("Profil konnte nicht geladen werden."));
   }, [auth.isAuthenticated]);
+  function goBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/");
+    }
+  }
   if (auth.isLoading) return <main className="p-6">Profil wird geladen …</main>;
   if (!auth.isAuthenticated)
     return (
-      <AuthCard title="Anmeldung erforderlich">
+      <AuthCard title="Anmeldung erforderlich" back={{ label: "Zurück", onClick: goBack }}>
         <p>Bitte melde dich an, um dein Helferprofil zu bearbeiten.</p>
         <Link className="mt-3 inline-block underline" href="/login">
           Anmelden
@@ -52,7 +61,7 @@ export default function ProfilePage() {
     }
   }
   return (
-    <AuthCard title="Mein Helferprofil">
+    <AuthCard title="Mein Helferprofil" back={{ label: "Zurück", onClick: goBack }}>
       <form className="flex flex-col gap-4" onSubmit={submit}>
         {(
           [

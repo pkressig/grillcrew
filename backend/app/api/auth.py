@@ -132,11 +132,13 @@ def register_volunteer(
         )
     )
     if payload.child_first_name and payload.child_last_name:
+        child_team_name = (payload.child_team_name or "").strip() or None
         child = FamilyMember(
             family_id=family.id,
             member_type=FamilyMemberType.CHILD,
             first_name=payload.child_first_name.strip(),
             last_name=payload.child_last_name.strip(),
+            team_name=child_team_name,
         )
         db.add(child)
         db.flush()

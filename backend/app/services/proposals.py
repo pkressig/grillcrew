@@ -361,6 +361,94 @@ class ProposalService:
             window for window in self.list_windows(include_past=True) if window.id == window_id
         )
 
+    def delete_confirmed_window(
+        self, window_id: str, kind: str, actor_user_id: uuid.UUID
+    ) -> ProposalWindowResponse:
+        """Undo a Kiosk/Grill confirmation entirely: cancel every real Shift
+        materialised for that kind and reset the override back to unconfirmed
+        "proposal" state, so the admin's card reverts to the editable proposal
+        form exactly as if it had never been confirmed.
+
+        Unlike _materialize_shifts's reconciliation (which only cancels
+        mismatched/duplicate shifts and blocks on signups), every non-cancelled
+        Shift of this event/kind is cancelled unconditionally here — the admin
+        explicitly asked to delete the whole confirmed window, including any
+        real volunteer signups it already collected.
+        """
+        if kind not in {"kiosk", "grill"}:
+            raise ProposalValidationError("unknown proposal type")
+        windows = {window.id: window for window in self.list_windows(include_past=True)}
+        current = windows.get(window_id)
+        if current is None:
+            raise ProposalNotFoundError
+        item = self.db.scalar(
+            select(ProposalOverride)
+            .options(selectinload(ProposalOverride.splits))
+            .where(
+                ProposalOverride.organization_id == self.organization_id,
+                ProposalOverride.window_key == window_id,
+            )
+            .with_for_update()
+        )
+        if item is None:
+            raise ProposalNotFoundError
+        if kind == "kiosk":
+            if not item.kiosk_confirmed:
+                raise ProposalValidationError("Der Kiosk ist für diesen Vorschlag nicht bestätigt")
+            # D-041/D-042: a grill confirmation may only ever exist on top of an
+            # already-confirmed kiosk. Deleting the kiosk confirmation while
+            # grill is still confirmed would leave grill in an invalid state,
+            # so this is blocked rather than cascaded — validate before
+            # mutating any state, mirroring confirm()'s grill branch.
+            if item.grill_confirmed:
+                raise ProposalValidationError(
+                    "Der bestätigte Grill-Einsatz muss zuerst gelöscht werden, bevor der "
+                    "Kiosk-Einsatz gelöscht werden kann"
+                )
+            shift_type = ShiftType.KIOSK
+        else:
+            if not item.grill_confirmed:
+                raise ProposalValidationError("Der Grill ist für diesen Vorschlag nicht bestätigt")
+            shift_type = ShiftType.GRILL
+        event_id = current.covered_event_ids[0]
+        existing_shifts = self.db.scalars(
+            select(Shift)
+            .where(
+                Shift.event_id == event_id,
+                Shift.shift_type == shift_type,
+                Shift.status != ShiftStatus.CANCELLED,
+            )
+            .with_for_update()
+        ).all()
+        affected_signup_count = sum(len(shift.signups) for shift in existing_shifts)
+        for shift in existing_shifts:
+            shift.status = ShiftStatus.CANCELLED
+        if kind == "kiosk":
+            item.kiosk_confirmed = False
+        else:
+            item.grill_confirmed = False
+        for existing_split in [split for split in item.splits if split.shift_type == shift_type]:
+            item.splits.remove(existing_split)
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="PROPOSAL_CONFIRMATION_DELETED",
+                entity_type="proposal_override",
+                entity_id=item.id,
+                event_metadata={
+                    "window_key": window_id,
+                    "kind": kind,
+                    "cancelled_shift_count": len(existing_shifts),
+                    "affected_signup_count": affected_signup_count,
+                },
+            )
+        )
+        self.db.commit()
+        return next(
+            window for window in self.list_windows(include_past=True) if window.id == window_id
+        )
+
     def _materialize_shifts(
         self,
         event_id: uuid.UUID,

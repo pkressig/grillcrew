@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CalendarDays, Clock3, MapPin, Users } from "lucide-react";
+import { CalendarDays, Clock3, MapPin, Users, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { useOrganization } from "@/components/organization-provider";
 import { Badge } from "@/components/ui/badge";
@@ -249,23 +249,27 @@ export function OrganizationLanding() {
           setPendingShiftId(null);
         }}
       >
-        <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-background p-2">
-          <button
-            className="float-right min-h-11 px-3"
-            type="button"
-            onClick={() => {
-              setAccountModal(null);
-              setPendingShiftId(null);
-            }}
-          >
-            Schliessen
-          </button>
+        <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-background p-4">
+          <div className="flex justify-end">
+            <button
+              className="-me-2 -mt-2 flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              type="button"
+              aria-label="Schliessen"
+              onClick={() => {
+                setAccountModal(null);
+                setPendingShiftId(null);
+              }}
+            >
+              <X aria-hidden="true" className="h-5 w-5" />
+            </button>
+          </div>
           <div className={accountModal === "register" ? undefined : "hidden"}>
             {registerOpened ? (
               <RegisterForm
                 organization={organization}
                 onSuccess={handleAccountSuccess}
                 onSwitchToLogin={() => setAccountModal("login")}
+                variant="modal"
               />
             ) : null}
           </div>

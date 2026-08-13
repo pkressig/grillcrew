@@ -62,6 +62,7 @@ export async function registerVolunteer(payload: {
   compensation_preference?: string;
   child_first_name?: string;
   child_last_name?: string;
+  child_team_name?: string;
 }) {
   return request<{ ok: boolean }>("/api/auth/volunteer/register", {
     method: "POST",

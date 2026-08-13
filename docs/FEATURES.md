@@ -732,6 +732,26 @@ interne Notiz und Status eines Helfers direkt in der Familienansicht; ein aktuel
 `INACTIVE`-Helfer bleibt sichtbar und reaktivierbar, neue Verknüpfungen akzeptieren weiterhin nur
 `ACTIVE`-Helfer, andere `INACTIVE`-Helfer sind nicht auswählbar.
 
+**Helfer-primäre Admin-Oberfläche (migration `0031`):** Der Familien-Admin-Bereich zeigt standardmäßig
+eine durchsuchbare Liste aller Helfer der Organisation (`GET .../families/all-volunteers`, inklusive
+`INACTIVE`-und-unverknüpft — bewusst breiter als die bestehende `GET .../families/volunteers`, deren
+ACTIVE-oder-verknüpft-Vertrag für die bestehende Familien-Detail-Verknüpfung unverändert bleibt) mit
+Familien-Badge und Status; eine sekundäre "Familien"-Ansicht bleibt für die familienzentrierte
+Verwaltung erhalten. Admin/Koordination können einen Helfer direkt anlegen
+(`POST .../families/volunteers`, ohne vorherige Familienmitgliedschaft), E-Mail ist jetzt Teil von
+`VolunteerAdminUpdate`/der Bearbeitungsmaske, und ein Helfer-Datensatz zeigt per Rückwärtssuche
+(`GET .../families/volunteers/{id}/family`) seine Familie inklusive `teamName` der Kinder. Ist ein
+Helfer nicht verknüpft, bietet die Oberfläche an, ihn mit einer bestehenden oder neu erstellten
+Familie zu verknüpfen. Für Helfer mit vorhandenem Konto (`user_id` gesetzt) stehen zwei
+Passwort-Aktionen bereit: ein Reset-Link per E-Mail (`POST .../send-password-reset`, nutzt die
+bestehende `PasswordResetService`/Token-Infrastruktur) und ein direktes Setzen durch Admin/Koordination
+(`POST .../set-password`, nutzt dieselbe Argon2-Hashing-/Passwort-Policy-Funktion wie Registrierung und
+Self-Service-Reset und widerruft aktive Refresh-Tokens). Ohne Konto bietet die Oberfläche aktuell
+keine Aktion an; eine eigene "Konto einladen"-Funktion für bestehende Helfer ohne Login bleibt
+Backlog, weil die vorhandene `Invitation`-Infrastruktur ausschließlich Staff-Rollen
+(`StaffMembership`) vergibt und für ein reines Helferkonto ohne Admin-/Koordinationsrechte nicht
+zutreffend ist.
+
 **Akzeptanzkriterien:** Konto-basierte Anmeldungen sind tenant-sicher und serverseitig validiert; private
 Kontaktdaten bleiben geschützt (Familien-Kartei ausschließlich für KOORDINATION/ADMIN); Login/Registrierung
 benötigen keine Staff-Mitgliedschaft und führen nicht in den Adminbereich.
@@ -782,7 +802,7 @@ and difference/status; the Grill view uses the same verified, missing, or manual
 Rows can be explicitly acknowledged or overridden. This workflow never creates or changes proposals,
 confirmed shifts, public signups, or Spielbetrieb data.
 
-Die privaten Planungsansichten zeigen transparente Vorschläge aus dem Spielbetrieb. Kiosk gruppiert Heimspiele in Tagesfenster, zeigt Abdeckung und Teilungsgrund und erlaubt manuelle Zeit-/Öffnungsanpassungen. Grill zeigt nur offene Kioskfenster, Crew-Regel-Kontext und änderbare Grillbedarfs-/Platzvorschläge. Vorschläge bleiben sichtbar von bestätigten Schichten und öffentlichen Anmeldungen getrennt.
+Die privaten Planungsansichten zeigen transparente Vorschläge aus dem Spielbetrieb. Kiosk gruppiert Heimspiele in Tagesfenster, zeigt Abdeckung und Teilungsgrund und erlaubt manuelle Zeit-/Öffnungsanpassungen. Grill zeigt nur offene Kioskfenster, Crew-Regel-Kontext und änderbare Grillbedarfs-/Platzvorschläge. Vorschläge bleiben sichtbar von bestätigten Schichten und öffentlichen Anmeldungen getrennt. Nach dem Bestätigen kann ADMIN/KOORDINATION die Kiosk- oder Grill-Bestätigung eines Fensters über "Einsatz löschen" wieder vollständig rückgängig machen (D-047): alle zugehörigen Schichten samt eventuell bereits bestehender Anmeldungen werden storniert, und das Fenster kehrt in den unbestätigten Vorschlagszustand zurück.
 # OneDrive-Spielplansynchronisation
 
 ADMIN kann im Spielplan-Import eine strikt lesende OneDrive-Quelle konfigurieren, manuell abrufen und einen täglichen Lauf in der Organisationszeitzone planen. Jeder erfolgreiche neue Inhalt endet als bestehender, explizit zu prüfender Importvergleich; es gibt keine automatische Übernahme.

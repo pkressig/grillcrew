@@ -154,7 +154,7 @@ describe("settings admin navigation and role gating", () => {
 
   it("hides the Einstellungen nav link for KOORDINATION", async () => {
     renderAdmin("KOORDINATION", "families");
-    await screen.findByRole("heading", { name: "Familien" });
+    await screen.findByRole("heading", { name: "Helfer" });
     expect(screen.queryByRole("link", { name: "Einstellungen" })).not.toBeInTheDocument();
   });
 
