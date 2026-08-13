@@ -23,9 +23,12 @@ vi.mock("@/lib/proposals", () => ({
   updateGrillShiftSplits,
 }));
 
-const { loadShifts } = vi.hoisted(() => ({ loadShifts: vi.fn() }));
+const { loadShifts, updateShift } = vi.hoisted(() => ({
+  loadShifts: vi.fn(),
+  updateShift: vi.fn(),
+}));
 
-vi.mock("@/lib/planning", () => ({ loadShifts }));
+vi.mock("@/lib/planning", () => ({ loadShifts, updateShift }));
 
 import { GrillPlanningPanel } from "@/app/[org]/admin/grill-planning-panel";
 
@@ -251,6 +254,67 @@ describe("GrillPlanningPanel", () => {
     await screen.findByText("Junioren A – Gäste");
     expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
     expect(screen.queryByText("20:00–22:00 Uhr")).not.toBeInTheDocument();
+  });
+
+  it("lets an admin adjust a confirmed shift's time and headcount via Anpassen", async () => {
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, grill_confirmed: true, covered_event_ids: ["event-1"] }],
+    });
+    loadShifts.mockResolvedValue([
+      {
+        id: "shift-1",
+        event_id: "event-1",
+        starts_at: "2026-08-08T18:00:00Z",
+        ends_at: "2026-08-08T19:00:00Z",
+        required_volunteers: 1,
+        occupied_volunteers: 0,
+        open_places: 1,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "OPEN",
+        sort_order: 0,
+        shift_type: "GRILL",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    updateShift.mockResolvedValue({
+      id: "shift-1",
+      event_id: "event-1",
+      starts_at: "2026-08-08T18:30:00Z",
+      ends_at: "2026-08-08T19:30:00Z",
+      required_volunteers: 2,
+      occupied_volunteers: 0,
+      open_places: 2,
+      signups: [],
+      public_note: null,
+      internal_note: null,
+      status: "OPEN",
+      sort_order: 0,
+      shift_type: "GRILL",
+      assignment_mode: "OPEN_SIGNUP",
+      menu_type: null,
+      crew_suggestion_overridden: false,
+    });
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Junioren A – Gäste");
+    expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Anpassen" }));
+    fireEvent.change(screen.getByLabelText("Helfer"), { target: { value: "2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+
+    await waitFor(() =>
+      expect(updateShift).toHaveBeenCalledWith(
+        "club",
+        "shift-1",
+        expect.objectContaining({ required_volunteers: 2 }),
+      ),
+    );
+    expect(await screen.findByText("20:30–21:30 Uhr")).toBeInTheDocument();
   });
 
   it("switches to the past tab and requests past proposals separately", async () => {

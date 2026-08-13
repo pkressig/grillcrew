@@ -369,16 +369,21 @@ class ProposalService:
         shift_specs: list[tuple[datetime, datetime, int]],
     ) -> None:
         """Create one real Shift per (starts_at, ends_at, required_volunteers)
-        spec, deduping each independently against an already-materialised Shift
-        of the same event/kind/time so a retried confirm never double-creates.
+        spec, reconciling against whatever this event/kind already has
+        materialised so repeated or racing confirm/reconcile calls converge on
+        exactly one Shift per spec instead of accumulating extras:
 
-        Also reconciles against whatever this event/kind previously had
-        materialised: an admin who first confirmed one whole-window shift and
-        later changes the split before re-confirming must not end up with both
-        the old and the new shifts. Any existing non-cancelled shift that no
-        longer matches a current spec is cancelled, unless it already has
-        signups — a real volunteer commitment is never silently dropped, and
-        the caller must resolve that in Anwesenheit first."""
+        - A shift whose time no longer matches any current spec (e.g. an old
+          whole-window shift left over from before a later split change) is
+          "orphaned" and gets cancelled.
+        - Two or more shifts that share the same time (e.g. created by two
+          overlapping confirm requests racing each other) are a duplicate
+          group; all but one are cancelled.
+
+        Either case is blocked instead of silently resolved if it would drop a
+        real volunteer commitment: an orphan with signups, or a duplicate
+        group with signups on more than one of its shifts, raises instead of
+        cancelling — the caller must resolve that in Anwesenheit first."""
         target_ranges = {(starts_at, ends_at) for starts_at, ends_at, _ in shift_specs}
         existing_shifts = self.db.scalars(
             select(Shift)
@@ -387,6 +392,7 @@ class ProposalService:
                 Shift.shift_type == shift_type,
                 Shift.status != ShiftStatus.CANCELLED,
             )
+            .order_by(Shift.starts_at, Shift.id)
             .with_for_update()
         ).all()
         orphaned = [
@@ -400,15 +406,29 @@ class ProposalService:
                 "Bitte zuerst im Bereich Anwesenheit bereinigen, bevor die Aufteilung "
                 "geändert wird."
             )
-        for shift in orphaned:
+        groups_by_range: dict[tuple[datetime, datetime], list[Shift]] = {}
+        for shift in existing_shifts:
+            if shift in orphaned:
+                continue
+            groups_by_range.setdefault((shift.starts_at, shift.ends_at), []).append(shift)
+
+        to_cancel = list(orphaned)
+        kept_by_range: dict[tuple[datetime, datetime], Shift] = {}
+        for range_key, group in groups_by_range.items():
+            with_signups = [shift for shift in group if shift.signups]
+            if len(with_signups) > 1:
+                raise ProposalValidationError(
+                    "Für dieselbe Schichtzeit bestehen mehrere Schichten mit Anmeldungen. "
+                    "Bitte zuerst im Bereich Anwesenheit bereinigen."
+                )
+            keeper = with_signups[0] if with_signups else group[0]
+            kept_by_range[range_key] = keeper
+            to_cancel.extend(shift for shift in group if shift is not keeper)
+
+        for shift in to_cancel:
             shift.status = ShiftStatus.CANCELLED
-        existing_by_range = {
-            (shift.starts_at, shift.ends_at): shift
-            for shift in existing_shifts
-            if shift not in orphaned
-        }
         for starts_at, ends_at, required_volunteers in shift_specs:
-            if (starts_at, ends_at) not in existing_by_range:
+            if (starts_at, ends_at) not in kept_by_range:
                 self.db.add(
                     Shift(
                         event_id=event_id,

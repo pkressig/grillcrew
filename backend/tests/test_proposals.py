@@ -354,6 +354,145 @@ def test_confirm_grill_blocks_reconfirm_when_orphaned_shift_has_signups(
     assert db.committed is False
 
 
+def test_confirm_grill_cancels_duplicate_shifts_sharing_the_same_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two shifts that already exist for the same split time (e.g. created by
+    two racing confirm requests) are a duplicate, not an orphan — reconcile
+    must collapse them to exactly one instead of leaving both untouched
+    because each individually matches a current spec."""
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=True,
+        grill_confirmed=True,
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 15, 30, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.GRILL,
+            sort_order=0,
+        ),
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 15, 30, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.GRILL,
+            sort_order=1,
+        ),
+    ]
+    duplicates = [
+        Shift(
+            event_id=window.covered_event_ids[0],
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 15, 30, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            status=ShiftStatus.OPEN,
+            shift_type=ShiftType.GRILL,
+        ),
+        Shift(
+            event_id=window.covered_event_ids[0],
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 15, 30, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            status=ShiftStatus.OPEN,
+            shift_type=ShiftType.GRILL,
+        ),
+        Shift(
+            event_id=window.covered_event_ids[0],
+            starts_at=datetime(2026, 8, 2, 15, 30, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            status=ShiftStatus.OPEN,
+            shift_type=ShiftType.GRILL,
+        ),
+        Shift(
+            event_id=window.covered_event_ids[0],
+            starts_at=datetime(2026, 8, 2, 15, 30, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            status=ShiftStatus.OPEN,
+            shift_type=ShiftType.GRILL,
+        ),
+    ]
+    db = _ConfirmDb([override], scalars_responses=[cast(list[object], duplicates)])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    service.confirm("window-1", "grill", uuid4())
+
+    cancelled = [shift for shift in duplicates if shift.status == ShiftStatus.CANCELLED]
+    kept = [shift for shift in duplicates if shift.status == ShiftStatus.OPEN]
+    assert len(cancelled) == 2
+    assert len(kept) == 2
+    assert {(shift.starts_at.hour, shift.ends_at.hour) for shift in kept} == {(11, 15), (15, 20)}
+    # No new shifts created: one already-OPEN shift per range was kept as-is.
+    assert [item for item in db.added if isinstance(item, Shift)] == []
+    assert db.committed is True
+
+
+def test_confirm_grill_blocks_when_duplicate_shifts_both_have_signups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Two duplicate shifts for the same time slot that BOTH already have real
+    signups cannot be silently collapsed into one — that would drop a
+    volunteer's commitment no matter which duplicate is kept."""
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=True,
+        grill_confirmed=True,
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.GRILL,
+            sort_order=0,
+        ),
+    ]
+    duplicate_a = Shift(
+        event_id=window.covered_event_ids[0],
+        starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+        ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+        required_volunteers=1,
+        status=ShiftStatus.OPEN,
+        shift_type=ShiftType.GRILL,
+    )
+    duplicate_a.signups = [
+        Signup(shift_id=uuid4(), volunteer_id=uuid4(), public_name_snapshot="Helfer A")
+    ]
+    duplicate_b = Shift(
+        event_id=window.covered_event_ids[0],
+        starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+        ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+        required_volunteers=1,
+        status=ShiftStatus.OPEN,
+        shift_type=ShiftType.GRILL,
+    )
+    duplicate_b.signups = [
+        Signup(shift_id=uuid4(), volunteer_id=uuid4(), public_name_snapshot="Helfer B")
+    ]
+    db = _ConfirmDb([override], scalars_responses=[[duplicate_a, duplicate_b]])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    with pytest.raises(ProposalValidationError, match="dieselbe Schichtzeit"):
+        service.confirm("window-1", "grill", uuid4())
+
+    assert duplicate_a.status == ShiftStatus.OPEN
+    assert duplicate_b.status == ShiftStatus.OPEN
+    assert db.added == []
+    assert db.committed is False
+
+
 class _SplitsDb:
     """Fake session for update_grill_shift_splits: one scalar() for the override
     lookup, and add()/commit() bookkeeping like the other fake DBs in this file."""
