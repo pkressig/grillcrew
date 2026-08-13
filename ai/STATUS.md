@@ -47,8 +47,8 @@
 
 <!-- GENERATED:START -->
 - Current branch: main
-- Current commit: 6bf5362e9d479f5e52e0aba4d11aad839138b629
-- Working tree state: dirty (10 changed path(s))
-- Latest commit subject: Merge pull request #33 from pkressig/codex/paperclip-claude-token-mode
-- Latest update timestamp: 2026-07-23T15:03:51.362Z
+- Current commit: a0d259cf960bfbd028b302af339afb89cd0b4c38
+- Working tree state: dirty (14 changed path(s))
+- Latest commit subject: fix: helper live-flow, family Kartei, kiosk/grill release status, import retry-safety
+- Latest update timestamp: 2026-08-13T08:23:23.279Z
 <!-- GENERATED:END -->
