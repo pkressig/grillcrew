@@ -255,6 +255,10 @@ class AdminShiftResponse(ShiftResponse):  # type: ignore[explicit-any]
     signups: list[AdminSignupResponse]
 
 
+class EventWithShiftsResponse(EventResponse):  # type: ignore[explicit-any]
+    shifts: list[AdminShiftResponse]
+
+
 class PublicShiftResponse(BaseModel):  # type: ignore[explicit-any]
     id: uuid.UUID
     starts_at: datetime

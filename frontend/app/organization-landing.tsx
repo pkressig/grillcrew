@@ -49,11 +49,28 @@ export function OrganizationLanding() {
   );
   const [volunteerProfile, setVolunteerProfile] = useState<VolunteerProfile | null>(null);
   const [accountModal, setAccountModal] = useState<"login" | "register" | null>(null);
+  const [pendingShiftId, setPendingShiftId] = useState<string | null>(null);
+  const [registerOpened, setRegisterOpened] = useState(false);
+
+  function openRegister() {
+    setRegisterOpened(true);
+    setAccountModal("register");
+  }
 
   function openSignup(shiftId: string) {
     setSelectedShift(shiftId);
     setSignupError(null);
     setSuccess(null);
+  }
+
+  function handleAccountSuccess() {
+    setAccountModal(null);
+    void auth.refresh().then(() => {
+      if (pendingShiftId) {
+        openSignup(pendingShiftId);
+        setPendingShiftId(null);
+      }
+    });
   }
 
   async function submitSignup(event: FormEvent<HTMLFormElement>, shiftId: string) {
@@ -93,7 +110,9 @@ export function OrganizationLanding() {
             "Zu viele Anfragen. Bitte warte einen kurzen Moment und versuche es nochmals.",
           );
         } else if (err.message === "csrf validation failed") {
-          setSignupError("Die Sitzung ist abgelaufen. Bitte lade die Seite neu und versuche es nochmals.");
+          setSignupError(
+            "Die Sitzung ist abgelaufen. Bitte lade die Seite neu und versuche es nochmals.",
+          );
         } else if (err.statusCode === 422) {
           setSignupError(`Anmeldung konnte nicht geprüft werden: ${err.message}`);
         } else {
@@ -193,14 +212,20 @@ export function OrganizationLanding() {
                 <a
                   className={cn(buttonVariants({ variant: "secondary" }), "min-h-11")}
                   href="#login"
-                  onClick={(event) => { event.preventDefault(); setAccountModal("login"); }}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    setAccountModal("login");
+                  }}
                 >
                   Login
                 </a>
                 <a
                   className={cn(buttonVariants(), "min-h-11")}
                   href="#register"
-                  onClick={(event) => { event.preventDefault(); setAccountModal("register"); }}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    openRegister();
+                  }}
                 >
                   Registrieren
                 </a>
@@ -209,14 +234,46 @@ export function OrganizationLanding() {
           </nav>
         </div>
       </header>
-      {accountModal ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" aria-label={accountModal === "login" ? "Helfer-Login" : "Helfer-Registrierung"}>
-          <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-background p-2">
-            <button className="float-right min-h-11 px-3" type="button" onClick={() => setAccountModal(null)}>Schliessen</button>
-            {accountModal === "register" ? <RegisterForm organization={organization} /> : <VolunteerLogin onSuccess={() => { setAccountModal(null); void auth.refresh(); }} />}
+      <div
+        className={cn(
+          "fixed inset-0 z-50 items-center justify-center bg-black/50 p-4",
+          accountModal ? "flex" : "hidden",
+        )}
+        role="dialog"
+        aria-modal="true"
+        aria-hidden={!accountModal}
+        aria-label={accountModal === "register" ? "Helfer-Registrierung" : "Helfer-Login"}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          setAccountModal(null);
+          setPendingShiftId(null);
+        }}
+      >
+        <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-background p-2">
+          <button
+            className="float-right min-h-11 px-3"
+            type="button"
+            onClick={() => {
+              setAccountModal(null);
+              setPendingShiftId(null);
+            }}
+          >
+            Schliessen
+          </button>
+          <div className={accountModal === "register" ? undefined : "hidden"}>
+            {registerOpened ? (
+              <RegisterForm
+                organization={organization}
+                onSuccess={handleAccountSuccess}
+                onSwitchToLogin={() => setAccountModal("login")}
+              />
+            ) : null}
+          </div>
+          <div className={accountModal === "register" ? "hidden" : undefined}>
+            <VolunteerLogin onSuccess={handleAccountSuccess} onSwitchToRegister={openRegister} />
           </div>
         </div>
-      ) : null}
+      </div>
 
       <div className="mx-auto max-w-4xl space-y-6 px-4 py-6 sm:px-6 sm:py-8">
         <PageHeader
@@ -371,7 +428,8 @@ export function OrganizationLanding() {
                               disabled={shift.status !== "OPEN" || full}
                               onClick={() => {
                                 if (!auth.isAuthenticated) {
-                                  window.location.href = `/login?org=${encodeURIComponent(organization.slug)}&next=/${encodeURIComponent(organization.slug)}`;
+                                  setPendingShiftId(shift.id);
+                                  setAccountModal("login");
                                   return;
                                 }
                                 openSignup(shift.id);
@@ -488,16 +546,62 @@ export function OrganizationLanding() {
   );
 }
 
-function VolunteerLogin({ onSuccess }: Readonly<{ onSuccess: () => void }>) {
+function VolunteerLogin({
+  onSuccess,
+  onSwitchToRegister,
+}: Readonly<{ onSuccess: () => void; onSwitchToRegister: () => void }>) {
   const [error, setError] = useState<string | null>(null);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const response = await fetch(`${apiBaseUrl}/api/auth/login`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: data.get("email"), password: data.get("password") }) });
-    if (!response.ok) { setError("E-Mail-Adresse oder Passwort ist ungültig."); return; }
+    const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: data.get("email"), password: data.get("password") }),
+    });
+    if (!response.ok) {
+      setError("E-Mail-Adresse oder Passwort ist ungültig.");
+      return;
+    }
     onSuccess();
   }
-  return <form className="flex flex-col gap-4 p-5" onSubmit={submit}><h2 className="text-xl font-bold">Helfer-Login</h2><label>E-Mail<input className="mt-1 min-h-11 w-full rounded border px-3" name="email" type="email" required /></label><label>Passwort<input className="mt-1 min-h-11 w-full rounded border px-3" name="password" type="password" required /></label>{error ? <p role="alert" className="text-status-error">{error}</p> : null}<button className="min-h-11 rounded bg-primary px-4 text-primary-foreground">Anmelden</button></form>;
+  return (
+    <form className="flex flex-col gap-4 p-5" onSubmit={submit}>
+      <h2 className="text-xl font-bold">Helfer-Login</h2>
+      <label>
+        E-Mail
+        <input
+          className="mt-1 min-h-11 w-full rounded border px-3"
+          name="email"
+          type="email"
+          required
+        />
+      </label>
+      <label>
+        Passwort
+        <input
+          className="mt-1 min-h-11 w-full rounded border px-3"
+          name="password"
+          type="password"
+          required
+        />
+      </label>
+      {error ? (
+        <p role="alert" className="text-status-error">
+          {error}
+        </p>
+      ) : null}
+      <button className="min-h-11 rounded bg-primary px-4 text-primary-foreground">Anmelden</button>
+      <button
+        type="button"
+        className="min-h-11 text-center text-sm underline"
+        onClick={onSwitchToRegister}
+      >
+        Noch kein Konto? Jetzt registrieren
+      </button>
+    </form>
+  );
 }
 
 function formatTime(value: string, timeZone: string) {

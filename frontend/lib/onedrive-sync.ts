@@ -27,6 +27,21 @@ export type OneDriveConfig = {
 };
 export type OneDriveConfigInput = Omit<OneDriveConfig, "id" | "next_run_at" | "last_run">;
 const base = (org: string) => `${apiBaseUrl}/api/admin/${encodeURIComponent(org)}/onedrive-sync`;
+// A network-level failure (connection dropped, CORS rejection, DNS failure, offline) makes
+// fetch() itself reject with a raw, untranslated browser error (e.g. "Failed to fetch" in
+// Chrome, "NetworkError when attempting to fetch resource." in Firefox). Without this guard
+// that raw TypeError propagated straight to the admin UI verbatim; catching it here and
+// raising an honest, German, actionable message instead keeps the error state readable.
+async function fetchOrThrow(input: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, { credentials: "include", ...init });
+  } catch {
+    throw new Error(
+      "Die Verbindung zum Server ist fehlgeschlagen. Bitte Internetverbindung prüfen und " +
+        "erneut versuchen.",
+    );
+  }
+}
 async function parse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail = "OneDrive-Synchronisation fehlgeschlagen.";
@@ -39,17 +54,15 @@ async function parse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 export const loadOneDriveConfig = (org: string) =>
-  fetch(base(org), { credentials: "include" }).then(parse<OneDriveConfig | null>);
+  fetchOrThrow(base(org)).then(parse<OneDriveConfig | null>);
 export const saveOneDriveConfig = (org: string, input: OneDriveConfigInput) =>
-  fetch(base(org), {
+  fetchOrThrow(base(org), {
     method: "PUT",
-    credentials: "include",
     headers: { "Content-Type": "application/json", ...csrfHeaders() },
     body: JSON.stringify(input),
   }).then(parse<OneDriveConfig>);
 export const syncOneDriveNow = (org: string) =>
-  fetch(`${base(org)}/sync`, {
+  fetchOrThrow(`${base(org)}/sync`, {
     method: "POST",
-    credentials: "include",
     headers: { ...csrfHeaders() },
   }).then(parse<OneDriveRun>);

@@ -13,7 +13,7 @@ from app.api import public
 from app.db.session import get_db
 from app.main import app
 from app.models.organization import Organization
-from app.models.planning import ShiftStatus, SignupStatus
+from app.models.planning import ShiftStatus, ShiftType, SignupStatus
 
 
 def test_public_plan_is_unauthenticated_sorted_and_public_safe(
@@ -40,6 +40,13 @@ def test_public_plan_is_unauthenticated_sorted_and_public_safe(
                 internal_note="cancelled secret",
                 status=ShiftStatus.CANCELLED,
             ),
+            _shift(
+                uuid4(),
+                3,
+                "14:00",
+                internal_note="fixed-assignment kiosk roster",
+                shift_type=ShiftType.KIOSK,
+            ),
         ],
     )
     captured: list[UUID] = []
@@ -63,6 +70,8 @@ def test_public_plan_is_unauthenticated_sorted_and_public_safe(
     assert response.status_code == 200
     assert captured == [organization.id]
     body = response.json()
+    # Only the open (non-cancelled) GRILL shifts belong on the public page; the
+    # fixed-assignment KIOSK shift on the same event must never be exposed here.
     assert [shift["id"] for shift in body["events"][0]["shifts"]] == [
         str(earlier_id),
         str(later_id),
@@ -75,6 +84,7 @@ def test_public_plan_is_unauthenticated_sorted_and_public_safe(
         "+41 79",
         "organization_id",
         "event_id",
+        "fixed-assignment kiosk roster",
     ):
         assert forbidden not in serialized
     assert body["events"][0]["shifts"][0]["occupied_volunteers"] == 1
@@ -135,6 +145,7 @@ def _shift(
     hour: str,
     internal_note: str,
     status: ShiftStatus = ShiftStatus.OPEN,
+    shift_type: ShiftType = ShiftType.GRILL,
 ) -> SimpleNamespace:
     start = datetime.fromisoformat(f"2099-08-01T{hour}:00+00:00")
     return SimpleNamespace(
@@ -145,6 +156,7 @@ def _shift(
         public_note="Schürze mitbringen",
         internal_note=internal_note,
         status=status,
+        shift_type=shift_type,
         sort_order=order,
         signups=[
             SimpleNamespace(status=SignupStatus.ACTIVE, public_name_snapshot="Mia Muster"),

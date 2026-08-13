@@ -2,13 +2,21 @@
 
 ## Manual Status
 
-- Current feature: F009 - Attendance
-- Current step: F009 Step 2 merged in PR #31
-- Last merged feature: F009 Step 2 - Full attendance outcomes and audit trail (PR #31)
-- Current phase: Post-merge synchronization complete; ready to define the next bounded F009 step
+- Current feature: F016 - Helferkonto und konto-basierte Einsatzanmeldung, plus begleitende
+  Familien-Kartei-, Kiosk/Grill-Freigabe- und Spielplan-Import-Korrekturen
+- Current step: Dieses Release bringt die Familien-Kartei mit editierbaren Helferdaten und
+  INACTIVE-Reaktivierung, den behobenen öffentlichen Modal-/Redirect-Fehler, drei Korrekturen am
+  Kiosk/Grill-Freigabeworkflow (u. a. ein Leck bestätigter Kiosk-Schichten auf der öffentlichen
+  Seite), sowie eine retry-sichere, idempotente Spielplan-Import-Route auf `main`.
+- Last merged feature: siehe „Current step" — Details und Review-Historie in
+  `ai/incoming/claude-latest.md` und `docs/FEATURES.md`.
+- Current phase: Admin Visual Application Phase 2 released; direct ChatGPT–PowerShell handoffs are active
 - Active blockers: A full isolated Paperclip database restore drill requires a compatible `psql` client not included in the embedded Windows runtime
-- Next intended action: Define the next bounded F009 step with the Product Owner before creating new implementation work
-- Paperclip control plane: Configured locally as GrillCrew Product Development with five governed roles, pinned/local skills, isolated worktrees, sequential Claude/AGY/board review policy, and event-driven execution. Token-conservation mode is active: GrillCrew Codex is paused; the existing Product Orchestrator runs on Claude Sonnet 4.6 at low effort and 25 maximum turns; GrillCrew Claude Engineer and the independent Claude reviewer use Sonnet 4.6 at low effort and 35 maximum turns. Governed smoke test PKA-8 completed all stages successfully. The required instance-level `enableIsolatedWorkspaces` gate is enabled, and PKA-13 proves real `git_worktree` execution on a `codex/PKA-13-*` branch outside the shared primary checkout.
+- Next intended action: Ein echter End-to-End-Test mit einem frischen Helferkonto im Live-System
+  (Registrierung, Login, Anmeldung), danach den nächsten Helfer-/Familien-Workflow als begrenzten
+  Vertrag definieren. Nach dem Merge `npm run ai:prepare` ausführen, um diesen Generated-Status-Block
+  zu aktualisieren.
+- Active workflow: Paperclip is intentionally paused for product development. Codex, Claude, and AGY are started manually from PowerShell; each must write its final report to the file-based return channel defined in `ai/DIRECT_HANDOFF.md`. Local Ollama remains optional for bounded, low-risk analysis.
 - Paperclip governance automation: Three read-only routines are active (daily workflow triage, weekly context reconciliation, weekly cost/review audit); manual routine smoke test PKA-10 completed successfully
 - Production frontend URL: Not configured in repository; see Vercel project settings
 - Production backend URL: Not configured in repository; see Render service settings
@@ -38,9 +46,9 @@
 ## Generated Status
 
 <!-- GENERATED:START -->
-- Current branch: codex/paperclip-claude-token-mode
-- Current commit: 0cb91122e99c116859e91f2b98a07b50b715e095
-- Working tree state: clean
-- Latest commit subject: Configure Claude token-conservation mode
-- Latest update timestamp: 2026-07-23T12:57:27.735Z
+- Current branch: main
+- Current commit: 6bf5362e9d479f5e52e0aba4d11aad839138b629
+- Working tree state: dirty (10 changed path(s))
+- Latest commit subject: Merge pull request #33 from pkressig/codex/paperclip-claude-token-mode
+- Latest update timestamp: 2026-07-23T15:03:51.362Z
 <!-- GENERATED:END -->

@@ -46,7 +46,7 @@ Signs up for shifts, optionally manages personal assignments, and may contribute
 3. Organization Admin creates events and shifts.
 4. Organization Admin publishes the public plan.
 5. Volunteers open the organization's public plan through its domain, subdomain, slug, or other resolved route.
-6. Volunteers sign up without an account and receive a management link.
+6. Volunteers register or log in with a volunteer account to sign up and receive a management link.
 7. Organization Staff tracks attendance and operational issues.
 8. Volunteers or Admin submit actual worked time.
 9. Admin confirms work records, family credits, and payouts.
@@ -75,7 +75,7 @@ Signs up for shifts, optionally manages personal assignments, and may contribute
 - platform operator access
 - organization admin access
 - organization staff roles
-- optional volunteer account later
+- volunteer account required for public signup (registration or login)
 - backend-enforced permission guards
 - one user may have different roles in different organizations
 
@@ -91,7 +91,7 @@ Signs up for shifts, optionally manages personal assignments, and may contribute
 
 - public organization-specific plan
 - open shift display
-- signup without account
+- signup requires a volunteer account (registration or login)
 - immediate place reservation
 - contact and compensation choice
 - organization-specific anti-abuse controls

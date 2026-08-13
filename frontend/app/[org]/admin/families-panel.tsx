@@ -12,16 +12,26 @@ import {
   loadFamilyMembers,
   loadFamilyVolunteers,
   updateFamilyMemberVolunteer,
+  updateFamilyVolunteer,
   type Family,
   type FamilyListItem,
   type FamilyMember,
   type FamilyMemberType,
   type FamilyVolunteer,
+  type FamilyVolunteerUpdate,
+  type VolunteerCompensation,
+  type VolunteerStatus,
 } from "@/lib/families";
 import { cn } from "@/lib/utils";
 
 const control = "min-h-11 w-full rounded-md border bg-background px-3 py-2";
 const labels: Record<FamilyMemberType, string> = { CHILD: "Kind", HELPER: "Helfer" };
+const compensationLabels: Record<VolunteerCompensation, string> = {
+  WORK_HOURS: "Sollstunden",
+  VOLUNTARY: "Unentgeltlich",
+  PAYOUT: "Bezahlt",
+};
+const statusLabels: Record<VolunteerStatus, string> = { ACTIVE: "Aktiv", INACTIVE: "Inaktiv" };
 
 function queryFamily() {
   return typeof window === "undefined"
@@ -551,16 +561,35 @@ function FamilyDetail({
                       </Badge>
                     </div>
                     {member.member_type === "HELPER" ? (
-                      <div className="grid gap-2 border-t pt-3">
-                        <p className="text-sm font-medium">
-                          {member.volunteer_id
-                            ? `Verknüpft mit ${
-                                volunteers.find((item) => item.id === member.volunteer_id)
-                                  ? `${volunteers.find((item) => item.id === member.volunteer_id)!.first_name} ${volunteers.find((item) => item.id === member.volunteer_id)!.last_name}`
-                                  : "Volunteer"
-                              }`
-                            : "Noch nicht mit einem Volunteer verknüpft"}
-                        </p>
+                      <div className="grid gap-3 border-t pt-3">
+                        {member.volunteer_id ? (
+                          volunteersLoading ? (
+                            <p className="text-sm text-muted-foreground" role="status">
+                              Helferdaten werden geladen …
+                            </p>
+                          ) : volunteers.find((item) => item.id === member.volunteer_id) ? (
+                            <VolunteerKartei
+                              org={org}
+                              volunteer={volunteers.find(
+                                (item) => item.id === member.volunteer_id,
+                              )!}
+                              childMembers={members?.filter((m) => m.member_type === "CHILD") ?? []}
+                              onSaved={(updated) =>
+                                setVolunteers((current) =>
+                                  current.map((item) => (item.id === updated.id ? updated : item)),
+                                )
+                              }
+                            />
+                          ) : (
+                            <p className="text-sm font-medium">
+                              Verknüpft mit einem nicht mehr aktiven Volunteer
+                            </p>
+                          )
+                        ) : (
+                          <p className="text-sm font-medium">
+                            Noch nicht mit einem Volunteer verknüpft
+                          </p>
+                        )}
                         {volunteersLoading ? (
                           <p className="text-sm text-muted-foreground" role="status">
                             Volunteers werden geladen …
@@ -583,59 +612,66 @@ function FamilyDetail({
                             Keine aktiven Volunteers verfügbar.
                           </p>
                         ) : (
-                          <>
-                            <label
-                              className="grid gap-1 text-sm"
-                              htmlFor={`volunteer-search-${member.id}`}
-                            >
-                              Volunteer suchen
-                              <input
-                                className={control}
-                                id={`volunteer-search-${member.id}`}
-                                value={volunteerSearch[member.id] ?? ""}
-                                onChange={(event) =>
-                                  setVolunteerSearch((current) => ({
-                                    ...current,
-                                    [member.id]: event.target.value,
-                                  }))
-                                }
-                              />
-                            </label>
-                            <label
-                              className="grid gap-1 text-sm"
-                              htmlFor={`volunteer-link-${member.id}`}
-                            >
-                              Volunteer für {member.first_name} {member.last_name}
-                              <select
-                                className={control}
-                                id={`volunteer-link-${member.id}`}
-                                value={member.volunteer_id ?? ""}
-                                disabled={busy}
-                                onChange={(event) =>
-                                  void saveVolunteer(member, event.target.value || null)
-                                }
+                          <details>
+                            <summary className="cursor-pointer text-sm font-medium">
+                              Verknüpfung ändern
+                            </summary>
+                            <div className="mt-2 grid gap-2">
+                              <label
+                                className="grid gap-1 text-sm"
+                                htmlFor={`volunteer-search-${member.id}`}
                               >
-                                <option value="">Keine Verknüpfung</option>
-                                {volunteers
-                                  .filter(
-                                    (item) =>
-                                      item.id === member.volunteer_id ||
-                                      `${item.first_name} ${item.last_name}`
-                                        .toLocaleLowerCase()
-                                        .includes(
-                                          (volunteerSearch[member.id] ?? "")
-                                            .trim()
-                                            .toLocaleLowerCase(),
-                                        ),
-                                  )
-                                  .map((item) => (
-                                    <option key={item.id} value={item.id}>
-                                      {item.first_name} {item.last_name}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                          </>
+                                Volunteer suchen
+                                <input
+                                  className={control}
+                                  id={`volunteer-search-${member.id}`}
+                                  value={volunteerSearch[member.id] ?? ""}
+                                  onChange={(event) =>
+                                    setVolunteerSearch((current) => ({
+                                      ...current,
+                                      [member.id]: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label
+                                className="grid gap-1 text-sm"
+                                htmlFor={`volunteer-link-${member.id}`}
+                              >
+                                Volunteer für {member.first_name} {member.last_name}
+                                <select
+                                  className={control}
+                                  id={`volunteer-link-${member.id}`}
+                                  value={member.volunteer_id ?? ""}
+                                  disabled={busy}
+                                  onChange={(event) =>
+                                    void saveVolunteer(member, event.target.value || null)
+                                  }
+                                >
+                                  <option value="">Keine Verknüpfung</option>
+                                  {volunteers
+                                    .filter(
+                                      (item) =>
+                                        (item.status === "ACTIVE" ||
+                                          item.id === member.volunteer_id) &&
+                                        (item.id === member.volunteer_id ||
+                                          `${item.first_name} ${item.last_name}`
+                                            .toLocaleLowerCase()
+                                            .includes(
+                                              (volunteerSearch[member.id] ?? "")
+                                                .trim()
+                                                .toLocaleLowerCase(),
+                                            )),
+                                    )
+                                    .map((item) => (
+                                      <option key={item.id} value={item.id}>
+                                        {item.first_name} {item.last_name}
+                                      </option>
+                                    ))}
+                                </select>
+                              </label>
+                            </div>
+                          </details>
                         )}
                       </div>
                     ) : null}
@@ -647,5 +683,204 @@ function FamilyDetail({
         )}
       </section>
     </div>
+  );
+}
+
+function VolunteerKartei({
+  org,
+  volunteer,
+  childMembers,
+  onSaved,
+}: Readonly<{
+  org: string;
+  volunteer: FamilyVolunteer;
+  childMembers: FamilyMember[];
+  onSaved: (volunteer: FamilyVolunteer) => void;
+}>) {
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const payload: FamilyVolunteerUpdate = {
+      first_name: String(data.get("first_name") ?? "").trim(),
+      last_name: String(data.get("last_name") ?? "").trim(),
+      phone: String(data.get("phone") ?? "").trim(),
+      compensation_preference: data.get("compensation_preference") as VolunteerCompensation,
+      compensation_family_member_id:
+        String(data.get("compensation_family_member_id") ?? "") || null,
+      internal_note: String(data.get("internal_note") ?? "").trim() || null,
+      status: data.get("status") as VolunteerStatus,
+    };
+    if (!payload.first_name || !payload.last_name) {
+      setError("Vorname und Nachname sind erforderlich.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await updateFamilyVolunteer(org, volunteer.id, payload));
+      setEditing(false);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Die Helferdaten konnten nicht gespeichert werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div className="grid gap-1 rounded-md border bg-background p-3 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-semibold">
+            {volunteer.first_name} {volunteer.last_name}
+          </p>
+          <div className="flex items-center gap-2">
+            {volunteer.status === "INACTIVE" ? <Badge variant="neutral">Inaktiv</Badge> : null}
+            <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+              Bearbeiten
+            </Button>
+          </div>
+        </div>
+        <p className="text-muted-foreground">
+          {volunteer.phone} · {volunteer.email}
+        </p>
+        <p className="text-muted-foreground">
+          Vergütung: {compensationLabels[volunteer.compensation_preference]}
+          {volunteer.compensation_family_member_id
+            ? ` für ${
+                childMembers.find((child) => child.id === volunteer.compensation_family_member_id)
+                  ?.first_name ?? "ein Kind"
+              }`
+            : ""}
+        </p>
+        {volunteer.internal_note ? (
+          <p className="text-muted-foreground">Notiz: {volunteer.internal_note}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <form className="grid gap-3 rounded-md border bg-background p-3" onSubmit={submit}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="grid gap-1 text-sm" htmlFor={`kartei-first-${volunteer.id}`}>
+          Vorname
+          <input
+            className={control}
+            id={`kartei-first-${volunteer.id}`}
+            name="first_name"
+            defaultValue={volunteer.first_name}
+            maxLength={100}
+            required
+            disabled={busy}
+          />
+        </label>
+        <label className="grid gap-1 text-sm" htmlFor={`kartei-last-${volunteer.id}`}>
+          Nachname
+          <input
+            className={control}
+            id={`kartei-last-${volunteer.id}`}
+            name="last_name"
+            defaultValue={volunteer.last_name}
+            maxLength={100}
+            required
+            disabled={busy}
+          />
+        </label>
+      </div>
+      <label className="grid gap-1 text-sm" htmlFor={`kartei-phone-${volunteer.id}`}>
+        Telefon
+        <input
+          className={control}
+          id={`kartei-phone-${volunteer.id}`}
+          name="phone"
+          defaultValue={volunteer.phone}
+          maxLength={50}
+          required
+          disabled={busy}
+        />
+      </label>
+      <p className="text-sm text-muted-foreground">E-Mail: {volunteer.email}</p>
+      <label className="grid gap-1 text-sm" htmlFor={`kartei-compensation-${volunteer.id}`}>
+        Einsatzvergütung
+        <select
+          className={control}
+          id={`kartei-compensation-${volunteer.id}`}
+          name="compensation_preference"
+          defaultValue={volunteer.compensation_preference}
+          disabled={busy}
+        >
+          {(Object.keys(compensationLabels) as VolunteerCompensation[]).map((value) => (
+            <option key={value} value={value}>
+              {compensationLabels[value]}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-1 text-sm" htmlFor={`kartei-child-${volunteer.id}`}>
+        Kind für Vergütung (optional)
+        <select
+          className={control}
+          id={`kartei-child-${volunteer.id}`}
+          name="compensation_family_member_id"
+          defaultValue={volunteer.compensation_family_member_id ?? ""}
+          disabled={busy}
+        >
+          <option value="">Kein Kind</option>
+          {childMembers.map((child) => (
+            <option key={child.id} value={child.id}>
+              {child.first_name} {child.last_name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="grid gap-1 text-sm" htmlFor={`kartei-note-${volunteer.id}`}>
+        Interne Notiz
+        <textarea
+          className={control}
+          id={`kartei-note-${volunteer.id}`}
+          name="internal_note"
+          defaultValue={volunteer.internal_note ?? ""}
+          rows={2}
+          disabled={busy}
+        />
+      </label>
+      <label className="grid gap-1 text-sm" htmlFor={`kartei-status-${volunteer.id}`}>
+        Status
+        <select
+          className={control}
+          id={`kartei-status-${volunteer.id}`}
+          name="status"
+          defaultValue={volunteer.status}
+          disabled={busy}
+        >
+          {(Object.keys(statusLabels) as VolunteerStatus[]).map((value) => (
+            <option key={value} value={value}>
+              {statusLabels[value]}
+            </option>
+          ))}
+        </select>
+      </label>
+      {error ? (
+        <p className="text-sm text-status-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={busy}>
+          {busy ? "Wird gespeichert …" : "Speichern"}
+        </Button>
+        <Button type="button" variant="secondary" disabled={busy} onClick={() => setEditing(false)}>
+          Abbrechen
+        </Button>
+      </div>
+    </form>
   );
 }

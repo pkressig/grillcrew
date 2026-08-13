@@ -113,15 +113,19 @@ function overviewFetch(role: "ADMIN" | "KOORDINATION" | "KIOSK" = "ADMIN", empty
             ],
       );
     if (url.endsWith("/seasons/season-1/events")) return Response.json(events);
-    if (url.endsWith("/events/soon/shifts"))
-      return Response.json([
-        shift("past", "soon", "2026-07-20T08:00:00Z", "2026-07-20T10:00:00Z", 0, true),
-        shift("next", "soon", "2026-08-02T08:00:00Z", "2026-08-02T10:00:00Z", 2),
-      ]);
-    if (url.endsWith("/events/later/shifts"))
-      return Response.json([
-        shift("later", "later", "2026-08-10T08:00:00Z", "2026-08-10T10:00:00Z", 1),
-      ]);
+    if (url.endsWith("/seasons/season-1/events-with-shifts"))
+      return Response.json(
+        events.map((event) => ({
+          ...event,
+          shifts:
+            event.id === "soon"
+              ? [
+                  shift("past", "soon", "2026-07-20T08:00:00Z", "2026-07-20T10:00:00Z", 0, true),
+                  shift("next", "soon", "2026-08-02T08:00:00Z", "2026-08-02T10:00:00Z", 2),
+                ]
+              : [shift("later", "later", "2026-08-10T08:00:00Z", "2026-08-10T10:00:00Z", 1)],
+        })),
+      );
     if (url.endsWith("/families"))
       return Response.json(empty ? [] : [{ id: "family-1" }, { id: "family-2" }]);
     return new Response(null, { status: 404 });

@@ -146,7 +146,7 @@ Medium.
 
 Steps 1, 2, 2.1, 3, 3.1, and 4 are merged on `main`: the organization public route
 presents upcoming published events and non-cancelled shifts through a public-safe API, visitors can
-reserve an open place without an account, and ADMIN/KOORDINATION can see active occupancy plus
+reserve an open place (superseded — public signup now requires a volunteer account, see F008), and ADMIN/KOORDINATION can see active occupancy plus
 volunteer contact details in the authenticated planning cards. New volunteers receive a hashed-at-rest
 personal management link where they can view their own submitted details and cancel before the
 calendar-day deadline. Public contacts remain private and cancelled signups are excluded from active
@@ -320,7 +320,7 @@ Allow volunteers to reserve shifts on an organization-specific public plan.
 
 **User stories**
 
-- As a volunteer, I can sign up without an account.
+- As a volunteer, I register or log in with a volunteer account before I can sign up.
 - As a volunteer, I immediately reserve a place.
 - As Staff, I can see suspicious signups for my organization.
 
@@ -712,6 +712,29 @@ High (multi-phase).
   entries offers compensation-type, child-assignment, and duration fields; `PAYOUT` shows the
   computed amount and status, with an ADMIN-only control to advance `payoutStatus` and record the
   manual signature-received note.
+
+## F016 Helferkonto und konto-basierte Einsatzanmeldung
+
+**Status:** Auf `main`. Claude Code dokumentierte die zugrunde liegende Product-Owner-Entscheidung
+als `D-046` in `docs/DECISIONS.md`; sie ersetzt `D-007` und aktualisiert den Grundsatz "No forced
+registration for public volunteer signup" in `CLAUDE.md`.
+
+**Scope und geliefert:** Organisationsbezogene Passwort-Registrierung mit Pflichtdaten, konfigurierbarer
+Passwort-Mindestlänge (Startwert 6), automatischer Helferfamilie, optionalem Kind und Vergütungsvoreinstellung;
+Login, Logout, Profilbearbeitung, Kind-Zuordnung sowie kommende und geleistete Einsätze. Die öffentliche
+Einsatzliste bleibt sichtbar, die verbindliche Anmeldung erfordert ein Konto und bestätigt die Profildaten.
+Responsive Login-/Registrierungs-Modals halten Helfer im öffentlichen Kontext (Backdrop-Close,
+Feldpersistenz, Login/Register-Wechsel), inklusive Rückkehr zur gewählten Schicht nach Login/Registrierung.
+Der zuvor vom Schicht-Button auf `/login` bzw. `/{org}/admin` führende Redirect-Fehler ist behoben.
+
+Familien-Kartei: Admin/Koordination sehen und bearbeiten Name, Telefon, Vergütung, Kind-Zuordnung,
+interne Notiz und Status eines Helfers direkt in der Familienansicht; ein aktuell verknüpfter
+`INACTIVE`-Helfer bleibt sichtbar und reaktivierbar, neue Verknüpfungen akzeptieren weiterhin nur
+`ACTIVE`-Helfer, andere `INACTIVE`-Helfer sind nicht auswählbar.
+
+**Akzeptanzkriterien:** Konto-basierte Anmeldungen sind tenant-sicher und serverseitig validiert; private
+Kontaktdaten bleiben geschützt (Familien-Kartei ausschließlich für KOORDINATION/ADMIN); Login/Registrierung
+benötigen keine Staff-Mitgliedschaft und führen nicht in den Adminbereich.
 
 ## Recommended Implementation Order
 

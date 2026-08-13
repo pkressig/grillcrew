@@ -66,7 +66,17 @@ async function request<T>(path: string, init?: RequestInit, errorMessage?: strin
   try {
     response = await fetch(`${apiBaseUrl}${path}`, { credentials: "include", ...init });
   } catch {
-    throw new Error(fallbackMessage);
+    // fetch() rejecting (rather than resolving with a 4xx/5xx) means the request never
+    // got a response at all: dropped connection, CORS rejection, or DNS/offline failure.
+    // Reporting that distinctly (instead of the operation-specific fallback message)
+    // avoids implying a business-rule rejection when it was actually a network problem.
+    // Retrying is safe: the server-side import endpoints are idempotent/guarded against
+    // double-submission (identical re-uploads are deduplicated, and row/confirm actions
+    // are no-ops once already applied).
+    throw new Error(
+      "Die Verbindung zum Server ist fehlgeschlagen. Bitte Internetverbindung prüfen und " +
+        "erneut versuchen.",
+    );
   }
   if (!response.ok) {
     let detail: unknown;

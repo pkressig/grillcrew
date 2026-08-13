@@ -367,7 +367,7 @@ def test_create_batch_raises_when_season_type_missing() -> None:
         end_date=date(2027, 6, 30),
         status=PlanningStatus.ACTIVE,
     )
-    db = _FakeDb(scalar_results=[club_year, None])
+    db = _FakeDb(scalar_results=[club_year, None, None])
     service = ImportService(cast(object, db), club_year.organization_id)  # type: ignore[arg-type]
     with pytest.raises(ImportValidationError):
         service.create_batch(club_year.id, "plan.xlsx", content, uuid4())
@@ -395,7 +395,7 @@ def test_create_batch_raises_on_duplicate_match_key_within_batch() -> None:
         status=PlanningStatus.ACTIVE,
     )
     season = _season(SeasonType.AUTUMN)
-    db = _FakeDb(scalar_results=[club_year, season], scalars_results=[[], []])
+    db = _FakeDb(scalar_results=[club_year, None, season], scalars_results=[[], []])
     service = ImportService(cast(object, db), club_year.organization_id)  # type: ignore[arg-type]
     with pytest.raises(ImportValidationError):
         service.create_batch(club_year.id, "plan.xlsx", content, uuid4())
@@ -426,15 +426,88 @@ def test_create_batch_stages_neu_rows_excluded_without_home_venue() -> None:
         status=PlanningStatus.ACTIVE,
     )
     season = _season(SeasonType.AUTUMN)
-    db = _FakeDb(scalar_results=[club_year, season], scalars_results=[[], []])
+    db = _FakeDb(scalar_results=[club_year, None, season], scalars_results=[[], []])
     service = ImportService(cast(object, db), club_year.organization_id)  # type: ignore[arg-type]
     batch = service.create_batch(club_year.id, "plan.xlsx", content, uuid4())
     assert batch.row_count == 1
     assert batch.status == ImportBatchStatus.STAGED
+    assert batch.content_sha256 is not None
     assert db.commits == 1
     created_row = next(item for item in db.added if isinstance(item, ImportRow))
     assert created_row.classification == ImportRowClassification.NEU
     assert created_row.include_decision == ImportRowDecision.EXCLUDE
+
+
+# -- create_batch retry safety (idempotent re-upload) ----------------------------
+
+
+def test_create_batch_returns_existing_staged_batch_for_identical_retry() -> None:
+    """A retried upload (dropped connection, double submit) of the exact same file must
+    not create a second ImportBatch/ImportRow set — it should hand back the batch that
+    is already staged from the first attempt."""
+    content = _workbook_bytes(
+        [
+            [
+                "Meisterschaft",
+                "FCTC Herren 1",
+                119550,
+                "Sa",
+                date(2026, 8, 15),
+                time(17, 0),
+                "FC Thusis/Cazis 1 - FC Lusitanos",
+                "St. Martin, Cazis - Platz 1",
+                None,
+            ]
+        ]
+    )
+    club_year = ClubYear(
+        id=uuid4(),
+        organization_id=uuid4(),
+        label="2026/2027",
+        start_date=date(2026, 7, 1),
+        end_date=date(2027, 6, 30),
+        status=PlanningStatus.ACTIVE,
+    )
+    existing_batch = ImportBatch(
+        id=uuid4(),
+        organization_id=club_year.organization_id,
+        club_year_id=club_year.id,
+        source_filename="plan.xlsx",
+        uploaded_by_user_id=uuid4(),
+        status=ImportBatchStatus.STAGED,
+        row_count=1,
+    )
+    db = _FakeDb(scalar_results=[club_year, existing_batch])
+    service = ImportService(cast(object, db), club_year.organization_id)  # type: ignore[arg-type]
+
+    batch = service.create_batch(club_year.id, "plan.xlsx", content, uuid4())
+
+    assert batch is existing_batch
+    # No new ImportBatch/ImportRow was staged and no extra commit was issued.
+    assert db.added == []
+    assert db.commits == 0
+
+
+def test_create_batch_dedupe_query_is_scoped_to_staged_status() -> None:
+    """The dedupe lookup must filter on status == STAGED so a CONFIRMED or DISCARDED
+    batch with the same content hash is never returned, and a genuinely new re-import
+    after confirmation proceeds normally (here reaching the season-not-found check)."""
+    content = _workbook_bytes([])
+    club_year = ClubYear(
+        id=uuid4(),
+        organization_id=uuid4(),
+        label="2026/2027",
+        start_date=date(2026, 7, 1),
+        end_date=date(2027, 6, 30),
+        status=PlanningStatus.ACTIVE,
+    )
+    # No STAGED duplicate exists (e.g. the earlier batch with this hash was confirmed),
+    # so the dedupe lookup returns None and create_batch proceeds to parse and stage.
+    db = _FakeDb(scalar_results=[club_year, None])
+    service = ImportService(cast(object, db), club_year.organization_id)  # type: ignore[arg-type]
+
+    with pytest.raises(ImportValidationError, match="Saison-Eintrag"):
+        service.create_batch(club_year.id, "plan.xlsx", content, uuid4())
 
 
 # -- confirm orchestration --------------------------------------------------------
@@ -690,6 +763,55 @@ def test_wrong_organization_slug_is_forbidden(client: TestClient) -> None:
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 403
+
+
+def test_upload_import_translates_conflict_error_instead_of_raising(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression test: uploading against a closed/archived club year (or any other
+    ImportConflictError from create_batch) must come back as a clean 409 response, not
+    propagate as an unhandled exception. An unhandled exception here previously produced
+    a 500 response with no CORS headers at all (it bypasses CORSMiddleware, which sits
+    inside the router's automatic ServerErrorMiddleware), which browsers surface to
+    calling JS as a network-level "TypeError: Failed to fetch" instead of a readable
+    error — not a 4xx/5xx the frontend could show to the admin.
+    """
+
+    class FakeServiceRaisesConflict:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def create_batch(self, *_args: object, **_kwargs: object) -> object:
+            raise ImportConflictError(
+                "Für ein geschlossenes oder archiviertes Vereinsjahr ist kein neuer Import möglich."
+            )
+
+    current = _current(StaffRole.ADMIN)
+    app.dependency_overrides[imports_api.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: _FakeDb()
+    monkeypatch.setattr(
+        imports_api, "_service", lambda *_a, **_k: FakeServiceRaisesConflict(None, uuid4())
+    )
+    monkeypatch.setattr(imports_api, "_ensure_origin_and_host", lambda *_args: None)
+    workbook = io.BytesIO()
+    openpyxl.Workbook().save(workbook)
+    try:
+        response = client.post(
+            "/api/admin/tenant-a/imports",
+            headers={"Origin": "http://localhost:3000"},
+            data={"club_year_id": str(uuid4())},
+            files={"file": ("plan.xlsx", workbook.getvalue(), "application/octet-stream")},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 409
+    assert "geschlossenes" in response.json()["detail"]
+    # A clean HTTPException response is still processed by CORSMiddleware, unlike an
+    # unhandled exception (which bypasses it entirely and comes back with no CORS
+    # headers, causing the browser to reject the response with "Failed to fetch").
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:3000"
 
 
 def test_get_import_rows_returns_batch_and_rows(

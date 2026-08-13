@@ -392,7 +392,16 @@ class Signup(Base):
 
 class ImportBatch(Base):
     __tablename__ = "import_batch"
-    __table_args__ = (Index("ix_import_batch_organization_status", "organization_id", "status"),)
+    __table_args__ = (
+        Index("ix_import_batch_organization_status", "organization_id", "status"),
+        Index(
+            "ix_import_batch_dedupe",
+            "organization_id",
+            "club_year_id",
+            "content_sha256",
+            "status",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")
@@ -407,6 +416,12 @@ class ImportBatch(Base):
     uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("user.id", ondelete="RESTRICT"), nullable=False
     )
+    # SHA-256 of the uploaded workbook bytes. Lets create_batch() recognize a retried
+    # upload (e.g. after a dropped connection or client-side "Failed to fetch") of the
+    # same file for the same club year and return the already-staged batch instead of
+    # creating a duplicate ImportBatch/ImportRow set. Nullable so historical rows created
+    # before this column existed remain valid.
+    content_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[ImportBatchStatus] = mapped_column(
         Enum(ImportBatchStatus, name="import_batch_status"),
         nullable=False,

@@ -128,10 +128,15 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     setSavingId(window.id);
     setError(null);
     try {
-      const updated = await confirmPlanningProposal(org, window.id, {
-        kind: "grill",
-        grill_shift_count: window.proposed_grill_slots,
+      // The confirm endpoint materialises the shift from the already-persisted
+      // override, not from this request. Persist any unsaved "Grillplätze"/
+      // "Grillstatus" edits first so they are never silently discarded if the
+      // admin clicks "bestätigen" without first clicking "Anpassung speichern".
+      await updatePlanningProposal(org, window.id, {
+        grill_required: window.grill_required,
+        proposed_grill_slots: window.grill_required ? window.proposed_grill_slots : 0,
       });
+      const updated = await confirmPlanningProposal(org, window.id, { kind: "grill" });
       setWindows((current) => current.map((item) => (item.id === updated.id ? updated : item)));
       if (updated.covered_event_ids?.[0]) {
         const confirmedShifts = await loadShifts(org, updated.covered_event_ids[0]);
@@ -152,8 +157,12 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
     }
   }
 
+  // Grill proposals may only ever be offered for a window whose kiosk half has
+  // actually been confirmed by an admin (D-041/D-042); an unconfirmed or
+  // never-touched window must not be selectable here even though the backend
+  // also enforces this on confirm.
   const openWindows = windows.filter(
-    (window) => window.kiosk_open && window.kiosk_confirmed !== false,
+    (window) => window.kiosk_open && window.kiosk_confirmed === true,
   );
 
   return (

@@ -597,9 +597,155 @@ def test_tenant_scoped_event_and_shift_lookups_reject_missing_chain() -> None:
         service._get_shift(uuid4())
 
 
+class _EventsWithShiftsDb:
+    def __init__(self, season: Season, events: list[Event]) -> None:
+        self.season = season
+        self.events = events
+        self.statements: list[object] = []
+
+    def scalar(self, statement: object) -> Season:
+        self.statements.append(statement)
+        return self.season
+
+    def scalars(self, statement: object) -> list[Event]:
+        self.statements.append(statement)
+        return self.events
+
+
+def _fake_shift(*, sort_order: int, starts_at: datetime) -> Shift:
+    return cast(
+        Shift,
+        SimpleNamespace(
+            id=uuid4(),
+            event_id=uuid4(),
+            starts_at=starts_at,
+            ends_at=starts_at + timedelta(hours=1),
+            required_volunteers=1,
+            public_note=None,
+            internal_note=None,
+            status=ShiftStatus.OPEN,
+            sort_order=sort_order,
+            shift_type=ShiftType.GRILL,
+            assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
+            menu_type=None,
+            crew_suggestion_overridden=False,
+            created_at=starts_at,
+            updated_at=starts_at,
+            signups=[],
+        ),
+    )
+
+
+def test_list_events_with_shifts_scopes_to_the_requested_season() -> None:
+    season = cast(Season, SimpleNamespace(id=uuid4()))
+    now = datetime.now(UTC)
+    event = cast(
+        Event,
+        SimpleNamespace(
+            id=uuid4(),
+            season_id=season.id,
+            title="Meisterschaft",
+            date=now.date(),
+            location="Platz 1",
+            event_type="Meisterschaft",
+            public_description=None,
+            internal_note=None,
+            status=EventStatus.PUBLISHED,
+            published_at=now,
+            source_import_id=None,
+            kickoff_time=None,
+            duration_minutes=None,
+            kiosk_requested=None,
+            grill_requested=None,
+            external_game_number=None,
+            import_match_key=None,
+            created_at=now,
+            updated_at=now,
+            shifts=[
+                _fake_shift(sort_order=1, starts_at=now + timedelta(hours=2)),
+                _fake_shift(sort_order=0, starts_at=now),
+            ],
+        ),
+    )
+    db = _EventsWithShiftsDb(season, [event])
+
+    result = PlanningService(cast(object, db), uuid4()).list_events_with_shifts(  # type: ignore[arg-type]
+        season.id
+    )
+
+    assert result == [event]
+    # The season lookup must be scoped to this season id, matching list_events().
+    assert "season.id" in str(db.statements[0])
+    assert "event.season_id" in str(db.statements[1])
+
+
+def test_events_with_shifts_route_nests_and_sorts_shifts(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = cast(
+        CurrentStaffMembership,
+        SimpleNamespace(organization=SimpleNamespace(id=uuid4(), slug="tenant-a")),
+    )
+    now = datetime.now(UTC)
+    season_id = uuid4()
+    event = cast(
+        Event,
+        SimpleNamespace(
+            id=uuid4(),
+            season_id=season_id,
+            title="Meisterschaft",
+            date=now.date(),
+            location="Platz 1",
+            event_type="Meisterschaft",
+            public_description=None,
+            internal_note=None,
+            status=EventStatus.PUBLISHED,
+            published_at=now,
+            source_import_id=None,
+            kickoff_time=None,
+            duration_minutes=None,
+            kiosk_requested=None,
+            grill_requested=None,
+            external_game_number=None,
+            import_match_key=None,
+            created_at=now,
+            updated_at=now,
+            shifts=[
+                _fake_shift(sort_order=1, starts_at=now + timedelta(hours=2)),
+                _fake_shift(sort_order=0, starts_at=now),
+            ],
+        ),
+    )
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: object) -> None:
+            pass
+
+        def list_events_with_shifts(self, received_season_id: object) -> list[Event]:
+            assert received_season_id == season_id
+            return [event]
+
+    app.dependency_overrides[planning.manage] = lambda: current
+    app.dependency_overrides[get_db] = lambda: _ListDb()
+    monkeypatch.setattr(planning, "PlanningService", FakeService)
+    try:
+        response = client.get(f"/api/admin/tenant-a/seasons/{season_id}/events-with-shifts")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    shift_ids = [shift["id"] for shift in body[0]["shifts"]]
+    # Shifts come back sorted by sort_order regardless of the ORM relationship's
+    # unspecified load order (the event was built with sort_order 1 before 0).
+    assert shift_ids == [str(event.shifts[1].id), str(event.shifts[0].id)]
+
+
 def test_event_shift_routes_are_registered_with_manage_guard() -> None:
     expected = {
         ("GET", "/api/admin/{organization_slug}/seasons/{season_id}/events"),
+        ("GET", "/api/admin/{organization_slug}/seasons/{season_id}/events-with-shifts"),
         ("POST", "/api/admin/{organization_slug}/seasons/{season_id}/events"),
         ("PATCH", "/api/admin/{organization_slug}/events/{event_id}"),
         ("DELETE", "/api/admin/{organization_slug}/events/{event_id}"),

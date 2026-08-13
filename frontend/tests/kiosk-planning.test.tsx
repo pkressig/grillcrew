@@ -101,4 +101,34 @@ describe("Kiosk planning", () => {
     await screen.findByRole("heading", { name: "Keine Kiosk-Zeitfenster" });
     expect(proposals.loadPlanningProposals).toHaveBeenCalledTimes(2);
   });
+
+  it("pre-fills the manual shift-count editor from the persisted proposed slot count", async () => {
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({
+      windows: [{ ...windowProposal, proposed_kiosk_slots: 4 }],
+    });
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Manuell anpassen" }));
+    expect(screen.getByLabelText("Kiosk-Schichten")).toHaveValue(4);
+  });
+
+  it("reflects a refreshed confirmation state without needing a remount", async () => {
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({
+      windows: [{ ...windowProposal, kiosk_confirmed: false }],
+    });
+    vi.mocked(proposals.refreshPlanningProposals).mockResolvedValue({
+      windows: [{ ...windowProposal, kiosk_confirmed: true }],
+    });
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    await screen.findByRole("button", { name: "Kiosk-Vorschlag bestätigen" });
+    fireEvent.click(
+      screen.getByRole("button", { name: /Vorschläge aus Spielbetrieb aktualisieren/ }),
+    );
+
+    expect(await screen.findByText("Kiosk-Entwurf angelegt")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Kiosk-Vorschlag bestätigen" }),
+    ).not.toBeInTheDocument();
+  });
 });

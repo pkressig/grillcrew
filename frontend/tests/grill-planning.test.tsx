@@ -23,6 +23,7 @@ const openWindow = {
   start_at: "2026-08-08T10:30:00+02:00",
   end_at: "2026-08-08T15:30:00+02:00",
   kiosk_open: true,
+  kiosk_confirmed: true,
   grill_required: true,
   proposed_grill_slots: 2,
   override_state: "PROPOSAL" as const,
@@ -85,5 +86,41 @@ describe("GrillPlanningPanel", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Netzwerkfehler");
     fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
     expect((await screen.findAllByText("Junioren A – Gäste")).at(-1)).toBeInTheDocument();
+  });
+
+  it("never offers a grill proposal for a kiosk window that has not been confirmed", async () => {
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, id: "unconfirmed", kiosk_confirmed: false }],
+    });
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    expect(await screen.findByText("Keine offenen Kioskfenster")).toBeInTheDocument();
+    expect(screen.queryByText("Junioren A – Gäste")).not.toBeInTheDocument();
+  });
+
+  it("persists an edited grill slot count before confirming so it is never silently discarded", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    confirmPlanningProposal.mockResolvedValue({ ...openWindow, grill_confirmed: true });
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A – Gäste");
+
+    // Edit the slot count but deliberately do NOT click "Anpassung speichern"
+    // first — confirming directly must still use the freshly typed value.
+    fireEvent.change(screen.getByLabelText("Grillplätze"), { target: { value: "5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Grill-Vorschlag bestätigen" }));
+
+    await waitFor(() =>
+      expect(updatePlanningProposal).toHaveBeenCalledWith("club", "window-1", {
+        grill_required: true,
+        proposed_grill_slots: 5,
+      }),
+    );
+    await waitFor(() =>
+      expect(confirmPlanningProposal).toHaveBeenCalledWith("club", "window-1", { kind: "grill" }),
+    );
+    const [updateOrder] = updatePlanningProposal.mock.invocationCallOrder;
+    const [confirmOrder] = confirmPlanningProposal.mock.invocationCallOrder;
+    expect(updateOrder).toBeDefined();
+    expect(confirmOrder).toBeDefined();
+    expect(updateOrder as number).toBeLessThan(confirmOrder as number);
   });
 });

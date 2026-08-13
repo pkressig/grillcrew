@@ -1,5 +1,6 @@
 """Tenant-safe game-plan import staging, diffing, and confirmation."""
 
+import hashlib
 import re
 import uuid
 from collections.abc import Iterable
@@ -104,6 +105,25 @@ class ImportService:
                 "Für ein geschlossenes oder archiviertes Vereinsjahr ist kein neuer Import möglich."
             )
 
+        content_sha256 = hashlib.sha256(content).hexdigest()
+        # A retried request (dropped connection, "Failed to fetch", double form submit)
+        # re-uploads byte-identical content. Recognizing that and returning the existing
+        # staged batch — instead of re-parsing and re-staging — keeps retries safe: no
+        # duplicate ImportBatch/ImportRow rows, no duplicate Events once confirmed. A
+        # batch that was already confirmed or discarded no longer matches (status
+        # STAGED only), so a genuine later re-import of the same file still runs and
+        # re-diffs against the current Event state.
+        duplicate_batch = self.db.scalar(
+            select(ImportBatch).where(
+                ImportBatch.organization_id == self.organization_id,
+                ImportBatch.club_year_id == club_year.id,
+                ImportBatch.content_sha256 == content_sha256,
+                ImportBatch.status == ImportBatchStatus.STAGED,
+            )
+        )
+        if duplicate_batch is not None:
+            return duplicate_batch
+
         try:
             sheets = parse_game_plan(content)
         except GamePlanParseError as error:
@@ -186,6 +206,7 @@ class ImportService:
             club_year_id=club_year.id,
             source_filename=source_filename,
             uploaded_by_user_id=uploaded_by_user_id,
+            content_sha256=content_sha256,
             status=ImportBatchStatus.STAGED,
             row_count=len(rows),
         )

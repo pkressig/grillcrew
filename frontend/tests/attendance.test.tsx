@@ -93,6 +93,11 @@ function attendanceFetch(options?: {
     if (url.endsWith("/seasons")) return Response.json(options?.empty ? [] : [season]);
     if (url.endsWith("/seasons/current")) return new Response(null, { status: 404 });
     if (url.endsWith("/seasons/season-1/events")) return Response.json([pastEvent, futureEvent]);
+    if (url.endsWith("/seasons/season-1/events-with-shifts"))
+      return Response.json([
+        { ...pastEvent, shifts: [pastShift] },
+        { ...futureEvent, shifts: [futureShift] },
+      ]);
     if (url.endsWith("/events/event-past/shifts")) return Response.json([pastShift]);
     if (url.endsWith("/events/event-future/shifts")) return Response.json([futureShift]);
     if (url.endsWith("/families/children")) return Response.json([child]);
@@ -169,13 +174,12 @@ describe("attendance admin", () => {
       if (url.endsWith("/club-years")) return Response.json([]);
       if (url.endsWith("/seasons/current")) return new Response(null, { status: 404 });
       if (url.endsWith("/seasons")) return Response.json([season]);
-      if (url.includes("/api/admin/old/") && url.endsWith("/seasons/season-1/events"))
+      if (url.includes("/api/admin/old/") && url.endsWith("/seasons/season-1/events-with-shifts"))
         return new Promise<Response>((resolve) => {
           resolveOldEvents = resolve;
         });
-      if (url.endsWith("/seasons/season-1/events"))
-        return Response.json([{ ...futureEvent, title: "Neuer Verein" }]);
-      if (url.endsWith("/events/event-future/shifts")) return Response.json([futureShift]);
+      if (url.endsWith("/seasons/season-1/events-with-shifts"))
+        return Response.json([{ ...futureEvent, title: "Neuer Verein", shifts: [futureShift] }]);
       return new Response(null, { status: 404 });
     });
     vi.stubGlobal("fetch", fetchMock);
@@ -184,13 +188,15 @@ describe("attendance admin", () => {
     await waitFor(() => expect(resolveOldEvents).toBeDefined());
     view.rerender(<AttendancePanel org="new" timezone="Europe/Zurich" />);
     expect(await screen.findAllByText("Neuer Verein")).toHaveLength(2);
-    resolveOldEvents!(Response.json([{ ...pastEvent, title: "Alter Verein" }]));
+    resolveOldEvents!(
+      Response.json([{ ...pastEvent, title: "Alter Verein", shifts: [pastShift] }]),
+    );
     await Promise.resolve();
 
     expect(screen.queryByText("Alter Verein")).not.toBeInTheDocument();
     expect(
       fetchMock.mock.calls.some(([url]) =>
-        String(url).includes("/api/admin/new/seasons/season-1/events"),
+        String(url).includes("/api/admin/new/seasons/season-1/events-with-shifts"),
       ),
     ).toBe(true);
   });

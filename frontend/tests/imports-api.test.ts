@@ -43,11 +43,16 @@ describe("import API errors", () => {
     await expect(upload()).rejects.toThrow("Die Datei konnte nicht importiert werden.");
   });
 
-  it("preserves another operation's fallback for a network error", async () => {
+  it("surfaces an honest, actionable message for a network error instead of the raw TypeError", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
+    // A rejected fetch() means the request never reached the server at all (dropped
+    // connection, CORS rejection, offline). This must not surface the raw browser
+    // "Failed to fetch" message, nor the business-rule-flavored operation fallback
+    // ("Der Import konnte nicht bestätigt werden.") — both would mislead the admin
+    // about what actually happened and whether retrying is sensible.
     await expect(confirmImportBatch("example", "batch-1")).rejects.toThrow(
-      "Der Import konnte nicht bestätigt werden.",
+      "Die Verbindung zum Server ist fehlgeschlagen. Bitte Internetverbindung prüfen und erneut versuchen.",
     );
   });
 });

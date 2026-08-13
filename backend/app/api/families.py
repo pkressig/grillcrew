@@ -12,6 +12,7 @@ from app.api.dependencies import CurrentStaffMembership, require_staff_role, val
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.identity import StaffRole
+from app.models.planning import Volunteer
 from app.schemas.family import (
     FamilyChildResponse,
     FamilyCreate,
@@ -21,12 +22,14 @@ from app.schemas.family import (
     FamilyMemberVolunteerUpdate,
     FamilyResponse,
     FamilyVolunteerResponse,
+    VolunteerAdminUpdate,
 )
 from app.services.family import (
     FamilyMemberLinkError,
     FamilyMemberNotFoundError,
     FamilyNotFoundError,
     FamilyService,
+    VolunteerNotFoundError,
 )
 
 router = APIRouter(prefix="/api/admin/{organization_slug}/families", tags=["families"])
@@ -70,6 +73,20 @@ def create_family(
     return FamilyResponse.model_validate(_service(organization_slug, current, db).create(payload))
 
 
+def _volunteer_response(volunteer: Volunteer) -> FamilyVolunteerResponse:
+    return FamilyVolunteerResponse(
+        id=volunteer.id,
+        first_name=volunteer.first_name,
+        last_name=volunteer.last_name,
+        phone=volunteer.phone_display,
+        email=volunteer.email_display,
+        compensation_preference=volunteer.compensation_preference,
+        compensation_family_member_id=volunteer.compensation_family_member_id,
+        internal_note=volunteer.internal_note,
+        status=volunteer.status,
+    )
+
+
 @router.get("/volunteers", response_model=list[FamilyVolunteerResponse])
 def list_family_volunteers(
     organization_slug: str,
@@ -77,9 +94,31 @@ def list_family_volunteers(
     db: Session = Depends(get_db),
 ) -> list[FamilyVolunteerResponse]:
     return [
-        FamilyVolunteerResponse.model_validate(item)
-        for item in _service(organization_slug, current, db).list_active_volunteers()
+        _volunteer_response(item)
+        for item in _service(organization_slug, current, db).list_family_volunteers()
     ]
+
+
+@router.patch("/volunteers/{volunteer_id}", response_model=FamilyVolunteerResponse)
+def update_family_volunteer(
+    organization_slug: str,
+    volunteer_id: uuid.UUID,
+    payload: VolunteerAdminUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> FamilyVolunteerResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        volunteer = _service(organization_slug, current, db).update_volunteer(
+            volunteer_id, payload, current.user.id
+        )
+        return _volunteer_response(volunteer)
+    except VolunteerNotFoundError:
+        raise HTTPException(status_code=404, detail="volunteer not found") from None
+    except FamilyMemberLinkError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
 
 
 @router.get("/children", response_model=list[FamilyChildResponse])

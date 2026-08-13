@@ -278,11 +278,13 @@ class ProposalService:
         else:
             if not current.grill_required:
                 raise ProposalValidationError("Grill ist für diesen Vorschlag deaktiviert")
+            # A grill proposal may only ever be tied to an already-confirmed Kiosk
+            # window; validate before mutating any state on this override.
+            if not item.kiosk_confirmed:
+                raise ProposalValidationError("Der Kiosk muss zuerst bestätigt werden")
             item.grill_confirmed = True
             shift_type = ShiftType.GRILL
             required = max(1, current.proposed_grill_slots)
-        if kind == "grill" and not item.kiosk_confirmed:
-            raise ProposalValidationError("Der Kiosk muss zuerst bestÃ¤tigt werden")
         if kind == "kiosk":
             event_id = current.covered_event_ids[0]
             existing = self.db.scalar(

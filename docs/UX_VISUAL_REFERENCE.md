@@ -65,11 +65,11 @@ The organization-scoped `/{org}/admin/attendance` route is the primary attendanc
 
 Reference: `docs/design-reference/public-helper-signup.png`
 
-One primary action per event card, clear date/time/location/capacity, short form, privacy notice, loading/error/success states, and management-link confirmation. Do not add profile tabs or volunteer accounts until approved.
+One primary action per event card, clear date/time/location/capacity, short form, privacy notice, loading/error/success states, and management-link confirmation. Signup now requires a volunteer account (registration or login); the public plan gates signup behind a login/register modal (`frontend/app/organization-landing.tsx`, `frontend/app/register/register-form.tsx`).
 
-### 6. Meine Einsätze / Helferportal — future
+### 6. Meine Einsätze / Helferportal — implemented
 
-Only after an approved volunteer-account or management-link contract. Target: mobile list of available and booked shifts, assignment detail, status actions, and profile/settings only when backed by real auth/data.
+`frontend/app/profile/page.tsx` provides the volunteer account profile: upcoming/completed signups, compensation preference, and family-child assignment, backed by `/api/volunteer/profile`.
 
 ### 7. Arbeitszeiten / Work Records — future
 

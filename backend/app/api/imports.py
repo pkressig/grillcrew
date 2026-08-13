@@ -101,7 +101,7 @@ async def upload_import(
             end_date=import_end_date,
             home_only=home_only,
         )
-    except (ImportNotFoundError, ImportValidationError) as error:
+    except (ImportNotFoundError, ImportConflictError, ImportValidationError) as error:
         raise _translate(error) from None
     batch, rows = service.list_rows(batch.id)
     return _with_rows(batch, rows)

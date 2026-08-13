@@ -24,7 +24,7 @@ You work as the responsible senior full-stack developer for a commercial multi-o
 - Organization branding comes from the database.
 - Mobile first.
 - Understandable for young and older users.
-- No forced registration for public volunteer signup.
+- Public volunteer signup requires a volunteer account (registration + login); see D-046 in `docs/DECISIONS.md`.
 - Large interaction targets and clear language.
 - Public phone numbers and email addresses are forbidden.
 - Helpers and credited families are separate entities.

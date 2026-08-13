@@ -15,13 +15,14 @@ from app.main import app
 from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStatus
 from app.models.identity import AuditEvent, StaffMembership, StaffRole, User
 from app.models.organization import Organization
-from app.models.planning import Volunteer, VolunteerStatus
-from app.schemas.family import FamilyMemberCreate, FamilyMemberVolunteerUpdate
+from app.models.planning import Volunteer, VolunteerCompensation, VolunteerStatus
+from app.schemas.family import FamilyMemberCreate, FamilyMemberVolunteerUpdate, VolunteerAdminUpdate
 from app.services.family import (
     FamilyMemberLinkError,
     FamilyMemberNotFoundError,
     FamilyNotFoundError,
     FamilyService,
+    VolunteerNotFoundError,
 )
 
 
@@ -275,13 +276,16 @@ def _helper(family_id: UUID, volunteer_id: UUID | None = None) -> FamilyMember:
     )
 
 
-def test_lists_only_active_tenant_volunteers_by_name() -> None:
+def test_lists_active_and_linked_inactive_tenant_volunteers_by_name() -> None:
     db = _LinkDb([], [SimpleNamespace(id=uuid4(), first_name="Anna", last_name="Zeta")])
-    result = FamilyService(cast(object, db), uuid4()).list_active_volunteers()  # type: ignore[arg-type]
+    result = FamilyService(cast(object, db), uuid4()).list_family_volunteers()  # type: ignore[arg-type]
     assert len(result) == 1
     sql = str(db.statements[0])
     assert "volunteer.organization_id" in sql
     assert "volunteer.status" in sql
+    assert "family_member.volunteer_id = volunteer.id" in sql
+    assert "family.organization_id" in sql
+    assert " OR (EXISTS " in sql
     assert "ORDER BY volunteer.last_name, volunteer.first_name" in sql
 
 
@@ -450,3 +454,239 @@ def test_rejects_missing_member_without_audit() -> None:
             uuid4(),
         )
     assert db.commits == 0 and db.added == []
+
+
+def _volunteer() -> Volunteer:
+    return cast(
+        Volunteer,
+        SimpleNamespace(
+            id=uuid4(),
+            first_name="Old",
+            last_name="Name",
+            phone_normalized="+41791234567",
+            phone_display="+41 79 123 45 67",
+            compensation_preference=VolunteerCompensation.WORK_HOURS,
+            compensation_family_member_id=None,
+            internal_note=None,
+            status=VolunteerStatus.ACTIVE,
+        ),
+    )
+
+
+def test_update_volunteer_applies_changes_and_audits() -> None:
+    organization_id = uuid4()
+    actor_id = uuid4()
+    volunteer = _volunteer()
+    child_id = uuid4()
+    db = _LinkDb([volunteer, SimpleNamespace(id=child_id)])
+    service = FamilyService(cast(object, db), organization_id)  # type: ignore[arg-type]
+
+    updated = service.update_volunteer(
+        volunteer.id,
+        VolunteerAdminUpdate(
+            first_name="New",
+            last_name="Name",
+            phone="079 999 88 77",
+            compensation_preference=VolunteerCompensation.PAYOUT,
+            compensation_family_member_id=child_id,
+            internal_note="  Notiz  ",
+            status=VolunteerStatus.ACTIVE,
+        ),
+        actor_id,
+    )
+
+    assert updated.first_name == "New"
+    assert updated.phone_normalized == "0799998877"
+    assert updated.compensation_preference == VolunteerCompensation.PAYOUT
+    assert updated.compensation_family_member_id == child_id
+    assert updated.internal_note == "Notiz"
+    assert db.commits == 1
+    audit = cast(AuditEvent, db.added[-1])
+    assert audit.organization_id == organization_id
+    assert audit.actor_user_id == actor_id
+    assert audit.action == "VOLUNTEER_PROFILE_UPDATED_BY_ADMIN"
+    assert audit.entity_id == volunteer.id
+    assert set(cast(list[str], audit.event_metadata["changed_fields"])) == {
+        "first_name",
+        "phone",
+        "compensation_preference",
+        "compensation_family_member_id",
+        "internal_note",
+    }
+
+
+def test_update_volunteer_identical_payload_skips_commit_and_audit() -> None:
+    volunteer = _volunteer()
+    db = _LinkDb([volunteer])
+    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
+
+    service.update_volunteer(
+        volunteer.id,
+        VolunteerAdminUpdate(
+            first_name=volunteer.first_name,
+            last_name=volunteer.last_name,
+            phone=volunteer.phone_normalized,
+            compensation_preference=volunteer.compensation_preference,
+            compensation_family_member_id=None,
+            internal_note=None,
+            status=volunteer.status,
+        ),
+        uuid4(),
+    )
+    assert db.commits == 0 and db.added == []
+
+
+def test_update_volunteer_rejects_missing_volunteer() -> None:
+    db = _LinkDb([None])
+    with pytest.raises(VolunteerNotFoundError):
+        FamilyService(cast(object, db), uuid4()).update_volunteer(  # type: ignore[arg-type]
+            uuid4(),
+            VolunteerAdminUpdate(
+                first_name="New",
+                last_name="Name",
+                phone="0799998877",
+                compensation_preference=VolunteerCompensation.VOLUNTARY,
+                compensation_family_member_id=None,
+                internal_note=None,
+                status=VolunteerStatus.ACTIVE,
+            ),
+            uuid4(),
+        )
+    assert db.commits == 0 and db.added == []
+
+
+def test_update_volunteer_rejects_invalid_child() -> None:
+    volunteer = _volunteer()
+    db = _LinkDb([volunteer, None])
+    with pytest.raises(FamilyMemberLinkError, match="invalid child member"):
+        FamilyService(cast(object, db), uuid4()).update_volunteer(  # type: ignore[arg-type]
+            volunteer.id,
+            VolunteerAdminUpdate(
+                first_name="New",
+                last_name="Name",
+                phone="0799998877",
+                compensation_preference=VolunteerCompensation.VOLUNTARY,
+                compensation_family_member_id=uuid4(),
+                internal_note=None,
+                status=VolunteerStatus.ACTIVE,
+            ),
+            uuid4(),
+        )
+    assert db.commits == 0 and db.added == []
+
+
+def test_volunteer_update_route_requires_csrf_and_origin(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    volunteer_id = uuid4()
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[get_db] = lambda: _MemberDb(None)
+    monkeypatch.setattr(auth, "_organization_domains", lambda _db: set())
+    payload = {
+        "first_name": "New",
+        "last_name": "Name",
+        "phone": "0799998877",
+        "compensation_preference": "WORK_HOURS",
+        "compensation_family_member_id": None,
+        "internal_note": None,
+        "status": "ACTIVE",
+    }
+    try:
+        missing_csrf = client.patch(
+            f"/api/admin/tenant-a/families/volunteers/{volunteer_id}", json=payload
+        )
+        app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+        missing_origin = client.patch(
+            f"/api/admin/tenant-a/families/volunteers/{volunteer_id}", json=payload
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert missing_csrf.status_code == 403
+    assert missing_origin.status_code == 403
+
+
+def test_volunteer_update_route_returns_404_for_unknown_volunteer(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    volunteer_id = uuid4()
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def update_volunteer(
+            self, received_id: UUID, _payload: VolunteerAdminUpdate, _actor_id: UUID
+        ) -> object:
+            assert received_id == volunteer_id
+            raise VolunteerNotFoundError
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    payload = {
+        "first_name": "New",
+        "last_name": "Name",
+        "phone": "0799998877",
+        "compensation_preference": "WORK_HOURS",
+        "compensation_family_member_id": None,
+        "internal_note": None,
+        "status": "ACTIVE",
+    }
+    try:
+        response = client.patch(
+            f"/api/admin/tenant-a/families/volunteers/{volunteer_id}", json=payload
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 404
+
+
+def test_volunteer_list_api_returns_exact_fields(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    item = SimpleNamespace(
+        id=uuid4(),
+        first_name="Mia",
+        last_name="Andere",
+        phone_display="079 123 45 67",
+        email_display="mia@example.invalid",
+        compensation_preference=VolunteerCompensation.WORK_HOURS,
+        compensation_family_member_id=None,
+        internal_note="secret note",
+        status=VolunteerStatus.ACTIVE,
+        user_id="must not leak",
+    )
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def list_family_volunteers(self) -> list[object]:
+            return [item]
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    try:
+        listed = client.get("/api/admin/tenant-a/families/volunteers")
+    finally:
+        app.dependency_overrides.clear()
+    expected = {
+        "id",
+        "first_name",
+        "last_name",
+        "phone",
+        "email",
+        "compensation_preference",
+        "compensation_family_member_id",
+        "internal_note",
+        "status",
+    }
+    assert listed.status_code == 200
+    assert set(listed.json()[0]) == expected
+    assert "must not leak" not in listed.text

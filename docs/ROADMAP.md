@@ -34,7 +34,7 @@ Nicht Sprint 1:
 
 ## Sprint 3 – Öffentliche Eintragung
 - öffentlicher Einsatzplan
-- Buchung ohne Konto
+- Buchung mit verpflichtendem Helferkonto (F016; ersetzt die historische Planung ohne Konto)
 - Pflichtdaten
 - Vergütungswahl
 - Bestätigung
@@ -42,8 +42,8 @@ Nicht Sprint 1:
 - Absageregel
 
 ## Sprint 4 – Helferkonto und Staff
-- freiwilliges Konto
-- Magic Link
+- Passwort-basiertes Helferkonto und Login (F016 umgesetzt)
+- Magic Link bleibt historische Planung und ist nicht Teil der ausgelieferten Authentifizierung
 - Datenübernahme
 - eigene Einsätze
 - Staff-Ansicht mit Kontaktdaten

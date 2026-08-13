@@ -218,6 +218,31 @@ class PlanningService:
             )
         )
 
+    def list_events_with_shifts(self, season_id: uuid.UUID) -> list[Event]:
+        """Same as list_events, but eager-loads shifts/signups in this one query.
+
+        The admin overview and planning views need every event's shifts to render.
+        Fetching them via a separate GET per event turns a page load into dozens of
+        HTTP round-trips once a season has many imported games, which is what made
+        the overview intermittently fail with "Failed to fetch" after a ~60-game
+        import (some of those parallel requests get dropped under load). This method
+        mirrors the selectinload pattern PlanningService.list_public_events already
+        uses for the same reason on the public side.
+        """
+        season = self._get_season(season_id)
+        return list(
+            self.db.scalars(
+                select(Event)
+                .options(
+                    selectinload(Event.shifts)
+                    .selectinload(Shift.signups)
+                    .selectinload(Signup.volunteer)
+                )
+                .where(Event.season_id == season.id)
+                .order_by(Event.date, Event.id)
+            )
+        )
+
     def list_public_events(self, from_date: date) -> list[Event]:
         """Return upcoming published events with public-visible shifts for this tenant."""
         events = list(

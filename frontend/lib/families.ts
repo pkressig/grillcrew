@@ -30,10 +30,27 @@ export type FamilyMember = {
   volunteer_id: string | null;
 };
 export type FamilyMemberInput = Omit<FamilyMember, "id" | "family_id" | "volunteer_id">;
+export type VolunteerCompensation = "WORK_HOURS" | "VOLUNTARY" | "PAYOUT";
+export type VolunteerStatus = "ACTIVE" | "INACTIVE";
 export type FamilyVolunteer = {
   id: string;
   first_name: string;
   last_name: string;
+  phone: string;
+  email: string;
+  compensation_preference: VolunteerCompensation;
+  compensation_family_member_id: string | null;
+  internal_note: string | null;
+  status: VolunteerStatus;
+};
+export type FamilyVolunteerUpdate = {
+  first_name: string;
+  last_name: string;
+  phone: string;
+  compensation_preference: VolunteerCompensation;
+  compensation_family_member_id: string | null;
+  internal_note: string | null;
+  status: VolunteerStatus;
 };
 
 export type FamilyChild = {
@@ -97,6 +114,21 @@ export const loadFamilyChildren = (org: string) =>
     `/api/admin/${encodeURIComponent(org)}/families/children`,
     undefined,
     "Die Kinder konnten nicht geladen werden.",
+  );
+
+export const updateFamilyVolunteer = (
+  org: string,
+  volunteerId: string,
+  payload: FamilyVolunteerUpdate,
+) =>
+  request<FamilyVolunteer>(
+    `/api/admin/${encodeURIComponent(org)}/families/volunteers/${encodeURIComponent(volunteerId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+      body: JSON.stringify(payload),
+    },
+    "Die Helferdaten konnten nicht gespeichert werden.",
   );
 
 export const updateFamilyMemberVolunteer = (

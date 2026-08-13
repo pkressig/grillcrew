@@ -6,7 +6,15 @@ import { AuthCard } from "@/components/auth-card";
 import type { PublicOrganization } from "@/lib/organization";
 import { registerVolunteer } from "@/lib/volunteer-profile";
 
-export function RegisterForm({ organization }: Readonly<{ organization: PublicOrganization }>) {
+export function RegisterForm({
+  organization,
+  onSuccess,
+  onSwitchToLogin,
+}: Readonly<{
+  organization: PublicOrganization;
+  onSuccess?: () => void;
+  onSwitchToLogin?: () => void;
+}>) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -27,7 +35,11 @@ export function RegisterForm({ organization }: Readonly<{ organization: PublicOr
         child_first_name: String(data.get("child_first_name") ?? "") || undefined,
         child_last_name: String(data.get("child_last_name") ?? "") || undefined,
       });
-      router.replace(`/${encodeURIComponent(organization.slug)}`);
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        router.replace(`/${encodeURIComponent(organization.slug)}`);
+      }
     } catch (caughtError) {
       const detail = caughtError instanceof Error ? caughtError.message : "";
       const message =
@@ -104,12 +116,22 @@ export function RegisterForm({ organization }: Readonly<{ organization: PublicOr
         >
           {saving ? "Konto wird erstellt …" : "Registrieren"}
         </button>
-        <a
-          className="text-center text-sm underline"
-          href={`/login?org=${encodeURIComponent(organization.slug)}`}
-        >
-          Bereits registriert? Anmelden
-        </a>
+        {onSwitchToLogin ? (
+          <button
+            type="button"
+            className="min-h-11 text-center text-sm underline"
+            onClick={onSwitchToLogin}
+          >
+            Bereits registriert? Anmelden
+          </button>
+        ) : (
+          <a
+            className="text-center text-sm underline"
+            href={`/login?org=${encodeURIComponent(organization.slug)}`}
+          >
+            Bereits registriert? Anmelden
+          </a>
+        )}
       </form>
     </AuthCard>
   );

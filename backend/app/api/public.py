@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.security.rate_limit import InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
 from app.models.organization import Organization
-from app.models.planning import ShiftStatus, Signup, SignupStatus, Volunteer
+from app.models.planning import ShiftStatus, ShiftType, Signup, SignupStatus, Volunteer
 from app.schemas.organization import (
     OrganizationContact,
     PublicOrganizationResponse,
@@ -135,7 +135,12 @@ def public_plan(
                         ],
                     )
                     for shift in sorted(
-                        (item for item in event.shifts if item.status != ShiftStatus.CANCELLED),
+                        (
+                            item
+                            for item in event.shifts
+                            if item.status != ShiftStatus.CANCELLED
+                            and item.shift_type == ShiftType.GRILL
+                        ),
                         key=lambda item: (item.sort_order, item.starts_at, item.id),
                     )
                 ],

@@ -26,6 +26,7 @@ from app.schemas.planning import (
     EventDeleteConfirmation,
     EventResponse,
     EventUpdate,
+    EventWithShiftsResponse,
     SeasonCreate,
     SeasonResponse,
     SeasonUpdate,
@@ -301,6 +302,30 @@ def list_events(
         return [
             EventResponse.model_validate(item)
             for item in _service(organization_slug, current, db).list_events(season_id)
+        ]
+    except PlanningNotFoundError as error:
+        raise _translate(error) from None
+
+
+@router.get("/seasons/{season_id}/events-with-shifts", response_model=list[EventWithShiftsResponse])
+def list_events_with_shifts(
+    organization_slug: str,
+    season_id: uuid.UUID,
+    current: CurrentStaffMembership = Depends(manage),
+    db: Session = Depends(get_db),
+) -> list[EventWithShiftsResponse]:
+    try:
+        return [
+            EventWithShiftsResponse(
+                **EventResponse.model_validate(event).model_dump(),
+                shifts=[
+                    _admin_shift_response(shift)
+                    for shift in sorted(
+                        event.shifts, key=lambda s: (s.sort_order, s.starts_at, s.id)
+                    )
+                ],
+            )
+            for event in _service(organization_slug, current, db).list_events_with_shifts(season_id)
         ]
     except PlanningNotFoundError as error:
         raise _translate(error) from None

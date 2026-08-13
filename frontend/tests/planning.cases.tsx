@@ -115,6 +115,15 @@ function planningFetch(
     if (url.endsWith("/proposals") && method === "GET") return Response.json({ windows: [] });
     if (url.endsWith("/seasons/season-1/events") && method === "GET")
       return Response.json(returnedEvents);
+    if (url.endsWith("/seasons/season-1/events-with-shifts") && method === "GET")
+      return Response.json(
+        returnedEvents.map((event) => ({
+          ...event,
+          shifts: event.id === "event-1" && includeShifts ? [shift] : [],
+        })),
+      );
+    if (url.endsWith("/seasons/season-2/events-with-shifts") && method === "GET")
+      return Response.json([]);
     if (url.endsWith("/events/event-1/shifts") && method === "GET")
       return Response.json(includeShifts ? [shift] : []);
     if (url.endsWith("/events/event-2/shifts") && method === "GET") return Response.json([]);
@@ -456,6 +465,8 @@ describe("planning admin", () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/seasons/season-2/events")) return Response.json([springEvent]);
+      if (url.endsWith("/seasons/season-2/events-with-shifts"))
+        return Response.json([{ ...springEvent, shifts: [] }]);
       if (url.endsWith("/events/event-spring/shifts")) return Response.json([]);
       return base(input, init);
     });
@@ -648,7 +659,9 @@ describe("planning admin", () => {
     );
     expect(await screen.findByRole("status")).toHaveTextContent("Anwesend");
     expect(
-      fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/events/event-1/shifts")),
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/seasons/season-1/events-with-shifts"),
+      ),
     ).toHaveLength(2);
   });
 
@@ -740,8 +753,11 @@ describe("planning admin", () => {
     };
     const baseFetch = planningFetch("ADMIN", false, [season], true);
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
-        return Response.json([emptySignupShift]);
+      if (
+        String(input).endsWith("/seasons/season-1/events-with-shifts") &&
+        (init?.method ?? "GET") === "GET"
+      )
+        return Response.json([{ ...planningEvent, shifts: [emptySignupShift] }]);
       return baseFetch(input, init);
     });
     renderAdmin("ADMIN", fetchMock);
@@ -763,9 +779,14 @@ describe("planning admin", () => {
         cancelled = true;
         return Response.json({ ...shift, occupied_volunteers: 0, open_places: 3, signups: [] });
       }
-      if (url.endsWith("/events/event-1/shifts") && method === "GET")
+      if (url.endsWith("/seasons/season-1/events-with-shifts") && method === "GET")
         return Response.json([
-          cancelled ? { ...shift, occupied_volunteers: 0, open_places: 3, signups: [] } : shift,
+          {
+            ...planningEvent,
+            shifts: [
+              cancelled ? { ...shift, occupied_volunteers: 0, open_places: 3, signups: [] } : shift,
+            ],
+          },
         ]);
       return baseFetch(input, init);
     });
@@ -819,8 +840,11 @@ describe("planning admin", () => {
     };
     const baseFetch = planningFetch("ADMIN", false, [season], true);
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
-        return Response.json([fullShift]);
+      if (
+        String(input).endsWith("/seasons/season-1/events-with-shifts") &&
+        (init?.method ?? "GET") === "GET"
+      )
+        return Response.json([{ ...planningEvent, shifts: [fullShift] }]);
       return baseFetch(input, init);
     });
     renderAdmin("ADMIN", fetchMock);
@@ -1276,8 +1300,11 @@ describe("planning admin", () => {
     };
     const baseFetch = planningFetch("ADMIN", false, [season], true);
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
-        return Response.json([pastShift]);
+      if (
+        String(input).endsWith("/seasons/season-1/events-with-shifts") &&
+        (init?.method ?? "GET") === "GET"
+      )
+        return Response.json([{ ...planningEvent, shifts: [pastShift] }]);
       return baseFetch(input, init);
     });
     renderAdmin("ADMIN", fetchMock);
@@ -1406,8 +1433,13 @@ describe("planning admin", () => {
     const baseFetch = planningFetch("ADMIN", false, [season], true);
     let resolved = false;
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      if (String(input).endsWith("/events/event-1/shifts") && (init?.method ?? "GET") === "GET")
-        return Response.json([resolved ? resolvedPastShift : pastShift]);
+      if (
+        String(input).endsWith("/seasons/season-1/events-with-shifts") &&
+        (init?.method ?? "GET") === "GET"
+      )
+        return Response.json([
+          { ...planningEvent, shifts: [resolved ? resolvedPastShift : pastShift] },
+        ]);
       if (String(input).endsWith("/signups/signup-1/attendance") && init?.method === "PATCH") {
         resolved = true;
         return Response.json({ ...pastShift.signups[0]!, outcome: "ATTENDED" });

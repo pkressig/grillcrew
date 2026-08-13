@@ -75,6 +75,14 @@ function adminFetch(
       const volunteerId = JSON.parse(String(init?.body)).volunteer_id as string | null;
       return Response.json({ ...member, volunteer_id: volunteerId });
     }
+    if (url.includes("/families/volunteers/") && method === "PATCH") {
+      const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return Response.json({
+        id: url.split("/").at(-1),
+        email: "anna@example.invalid",
+        ...payload,
+      });
+    }
     if (url.endsWith("/families/family-2/members") && method === "GET") return Response.json([]);
     if (url.endsWith("/club-years") || url.endsWith("/seasons")) return Response.json([]);
     if (url.endsWith("/seasons/current")) return new Response(null, { status: 404 });
@@ -489,8 +497,28 @@ describe("family admin", () => {
 
   it("searches active volunteers by name and links, replaces, and removes with refresh", async () => {
     document.cookie = "gc_csrf=link-token";
-    const first = { id: "volunteer-1", first_name: "Anna", last_name: "Zeta" };
-    const second = { id: "volunteer-2", first_name: "Berta", last_name: "Alpha" };
+    const first = {
+      id: "volunteer-1",
+      first_name: "Anna",
+      last_name: "Zeta",
+      phone: "079 111 11 11",
+      email: "anna@example.invalid",
+      compensation_preference: "WORK_HOURS",
+      compensation_family_member_id: null,
+      internal_note: null,
+      status: "ACTIVE",
+    };
+    const second = {
+      id: "volunteer-2",
+      first_name: "Berta",
+      last_name: "Alpha",
+      phone: "079 222 22 22",
+      email: "berta@example.invalid",
+      compensation_preference: "VOLUNTARY",
+      compensation_family_member_id: null,
+      internal_note: null,
+      status: "ACTIVE",
+    };
     const fetchMock = adminFetch(
       "ADMIN",
       [Response.json([family])],
@@ -516,7 +544,7 @@ describe("family admin", () => {
 
     fireEvent.change(picker, { target: { value: first.id } });
     expect(await screen.findByRole("status")).toHaveTextContent("Volunteer wurde verknüpft.");
-    expect(await screen.findByText("Verknüpft mit Anna Zeta")).toBeInTheDocument();
+    expect(await screen.findByText("079 111 11 11 · anna@example.invalid")).toBeInTheDocument();
     fireEvent.change(search, { target: { value: "berta" } });
     expect(screen.getByRole("option", { name: "Anna Zeta" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Berta Alpha" })).toBeInTheDocument();
@@ -528,7 +556,7 @@ describe("family admin", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(
       "Volunteer-Verknüpfung wurde ersetzt.",
     );
-    expect(await screen.findByText("Verknüpft mit Berta Alpha")).toBeInTheDocument();
+    expect(await screen.findByText("079 222 22 22 · berta@example.invalid")).toBeInTheDocument();
 
     vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     const linkedPicker = screen.getByLabelText("Volunteer für Mia Andere");
@@ -588,5 +616,113 @@ describe("family admin", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Erneut versuchen" }));
     expect(await screen.findByText("Keine aktiven Volunteers verfügbar.")).toBeInTheDocument();
+  });
+
+  it("shows a neutral loading state for a linked helper instead of a false inactive fallback", async () => {
+    let resolveVolunteers!: (response: Response) => void;
+    const pending = new Promise<Response>((resolve) => {
+      resolveVolunteers = resolve;
+    });
+    const linkedMember = { ...member, volunteer_id: "volunteer-1" };
+    const base = adminFetch("ADMIN", [Response.json([family])], [Response.json([linkedMember])]);
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith("/families/volunteers") ? pending : base(input, init),
+    );
+    renderAdmin("ADMIN", fetchMock);
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+
+    expect(await screen.findByText("Helferdaten werden geladen …")).toBeInTheDocument();
+    expect(screen.queryByText("Verknüpft mit einem nicht mehr aktiven Volunteer")).toBeNull();
+
+    resolveVolunteers(
+      Response.json([
+        {
+          id: "volunteer-1",
+          first_name: "Anna",
+          last_name: "Zeta",
+          phone: "079 111 11 11",
+          email: "anna@example.invalid",
+          compensation_preference: "WORK_HOURS",
+          compensation_family_member_id: null,
+          internal_note: null,
+          status: "ACTIVE",
+        },
+      ]),
+    );
+    expect(await screen.findByText("079 111 11 11 · anna@example.invalid")).toBeInTheDocument();
+    expect(screen.queryByText("Helferdaten werden geladen …")).toBeNull();
+  });
+
+  it("keeps a linked inactive volunteer visible and allows safe reactivation", async () => {
+    document.cookie = "gc_csrf=reactivate-token";
+    const inactive = {
+      id: "volunteer-inactive",
+      first_name: "Anna",
+      last_name: "Zeta",
+      phone: "079 111 11 11",
+      email: "anna@example.invalid",
+      compensation_preference: "WORK_HOURS",
+      compensation_family_member_id: null,
+      internal_note: "Inaktiv geprüft",
+      status: "INACTIVE",
+    };
+    const fetchMock = adminFetch(
+      "ADMIN",
+      [Response.json([family])],
+      [Response.json([{ ...member, volunteer_id: inactive.id }])],
+      [Response.json([inactive])],
+    );
+    renderAdmin("ADMIN", fetchMock);
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+
+    expect(await screen.findByText("Inaktiv", { selector: "span" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Bearbeiten" }));
+    fireEvent.change(screen.getByLabelText("Status"), { target: { value: "ACTIVE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+
+    await waitFor(() => expect(screen.queryByText("Inaktiv", { selector: "span" })).toBeNull());
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/families\/volunteers\/volunteer-inactive$/),
+      expect.objectContaining({
+        method: "PATCH",
+        headers: expect.objectContaining({ "X-CSRF-Token": "reactivate-token" }),
+        body: expect.stringContaining('"status":"ACTIVE"'),
+      }),
+    );
+  });
+
+  it("offers active volunteers and the current inactive link only", async () => {
+    const currentInactive = {
+      id: "volunteer-current-inactive",
+      first_name: "Anna",
+      last_name: "Zeta",
+      status: "INACTIVE",
+    };
+    const otherInactive = {
+      id: "volunteer-other-inactive",
+      first_name: "Berta",
+      last_name: "Alpha",
+      status: "INACTIVE",
+    };
+    const active = {
+      id: "volunteer-active",
+      first_name: "Clara",
+      last_name: "Beta",
+      status: "ACTIVE",
+    };
+    renderAdmin(
+      "ADMIN",
+      adminFetch(
+        "ADMIN",
+        [Response.json([family])],
+        [Response.json([{ ...member, volunteer_id: currentInactive.id }])],
+        [Response.json([currentInactive, otherInactive, active])],
+      ),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+
+    expect(await screen.findByRole("option", { name: "Anna Zeta" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Berta Alpha" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Clara Beta" })).toBeInTheDocument();
   });
 });

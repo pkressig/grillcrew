@@ -25,7 +25,7 @@ VollstÃ¤ndige Namen eingetragener Helfer sind im Ã¶ffentlichen Plan sichtbar
 SelbststÃ¤ndige Absage ist bis sieben volle Tage vor Schichtbeginn mÃ¶glich. Danach muss die Koordination kontaktiert werden.
 
 ## D-007 â€“ Registrierung
-**Status:** beschlossen
+**Status:** ersetzt durch D-046 (2026-08-03)
 Helfer dÃ¼rfen sich ohne Konto eintragen. Ein freiwilliges Konto ermÃ¶glicht DatenÃ¼bernahme, eigene EinsÃ¤tze und Stundenansicht.
 
 ## D-008 â€“ VergÃ¼tungsart
@@ -262,3 +262,11 @@ Organisationen und bestehende Audit-Ereignisse bleiben erhalten. Vor der Löschu
 mandantenbezogenes `EVENT_FORCE_DELETED`-Audit-Ereignis mit Anlassidentität, Akteur und
 Abhängigkeitszahlen in derselben Transaktion geschrieben. Die Regeln zur Periodenaufbewahrung
 werden dadurch nicht gelockert.
+
+## D-046 – Verpflichtendes Helferkonto für die Einsatz-Anmeldung
+
+**Entscheid:** Die öffentliche Einsatz-Anmeldung erfordert ab sofort ein Helferkonto (Registrierung mit Passwort, danach Login). Die frühere anonyme Anmeldung nur mit Kontaktdaten (Vorname, Nachname, Telefon, E-Mail) entfällt für neue Anmeldungen. Login und Registrierung öffnen sich auf der öffentlichen Einsatzplan-Seite als responsives In-Page-Modal statt als separate Seite; nach erfolgreichem Login kehrt die/der Helfer:in direkt zur zuvor gewählten Schicht zurück und kann sich dort verbindlich eintragen, statt auf eine andere Seite (z. B. Admin-Login) umgeleitet zu werden. Dieser Entscheid ersetzt D-007 und den zugehörigen Grundsatz "No forced registration for public volunteer signup" in `CLAUDE.md`.
+
+**Abgrenzung:** Bereits vor diesem Entscheid erstellte anonyme Anmeldungen bleiben gültig; es findet keine rückwirkende Migration bestehender Datensätze statt. Admin- und Koordinationsflows sind von diesem Entscheid nicht betroffen.
+
+**Entschieden von:** Product Owner, 2026-08-03.

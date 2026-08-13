@@ -147,8 +147,8 @@ export function OneDriveSyncCard({
             Tägliche Synchronisation aktiviert
           </label>
           <p className="text-sm text-muted-foreground">
-            Der manuelle Download bleibt auch bei deaktivierter täglicher Synchronisation
-            verfügbar. Nach dem Download wird ein Importentwurf zur Prüfung geöffnet.
+            Der manuelle Download bleibt auch bei deaktivierter täglicher Synchronisation verfügbar.
+            Nach dem Download wird ein Importentwurf zur Prüfung geöffnet.
           </p>
           <div className="flex flex-wrap gap-2">
             <Button disabled={busy} type="submit">

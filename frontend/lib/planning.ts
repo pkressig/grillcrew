@@ -190,6 +190,13 @@ export const loadEvents = (org: string, seasonId: string) =>
     undefined,
     "Die Anlässe konnten nicht geladen werden.",
   );
+export type PlanningEventWithShifts = PlanningEvent & { shifts: Shift[] };
+export const loadEventsWithShifts = (org: string, seasonId: string) =>
+  request<PlanningEventWithShifts[]>(
+    `/api/admin/${encodeURIComponent(org)}/seasons/${encodeURIComponent(seasonId)}/events-with-shifts`,
+    undefined,
+    "Die Anlässe konnten nicht geladen werden.",
+  );
 export const createEvent = (org: string, seasonId: string, payload: EventInput) =>
   request<PlanningEvent>(
     `/api/admin/${encodeURIComponent(org)}/seasons/${encodeURIComponent(seasonId)}/events`,

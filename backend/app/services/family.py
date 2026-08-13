@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStatus
 from app.models.identity import AuditEvent
 from app.models.planning import Volunteer, VolunteerStatus
-from app.schemas.family import FamilyCreate, FamilyMemberCreate, FamilyMemberVolunteerUpdate
+from app.schemas.family import (
+    FamilyCreate,
+    FamilyMemberCreate,
+    FamilyMemberVolunteerUpdate,
+    VolunteerAdminUpdate,
+)
+from app.services.public_signup import normalize_phone
 
 
 class FamilyNotFoundError(Exception):
@@ -20,6 +26,10 @@ class FamilyMemberNotFoundError(Exception):
 
 
 class FamilyMemberLinkError(Exception):
+    pass
+
+
+class VolunteerNotFoundError(Exception):
     pass
 
 
@@ -104,17 +114,98 @@ class FamilyService:
         )
         return [(member, family) for member, family in self.db.execute(statement)]
 
-    def list_active_volunteers(self) -> list[Volunteer]:
+    def list_family_volunteers(self) -> list[Volunteer]:
+        linked_to_tenant_family = (
+            select(FamilyMember.id)
+            .join(Family, Family.id == FamilyMember.family_id)
+            .where(
+                FamilyMember.volunteer_id == Volunteer.id,
+                Family.organization_id == self.organization_id,
+            )
+            .exists()
+        )
         return list(
             self.db.scalars(
                 select(Volunteer)
                 .where(
                     Volunteer.organization_id == self.organization_id,
-                    Volunteer.status == VolunteerStatus.ACTIVE,
+                    (Volunteer.status == VolunteerStatus.ACTIVE) | linked_to_tenant_family,
                 )
                 .order_by(Volunteer.last_name, Volunteer.first_name, Volunteer.id)
             )
         )
+
+    def get_volunteer(self, volunteer_id: uuid.UUID) -> Volunteer:
+        volunteer = self.db.scalar(
+            select(Volunteer).where(
+                Volunteer.id == volunteer_id,
+                Volunteer.organization_id == self.organization_id,
+            )
+        )
+        if volunteer is None:
+            raise VolunteerNotFoundError
+        return volunteer
+
+    def update_volunteer(
+        self,
+        volunteer_id: uuid.UUID,
+        payload: VolunteerAdminUpdate,
+        actor_user_id: uuid.UUID,
+    ) -> Volunteer:
+        volunteer = self.get_volunteer(volunteer_id)
+        if payload.compensation_family_member_id is not None:
+            child = self.db.scalar(
+                select(FamilyMember)
+                .join(Family, Family.id == FamilyMember.family_id)
+                .where(
+                    FamilyMember.id == payload.compensation_family_member_id,
+                    FamilyMember.member_type == FamilyMemberType.CHILD,
+                    Family.organization_id == self.organization_id,
+                    Family.status == FamilyStatus.ACTIVE,
+                )
+            )
+            if child is None:
+                raise FamilyMemberLinkError("invalid child member")
+        new_phone_normalized = normalize_phone(payload.phone)
+        field_changes = (
+            ("first_name", volunteer.first_name != payload.first_name),
+            ("last_name", volunteer.last_name != payload.last_name),
+            ("phone", volunteer.phone_normalized != new_phone_normalized),
+            (
+                "compensation_preference",
+                volunteer.compensation_preference != payload.compensation_preference,
+            ),
+            (
+                "compensation_family_member_id",
+                volunteer.compensation_family_member_id != payload.compensation_family_member_id,
+            ),
+            ("internal_note", volunteer.internal_note != payload.internal_note),
+            ("status", volunteer.status != payload.status),
+        )
+        changed_fields = [field for field, changed in field_changes if changed]
+        if not changed_fields:
+            return volunteer
+        volunteer.first_name = payload.first_name
+        volunteer.last_name = payload.last_name
+        volunteer.phone_normalized = new_phone_normalized
+        volunteer.phone_display = payload.phone
+        volunteer.compensation_preference = payload.compensation_preference
+        volunteer.compensation_family_member_id = payload.compensation_family_member_id
+        volunteer.internal_note = payload.internal_note
+        volunteer.status = payload.status
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="VOLUNTEER_PROFILE_UPDATED_BY_ADMIN",
+                entity_type="volunteer",
+                entity_id=volunteer.id,
+                event_metadata={"changed_fields": changed_fields},
+            )
+        )
+        self.db.commit()
+        self.db.refresh(volunteer)
+        return volunteer
 
     def update_member_volunteer(
         self,

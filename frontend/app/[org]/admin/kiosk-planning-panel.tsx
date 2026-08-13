@@ -57,11 +57,22 @@ function KioskWindowCard({
   const [startsAt, setStartsAt] = useState(inputDateTime(window.start_at));
   const [endsAt, setEndsAt] = useState(inputDateTime(window.end_at));
   const [kioskOpen, setKioskOpen] = useState(window.kiosk_open);
-  const [shiftCount, setShiftCount] = useState(window.kiosk_shift_count ?? 1);
+  const [shiftCount, setShiftCount] = useState(window.proposed_kiosk_slots ?? 1);
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(window.kiosk_confirmed === true);
   const [error, setError] = useState<string | null>(null);
+
+  // Keep the card in sync with the server-confirmed proposal state (e.g. after
+  // "Vorschläge aus Spielbetrieb aktualisieren" or a confirmation elsewhere) —
+  // this component is keyed by window.id and does not remount on refresh.
+  useEffect(() => {
+    setStartsAt(inputDateTime(window.start_at));
+    setEndsAt(inputDateTime(window.end_at));
+    setKioskOpen(window.kiosk_open);
+    setShiftCount(window.proposed_kiosk_slots ?? 1);
+    setConfirmed(window.kiosk_confirmed === true);
+  }, [window]);
 
   async function save() {
     setSaving(true);
@@ -91,9 +102,7 @@ function KioskWindowCard({
     setConfirming(true);
     setError(null);
     try {
-      const updated = await confirmPlanningProposal(org, window.id, {
-        kiosk_shift_count: shiftCount,
-      });
+      const updated = await confirmPlanningProposal(org, window.id, { kind: "kiosk" });
       setConfirmed(true);
       onUpdated(updated);
     } catch (caught) {

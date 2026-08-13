@@ -28,8 +28,6 @@ export type ProposalWindow = {
   grill_confirmed?: boolean;
   /** Lifecycle fields are optional for backwards-compatible proposal responses. */
   status?: "DRAFT" | "CONFIRMED";
-  kiosk_shift_count?: number;
-  grill_shift_count?: number;
 };
 
 export type PlanningProposalWindow = ProposalWindow;
@@ -38,22 +36,20 @@ export type PlanningProposalResponse = { windows: ProposalWindow[] };
 export type ProposalOverrideInput = Partial<
   Pick<
     ProposalWindow,
-    | "kiosk_open"
-    | "grill_required"
-    | "proposed_grill_slots"
-    | "proposed_kiosk_slots"
-    | "kiosk_shift_count"
-    | "grill_shift_count"
+    "kiosk_open" | "grill_required" | "proposed_grill_slots" | "proposed_kiosk_slots"
   >
 > & {
   starts_at?: string;
   ends_at?: string;
 };
 
+/**
+ * The confirm endpoint never reads a request body: the shift/slot counts it
+ * materialises always come from the already-persisted proposal override, so
+ * callers must PATCH any edits before confirming rather than passing them here.
+ */
 export type ProposalConfirmationInput = {
   kind?: "kiosk" | "grill";
-  kiosk_shift_count?: number;
-  grill_shift_count?: number;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
