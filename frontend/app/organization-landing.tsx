@@ -496,7 +496,7 @@ function Day({
                   title: event.title,
                   matchDescription: event.public_description,
                   type: event.event_type,
-                  startsAt: earliestShiftStart(event),
+                  startsAt: event.kickoff_time ?? earliestShiftStart(event),
                 }))}
               />
             </div>

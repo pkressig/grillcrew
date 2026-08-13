@@ -18,6 +18,7 @@ export type PublicPlanEvent = {
   location: string;
   event_type: string;
   public_description: string | null;
+  kickoff_time?: string | null;
   shifts: PublicShift[];
 };
 

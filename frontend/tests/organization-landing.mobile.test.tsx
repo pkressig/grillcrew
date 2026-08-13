@@ -51,18 +51,8 @@ const plan = {
       location: "Platz C",
       event_type: "Cup",
       public_description: "FC Beispiel – FC Alpha",
-      shifts: [
-        {
-          id: "s0",
-          starts_at: "2026-09-05T07:00:00+02:00",
-          ends_at: "2026-09-05T08:00:00+02:00",
-          required_volunteers: 1,
-          occupied_volunteers: 0,
-          public_note: null,
-          status: "OPEN" as const,
-          volunteer_names: [],
-        },
-      ],
+      kickoff_time: "07:00:00",
+      shifts: [],
     },
     {
       id: "e1",
@@ -71,6 +61,7 @@ const plan = {
       location: "Platz A",
       event_type: "Meisterschaft",
       public_description: "FC Beispiel – FC Beta",
+      kickoff_time: "08:00:00",
       shifts: [
         {
           id: "s1",
@@ -91,18 +82,8 @@ const plan = {
       location: "Platz B",
       event_type: "Cup",
       public_description: "FC Beispiel – FC Gamma",
-      shifts: [
-        {
-          id: "s2",
-          starts_at: "2026-09-05T11:00:00+02:00",
-          ends_at: "2026-09-05T13:00:00+02:00",
-          required_volunteers: 2,
-          occupied_volunteers: 2,
-          public_note: null,
-          status: "OPEN" as const,
-          volunteer_names: [],
-        },
-      ],
+      kickoff_time: "11:00:00",
+      shifts: [],
     },
     {
       id: "e3",
@@ -111,6 +92,7 @@ const plan = {
       location: "Platz C",
       event_type: "Freundschaftsspiel",
       public_description: null,
+      kickoff_time: "09:00:00",
       shifts: [
         {
           id: "s3",
@@ -202,6 +184,7 @@ describe("mobile public plan", () => {
       "08:00Junioren – FC Beispiel – FC BetaMeisterschaft",
       "11:00Aktive – FC Beispiel – FC GammaCup",
     ]);
+    expect(screen.getAllByRole("button", { name: /Einsatz anmelden:/ })).toHaveLength(1);
     expect(screen.queryByText("Platz A")).not.toBeInTheDocument();
     fireEvent.click(secondDay);
     expect(firstDay).toHaveAttribute("aria-expanded", "false");
@@ -224,7 +207,7 @@ describe("mobile public plan", () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Kompakte Liste" }));
     expect(screen.getByText("1 von 3 Plätzen besetzt")).toBeInTheDocument();
-    expect(screen.getAllByText("Vollständig belegt")).toHaveLength(2);
+    expect(screen.queryByText("Vollständig belegt")).not.toBeInTheDocument();
     const action = screen.getByRole("button", { name: /Einsatz anmelden: Junioren/ });
     expect(action).toHaveClass("min-h-11", "w-full");
     fireEvent.click(action);

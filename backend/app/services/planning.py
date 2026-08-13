@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, text, update
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from app.models.external_kiosk import ExternalKioskBatch, ExternalKioskCategory, ExternalKioskRow
 from app.models.identity import AuditEvent
@@ -246,7 +246,24 @@ class PlanningService:
         )
 
     def list_public_events(self, from_date: date) -> list[Event]:
-        """Return upcoming published events with public-visible shifts for this tenant."""
+        """Return all published events on upcoming public grill-service days."""
+        grill_event = aliased(Event)
+        grill_season = aliased(Season)
+        grill_club_year = aliased(ClubYear)
+        public_grill_day_exists = (
+            select(Shift.id)
+            .join(grill_event, Shift.event_id == grill_event.id)
+            .join(grill_season, grill_event.season_id == grill_season.id)
+            .join(grill_club_year, grill_season.club_year_id == grill_club_year.id)
+            .where(
+                grill_club_year.organization_id == self.organization_id,
+                grill_event.status == EventStatus.PUBLISHED,
+                grill_event.date == Event.date,
+                Shift.status != ShiftStatus.CANCELLED,
+                Shift.shift_type == ShiftType.GRILL,
+            )
+            .exists()
+        )
         events = list(
             self.db.scalars(
                 select(Event)
@@ -257,10 +274,7 @@ class PlanningService:
                     ClubYear.organization_id == self.organization_id,
                     Event.status == EventStatus.PUBLISHED,
                     Event.date >= from_date,
-                    Event.shifts.any(
-                        (Shift.status != ShiftStatus.CANCELLED)
-                        & (Shift.shift_type == ShiftType.GRILL)
-                    ),
+                    public_grill_day_exists,
                 )
                 .order_by(Event.date, Event.id)
             )

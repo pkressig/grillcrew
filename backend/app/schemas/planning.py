@@ -334,6 +334,7 @@ class PublicEventResponse(BaseModel):  # type: ignore[explicit-any]
     location: str
     event_type: str
     public_description: str | None
+    kickoff_time: time_type | None
     shifts: list[PublicShiftResponse]
 
 

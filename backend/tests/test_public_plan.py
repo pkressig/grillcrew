@@ -29,6 +29,7 @@ def test_public_plan_is_unauthenticated_sorted_and_public_safe(
         location="Sportplatz",
         event_type="Match",
         public_description="Beim Eingang",
+        kickoff_time=None,
         internal_note="staff secret",
         shifts=[
             _shift(later_id, 2, "12:00", internal_note="private phone +41 79 000 00 00"),
@@ -104,6 +105,53 @@ def test_public_plan_unknown_organization_returns_404(
     assert response.status_code == 404
 
 
+def test_public_plan_serializes_all_games_but_only_existing_grill_shifts(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    organization = _organization("tenant-a")
+    game_date = date(2099, 8, 2)
+    events: list[object] = [
+        SimpleNamespace(
+            id=uuid4(),
+            title=title,
+            date=game_date,
+            location="Sportplatz",
+            event_type="Match",
+            public_description=teams,
+            kickoff_time=datetime.strptime(kickoff, "%H:%M").time(),
+            shifts=[_shift(uuid4(), 1, "08:00", "private")] if index == 0 else [],
+        )
+        for index, (title, teams, kickoff) in enumerate(
+            [
+                ("Spiel A", "Heim - Alpha", "10:00"),
+                ("Spiel B", "Heim - Beta", "12:00"),
+                ("Spiel C", "Heim - Gamma", "14:00"),
+            ]
+        )
+    ]
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def list_public_events(self, _from_date: date) -> list[object]:
+            return events
+
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(public, "resolve_organization", lambda *_args: organization)
+    monkeypatch.setattr(public, "PlanningService", FakeService)
+    try:
+        response = client.get("/api/public/tenant-a/plan")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()["events"]
+    assert [event["title"] for event in body] == ["Spiel A", "Spiel B", "Spiel C"]
+    assert [event["kickoff_time"] for event in body] == ["10:00:00", "12:00:00", "14:00:00"]
+    assert [len(event["shifts"]) for event in body] == [1, 0, 0]
+
+
 def test_public_service_query_filters_tenant_published_and_upcoming() -> None:
     from app.services.planning import PlanningService
 
@@ -124,6 +172,10 @@ def test_public_service_query_filters_tenant_published_and_upcoming() -> None:
     assert "club_year.organization_id" in sql
     assert "event.status" in sql
     assert "event.date >=" in sql
+    assert "EXISTS" in sql
+    assert "event_1.date = event.date" in sql
+    assert "shift.status !=" in sql
+    assert "shift.shift_type" in sql
     assert "ORDER BY event.date, event.id" in sql
 
 

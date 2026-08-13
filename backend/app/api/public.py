@@ -116,6 +116,7 @@ def public_plan(
                 location=event.location,
                 event_type=event.event_type,
                 public_description=event.public_description,
+                kickoff_time=event.kickoff_time,
                 shifts=[
                     PublicShiftResponse(
                         id=shift.id,
