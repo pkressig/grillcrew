@@ -1,13 +1,20 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KioskPlanningPanel } from "@/app/[org]/admin/kiosk-planning-panel";
 import * as proposals from "@/lib/proposals";
+import * as planningLib from "@/lib/planning";
 
 vi.mock("@/lib/proposals", () => ({
   loadPlanningProposals: vi.fn(),
   refreshPlanningProposals: vi.fn(),
   updatePlanningProposal: vi.fn(),
   confirmPlanningProposal: vi.fn(),
+  updateKioskShiftSplits: vi.fn(),
+}));
+
+vi.mock("@/lib/planning", () => ({
+  loadShifts: vi.fn(),
+  updateShift: vi.fn(),
 }));
 
 const windowProposal = {
@@ -27,6 +34,11 @@ const windowProposal = {
     { title: "Aktive – FC Muster", kickoff_at: "2026-09-12T12:00:00Z", venue: "Sportplatz" },
   ],
 };
+
+beforeEach(() => {
+  vi.mocked(planningLib.loadShifts).mockResolvedValue([]);
+  vi.mocked(proposals.updateKioskShiftSplits).mockResolvedValue(windowProposal);
+});
 
 afterEach(() => {
   cleanup();
@@ -96,8 +108,13 @@ describe("Kiosk planning", () => {
       .mockResolvedValueOnce({ windows: [] });
     render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Server nicht erreichbar");
-    fireEvent.click(screen.getByRole("button", { name: "Erneut laden" }));
+    // Scoped to the card containing our own mocked message: the unrelated
+    // ExternalPlanComparisonWorkspace embedded in this panel performs its own
+    // real (unmocked) fetch and can independently render a second, unrelated
+    // role="alert" card with its own "Erneut laden" button in the same test.
+    const message = await screen.findByText("Server nicht erreichbar");
+    const card = message.parentElement as HTMLElement;
+    fireEvent.click(within(card).getByRole("button", { name: "Erneut laden" }));
     await screen.findByRole("heading", { name: "Keine Kiosk-Zeitfenster" });
     expect(proposals.loadPlanningProposals).toHaveBeenCalledTimes(2);
   });
@@ -151,5 +168,121 @@ describe("Kiosk planning", () => {
     expect(
       screen.queryByRole("heading", { level: 2, name: /12. September 2026/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it("saves a manual split into two timed shifts with their own headcounts", async () => {
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [windowProposal] });
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+    await screen.findByRole("heading", { level: 2, name: /12. September 2026/i });
+
+    fireEvent.click(screen.getByRole("button", { name: "+ Zeitfenster" }));
+    fireEvent.change(screen.getByLabelText("Von"), { target: { value: "10:00" } });
+    fireEvent.change(screen.getByLabelText("Bis"), { target: { value: "14:00" } });
+    fireEvent.change(screen.getByLabelText("Helfer"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "Aufteilung speichern" }));
+
+    // Europe/Zurich is UTC+2 in September (CEST): 10:00/14:00 local -> 08:00/12:00Z.
+    await waitFor(() =>
+      expect(proposals.updateKioskShiftSplits).toHaveBeenCalledWith("example", "window-1", [
+        {
+          starts_at: "2026-09-12T08:00:00.000Z",
+          ends_at: "2026-09-12T12:00:00.000Z",
+          required_volunteers: 1,
+        },
+      ]),
+    );
+  });
+
+  it("persists an unsaved shift split before confirming so it is never silently discarded", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [windowProposal] });
+    vi.mocked(proposals.confirmPlanningProposal).mockResolvedValue({
+      ...windowProposal,
+      kiosk_confirmed: true,
+    });
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+    await screen.findByRole("heading", { level: 2, name: /12. September 2026/i });
+
+    // Add a split but deliberately do NOT click "Aufteilung speichern" first.
+    fireEvent.click(screen.getByRole("button", { name: "+ Zeitfenster" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kiosk-Vorschlag bestätigen" }));
+
+    await waitFor(() =>
+      expect(proposals.updateKioskShiftSplits).toHaveBeenCalledWith("example", "window-1", [
+        expect.objectContaining({ required_volunteers: 1 }),
+      ]),
+    );
+    await waitFor(() =>
+      expect(proposals.confirmPlanningProposal).toHaveBeenCalledWith("example", "window-1", {
+        kind: "kiosk",
+      }),
+    );
+    const [splitsOrder] = vi.mocked(proposals.updateKioskShiftSplits).mock.invocationCallOrder;
+    const [confirmOrder] = vi.mocked(proposals.confirmPlanningProposal).mock.invocationCallOrder;
+    expect(splitsOrder as number).toBeLessThan(confirmOrder as number);
+  });
+
+  it("renders confirmed shifts and lets an admin adjust one via Anpassen", async () => {
+    const confirmedWindow = {
+      ...windowProposal,
+      kiosk_confirmed: true,
+      covered_event_ids: ["event-1"],
+    };
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [confirmedWindow] });
+    vi.mocked(planningLib.loadShifts).mockResolvedValue([
+      {
+        id: "shift-1",
+        event_id: "event-1",
+        starts_at: "2026-09-12T08:30:00Z",
+        ends_at: "2026-09-12T12:30:00Z",
+        required_volunteers: 2,
+        occupied_volunteers: 1,
+        open_places: 1,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "CLOSED",
+        sort_order: 0,
+        shift_type: "KIOSK",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    vi.mocked(planningLib.updateShift).mockResolvedValue({
+      id: "shift-1",
+      event_id: "event-1",
+      starts_at: "2026-09-12T09:00:00Z",
+      ends_at: "2026-09-12T13:00:00Z",
+      required_volunteers: 3,
+      occupied_volunteers: 1,
+      open_places: 2,
+      signups: [],
+      public_note: null,
+      internal_note: null,
+      status: "CLOSED",
+      sort_order: 0,
+      shift_type: "KIOSK",
+      assignment_mode: "OPEN_SIGNUP",
+      menu_type: null,
+      crew_suggestion_overridden: false,
+    });
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Kiosk-Entwurf angelegt");
+    expect(screen.getByText("1 von 2 Helfer angemeldet")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Anpassen" }));
+    fireEvent.change(screen.getByLabelText("Helfer"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+
+    await waitFor(() =>
+      expect(planningLib.updateShift).toHaveBeenCalledWith(
+        "example",
+        "shift-1",
+        expect.objectContaining({ required_volunteers: 3 }),
+      ),
+    );
+    expect(await screen.findByText("1 von 3 Helfer angemeldet")).toBeInTheDocument();
   });
 });

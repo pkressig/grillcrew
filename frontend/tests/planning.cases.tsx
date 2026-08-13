@@ -48,6 +48,24 @@ const secondPlanningEvent = {
   id: "event-2",
   title: "Heimspieltag",
 };
+const draftEventOne = {
+  ...planningEvent,
+  id: "event-draft-1",
+  title: "CBS Junioren D-7a 1. Stkl.",
+  date: "2026-09-11",
+  kickoff_time: "14:30:00",
+  event_type: "Heimspiel",
+  status: "DRAFT",
+};
+const draftEventTwo = {
+  ...planningEvent,
+  id: "event-draft-2",
+  title: "Junioren A – FC Beispiel",
+  date: "2026-09-13",
+  kickoff_time: null,
+  event_type: "Auswärtsspiel",
+  status: "DRAFT",
+};
 const shift = {
   id: "shift-1",
   event_id: "event-1",
@@ -1505,5 +1523,151 @@ describe("planning admin", () => {
       "shift-event-1-starts-at",
       "shift-event-2-starts-at",
     ]);
+  });
+
+  it("shows selection checkboxes only for draft events", async () => {
+    renderAdmin(
+      "ADMIN",
+      planningFetch("ADMIN", false, [season], true, false, [planningEvent, draftEventOne]),
+    );
+    await screen.findByText("Sommerfest");
+    expect(
+      screen.getByLabelText(`Anlass ${draftEventOne.title} am 11.09.2026 auswählen`),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(`Anlass ${planningEvent.title} am 12.09.2026 auswählen`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows the bulk action bar only once at least one draft event is selected, with the correct count", async () => {
+    renderAdmin(
+      "ADMIN",
+      planningFetch("ADMIN", false, [season], true, false, [draftEventOne, draftEventTwo]),
+    );
+    await screen.findByText(draftEventOne.title);
+    expect(
+      screen.queryByRole("region", { name: "Mehrfachauswahl Anlässe" }),
+    ).not.toBeInTheDocument();
+
+    const checkboxOne = screen.getByLabelText(
+      `Anlass ${draftEventOne.title} am 11.09.2026 auswählen`,
+    );
+    fireEvent.click(checkboxOne);
+
+    const bar = await screen.findByRole("region", { name: "Mehrfachauswahl Anlässe" });
+    expect(bar).toHaveTextContent("1 Anlass ausgewählt");
+    expect(
+      within(bar).getByRole("button", { name: "1 Anlass veröffentlichen" }),
+    ).toBeInTheDocument();
+
+    const checkboxTwo = screen.getByLabelText(
+      `Anlass ${draftEventTwo.title} am 13.09.2026 auswählen`,
+    );
+    fireEvent.click(checkboxTwo);
+
+    expect(bar).toHaveTextContent("2 Anlässe ausgewählt");
+    expect(
+      within(bar).getByRole("button", { name: "Ausgewählte veröffentlichen (2)" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(bar).getByRole("button", { name: "Auswahl aufheben" }));
+
+    expect(
+      screen.queryByRole("region", { name: "Mehrfachauswahl Anlässe" }),
+    ).not.toBeInTheDocument();
+    expect(checkboxOne).not.toBeChecked();
+    expect(checkboxTwo).not.toBeChecked();
+  });
+
+  it("lists exactly the selected events in the confirmation modal with the four correct columns in order", async () => {
+    renderAdmin(
+      "ADMIN",
+      planningFetch("ADMIN", false, [season], true, false, [draftEventOne, draftEventTwo]),
+    );
+    await screen.findByText(draftEventOne.title);
+    fireEvent.click(screen.getByLabelText(`Anlass ${draftEventOne.title} am 11.09.2026 auswählen`));
+    fireEvent.click(screen.getByLabelText(`Anlass ${draftEventTwo.title} am 13.09.2026 auswählen`));
+    fireEvent.click(screen.getByRole("button", { name: "Ausgewählte veröffentlichen (2)" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "2 Anlässe veröffentlichen" });
+    expect(
+      within(dialog)
+        .getAllByRole("columnheader")
+        .map((header) => header.textContent),
+    ).toEqual(["Datum", "Uhrzeit", "Kategorie", "Mannschaften"]);
+    const rows = within(dialog).getAllByRole("row").slice(1);
+    expect(
+      rows.map((row) =>
+        within(row)
+          .getAllByRole("cell")
+          .map((cell) => cell.textContent),
+      ),
+    ).toEqual([
+      ["11.09.2026", "14:30", "Heimspiel", "CBS Junioren D-7a 1. Stkl."],
+      ["13.09.2026", "–", "Auswärtsspiel", "Junioren A – FC Beispiel"],
+    ]);
+  });
+
+  it("confirms bulk publish by calling updateEventStatus once per selected id, then shows a success message and clears the selection", async () => {
+    document.cookie = "gc_csrf=bulk-token";
+    const baseFetch = planningFetch("ADMIN", false, [season], true, false, [
+      draftEventOne,
+      draftEventTwo,
+    ]);
+    const patchedIds: string[] = [];
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const match = url.match(/\/events\/(event-draft-\d)$/);
+      if (match && init?.method === "PATCH") {
+        patchedIds.push(match[1]!);
+        return Response.json({ ...draftEventOne, id: match[1]!, status: "PUBLISHED" });
+      }
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByText(draftEventOne.title);
+    fireEvent.click(screen.getByLabelText(`Anlass ${draftEventOne.title} am 11.09.2026 auswählen`));
+    fireEvent.click(screen.getByLabelText(`Anlass ${draftEventTwo.title} am 13.09.2026 auswählen`));
+    fireEvent.click(screen.getByRole("button", { name: "Ausgewählte veröffentlichen (2)" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "2 Anlässe veröffentlichen" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "2 Anlässe veröffentlichen" }));
+
+    await waitFor(() => expect([...patchedIds].sort()).toEqual(["event-draft-1", "event-draft-2"]));
+    expect(await screen.findByRole("status")).toHaveTextContent("2 Anlässe wurden veröffentlicht.");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Mehrfachauswahl Anlässe" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("cancels the confirmation modal without calling updateEventStatus and keeps the selection", async () => {
+    const baseFetch = planningFetch("ADMIN", false, [season], true, false, [draftEventOne]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/events/event-draft-1") && init?.method === "PATCH")
+        throw new Error("updateEventStatus must not be called after Abbrechen");
+      return baseFetch(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByText(draftEventOne.title);
+    const checkbox = screen.getByLabelText(`Anlass ${draftEventOne.title} am 11.09.2026 auswählen`);
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: "1 Anlass veröffentlichen" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "1 Anlass veröffentlichen" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Abbrechen" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) => String(url).endsWith("/events/event-draft-1") && init?.method === "PATCH",
+      ),
+    ).toBe(false);
+    expect(checkbox).toBeChecked();
+    expect(screen.getByRole("region", { name: "Mehrfachauswahl Anlässe" })).toHaveTextContent(
+      "1 Anlass ausgewählt",
+    );
   });
 });

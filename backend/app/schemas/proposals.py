@@ -38,6 +38,7 @@ class ProposalWindowResponse(BaseModel):  # type: ignore[explicit-any]
     kiosk_confirmed: bool = False
     grill_confirmed: bool = False
     grill_shift_splits: list[ProposalShiftSplitResponse] = []
+    kiosk_shift_splits: list[ProposalShiftSplitResponse] = []
 
 
 class ProposalResponse(BaseModel):  # type: ignore[explicit-any]
@@ -84,3 +85,11 @@ class ProposalGrillSplitsUpdate(BaseModel):  # type: ignore[explicit-any]
 
     model_config = {"extra": "forbid"}
     shifts: list[ProposalShiftSplitInput] = Field(max_length=12)
+
+
+class ProposalKioskSplitsUpdate(ProposalGrillSplitsUpdate):  # type: ignore[explicit-any]
+    """Full replacement of a window's Kiosk sub-shifts (empty list clears them).
+
+    Same shape as ProposalGrillSplitsUpdate (a plain alias would work just as
+    well) but kept as its own named schema so the OpenAPI/Kiosk route reads
+    clearly rather than importing something literally named "Grill"."""

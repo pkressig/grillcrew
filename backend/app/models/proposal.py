@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Integer,
@@ -19,6 +20,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from app.models.planning import ShiftType
 
 
 class ProposalOverride(Base):
@@ -65,12 +67,16 @@ class ProposalOverride(Base):
 
 
 class ProposalShiftSplit(Base):
-    """One admin-defined grill sub-shift within a proposal window.
+    """One admin-defined Grill or Kiosk sub-shift within a proposal window.
 
-    A window like "10:00-20:00, 3 games" derives a single grill headcount by
-    default. When an admin instead wants e.g. two shorter shifts with their own
-    times and headcounts, each becomes one row here; ProposalService.confirm()
+    A window like "10:00-20:00, 3 games" derives a single Grill/Kiosk headcount
+    by default. When an admin instead wants e.g. two shorter shifts with their
+    own times and headcounts, each becomes one row here; ProposalService.confirm()
     materialises one real Shift per row instead of the single window-wide shift.
+    Grill and Kiosk splits coexist as independent rows on the same
+    ProposalOverride, distinguished by `shift_type`; a full-replace update only
+    ever touches the rows matching its own kind (see update_grill_shift_splits /
+    update_kiosk_shift_splits).
     """
 
     __tablename__ = "proposal_shift_split"
@@ -88,6 +94,13 @@ class ProposalShiftSplit(Base):
     ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     required_volunteers: Mapped[int] = mapped_column(Integer, nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    # Existing (already-shipped) rows all came from the grill-only endpoint, so
+    # the additive migration backfills them with server_default 'GRILL'.
+    shift_type: Mapped[ShiftType] = mapped_column(
+        Enum(ShiftType, name="shift_type", create_type=False),
+        nullable=False,
+        server_default=ShiftType.GRILL.value,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

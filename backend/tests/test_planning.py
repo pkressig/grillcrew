@@ -578,6 +578,40 @@ def test_shift_time_rules() -> None:
         )
 
 
+def test_update_shift_persists_new_time_window_and_required_volunteers() -> None:
+    """PATCH /shifts/{shift_id} (via PlanningService.update_shift) already existed
+    and is exercised by test_updates_reject_null_for_required_columns for its
+    schema-level validation, but had no direct coverage of a successful update.
+    The admin Kiosk panel is about to start relying on it to let an admin adjust
+    an already-materialised shift's time window and headcount after confirmation."""
+    event = SimpleNamespace(date=date(2026, 9, 1), title="Spiel 1", public_description=None)
+    shift = SimpleNamespace(
+        id=uuid4(),
+        event=event,
+        starts_at=datetime(2026, 9, 1, 10, tzinfo=UTC),
+        ends_at=datetime(2026, 9, 1, 12, tzinfo=UTC),
+        required_volunteers=2,
+        menu_type=None,
+        crew_suggestion_overridden=False,
+    )
+    db = _ShiftUpdateDb(shift)
+
+    result = PlanningService(cast(object, db), uuid4()).update_shift(  # type: ignore[arg-type]
+        shift.id,
+        ShiftUpdate(
+            starts_at=datetime(2026, 9, 1, 11, tzinfo=UTC),
+            ends_at=datetime(2026, 9, 1, 15, tzinfo=UTC),
+            required_volunteers=4,
+        ),
+    )
+
+    assert result.starts_at == datetime(2026, 9, 1, 11, tzinfo=UTC)
+    assert result.ends_at == datetime(2026, 9, 1, 15, tzinfo=UTC)
+    assert result.required_volunteers == 4
+    assert db.commits == 1
+    assert db.refreshes == 1
+
+
 @pytest.mark.parametrize(
     ("schema", "values"),
     [(EventUpdate, {"date": None}), (ShiftUpdate, {"required_volunteers": None})],
@@ -1178,6 +1212,29 @@ class _SignupDb:
 
     def add(self, item: object) -> None:
         self.added.append(item)
+
+    def commit(self) -> None:
+        self.commits += 1
+
+    def refresh(self, _item: object) -> None:
+        self.refreshes += 1
+
+
+class _ShiftUpdateDb:
+    """Fake session for PlanningService.update_shift: scalar() resolves the
+    Shift lookup (via _get_shift); scalars() resolves the crew-size-rule lookup
+    that a required_volunteers/menu_type change triggers via SettingsService."""
+
+    def __init__(self, shift: object) -> None:
+        self.shift = shift
+        self.commits = 0
+        self.refreshes = 0
+
+    def scalar(self, _statement: object) -> object:
+        return self.shift
+
+    def scalars(self, _statement: object) -> list[object]:
+        return []
 
     def commit(self) -> None:
         self.commits += 1

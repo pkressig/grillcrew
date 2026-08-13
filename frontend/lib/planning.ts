@@ -239,6 +239,16 @@ export const updateShiftStatus = (org: string, shiftId: string, status: ShiftSta
     writeInit("PATCH", { status }),
     "Der Einsatzstatus konnte nicht gespeichert werden.",
   );
+export const updateShift = (
+  org: string,
+  shiftId: string,
+  payload: Partial<Pick<Shift, "starts_at" | "ends_at" | "required_volunteers">>,
+) =>
+  request<Shift>(
+    `/api/admin/${encodeURIComponent(org)}/shifts/${encodeURIComponent(shiftId)}`,
+    writeInit("PATCH", payload),
+    "Der Einsatz konnte nicht aktualisiert werden.",
+  );
 export const cancelSignup = (org: string, signupId: string) =>
   request<Shift>(
     `/api/admin/${encodeURIComponent(org)}/signups/${encodeURIComponent(signupId)}/cancel`,

@@ -277,6 +277,43 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
 
 type SplitDraft = { startTime: string; endTime: string; required: number };
 
+function toMinutes(time: string): number {
+  const [hours, minutes] = time.split(":").map(Number);
+  return (hours ?? 0) * 60 + (minutes ?? 0);
+}
+
+function minutesToTime(total: number): string {
+  const hours = Math.floor(total / 60) % 24;
+  const minutes = total % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+/** Time ranges within [windowStart, windowEnd) that no split currently covers,
+ * so an admin who splits a window can see at a glance whether a slice was
+ * left without a grill shift on purpose or by oversight. */
+function uncoveredRanges(
+  windowStartTime: string,
+  windowEndTime: string,
+  splits: SplitDraft[],
+): Array<{ start: string; end: string }> {
+  const windowStart = toMinutes(windowStartTime);
+  const windowEnd = toMinutes(windowEndTime);
+  const covered = splits
+    .map((split): [number, number] => [toMinutes(split.startTime), toMinutes(split.endTime)])
+    .filter(([start, end]) => end > start)
+    .sort((left, right) => left[0] - right[0]);
+  const gaps: Array<{ start: string; end: string }> = [];
+  let cursor = windowStart;
+  for (const [start, end] of covered) {
+    const clippedStart = Math.max(start, windowStart);
+    const clippedEnd = Math.min(end, windowEnd);
+    if (clippedStart > cursor) gaps.push({ start: minutesToTime(cursor), end: minutesToTime(clippedStart) });
+    cursor = Math.max(cursor, clippedEnd);
+  }
+  if (cursor < windowEnd) gaps.push({ start: minutesToTime(cursor), end: minutesToTime(windowEnd) });
+  return gaps;
+}
+
 function GrillWindowCard({
   org,
   window,
@@ -315,6 +352,10 @@ function GrillWindowCard({
   const [splitsSaved, setSplitsSaved] = useState(true);
   const confirming = saving;
   const headingId = `grill-window-${window.id}`;
+  const uncovered =
+    splits.length > 0
+      ? uncoveredRanges(formatTime(window.start_at, timezone), formatTime(window.end_at, timezone), splits)
+      : [];
 
   useEffect(() => {
     setGrillRequired(window.grill_required);
@@ -555,6 +596,13 @@ function GrillWindowCard({
                 ))}
               </ul>
             )}
+            {uncovered.length > 0 ? (
+              <p className="text-sm text-status-warning" role="status">
+                Nicht abgedeckt: {uncovered.map((gap) => `${gap.start}–${gap.end} Uhr`).join(", ")}.
+                In dieser Zeit wird kein Grillplatz angelegt — falls das so gewollt ist, ist keine
+                weitere Aktion nötig.
+              </p>
+            ) : null}
             {splitsError ? (
               <p className="text-sm text-status-error" role="alert">
                 {splitsError}

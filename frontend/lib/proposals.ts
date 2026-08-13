@@ -34,6 +34,7 @@ export type ProposalWindow = {
   kiosk_confirmed?: boolean;
   grill_confirmed?: boolean;
   grill_shift_splits?: ProposalGrillShiftSplit[];
+  kiosk_shift_splits?: ProposalGrillShiftSplit[];
   /** Lifecycle fields are optional for backwards-compatible proposal responses. */
   status?: "DRAFT" | "CONFIRMED";
 };
@@ -132,6 +133,20 @@ export async function updateGrillShiftSplits(
 ): Promise<ProposalWindow> {
   await ensureCsrfToken();
   return request<ProposalWindow>(`${proposalPath(org)}/${encodeURIComponent(id)}/grill-shifts`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", ...csrfHeaders() },
+    body: JSON.stringify({ shifts }),
+  });
+}
+
+/** Full replacement of a window's admin-defined Kiosk sub-shifts (empty clears them). */
+export async function updateKioskShiftSplits(
+  org: string,
+  id: string,
+  shifts: ProposalGrillShiftSplitInput[],
+): Promise<ProposalWindow> {
+  await ensureCsrfToken();
+  return request<ProposalWindow>(`${proposalPath(org)}/${encodeURIComponent(id)}/kiosk-shifts`, {
     method: "PUT",
     headers: { "Content-Type": "application/json", ...csrfHeaders() },
     body: JSON.stringify({ shifts }),

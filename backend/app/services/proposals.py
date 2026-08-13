@@ -27,6 +27,7 @@ from app.models.proposal import ProposalOverride, ProposalShiftSplit
 from app.schemas.proposals import (
     ProposalGameResponse,
     ProposalGrillSplitsUpdate,
+    ProposalKioskSplitsUpdate,
     ProposalOverrideUpdate,
     ProposalShiftSplitResponse,
     ProposalWindowResponse,
@@ -281,47 +282,30 @@ class ProposalService:
             )
             self.db.add(item)
             self.db.flush()
+        event_id = current.covered_event_ids[0]
         if kind == "kiosk":
             if not current.kiosk_open:
                 raise ProposalValidationError("Kiosk ist für diesen Vorschlag deaktiviert")
             item.kiosk_confirmed = True
-            # Kiosk confirmation only unlocks the downstream grill proposal;
-            # it must not create a public signup shift yet.
-        else:
-            if not current.grill_required:
-                raise ProposalValidationError("Grill ist für diesen Vorschlag deaktiviert")
-            # A grill proposal may only ever be tied to an already-confirmed Kiosk
-            # window; validate before mutating any state on this override.
-            if not item.kiosk_confirmed:
-                raise ProposalValidationError("Der Kiosk muss zuerst bestätigt werden")
-            item.grill_confirmed = True
-            shift_type = ShiftType.GRILL
-            required = max(1, current.proposed_grill_slots)
-        if kind == "kiosk":
-            event_id = current.covered_event_ids[0]
-            existing = self.db.scalar(
-                select(Shift)
-                .where(
-                    Shift.event_id == event_id,
-                    Shift.shift_type == ShiftType.KIOSK,
-                    Shift.starts_at == current.start_at,
-                    Shift.ends_at == current.end_at,
-                    Shift.status != ShiftStatus.CANCELLED,
-                )
-                .with_for_update()
+            # Kiosk confirmation only unlocks the downstream grill proposal; the
+            # materialised shift(s) therefore stay CLOSED rather than OPEN, i.e.
+            # not yet public-signup-capable. An admin who split this window into
+            # several timed Kiosk sub-shifts (see update_kiosk_shift_splits) gets
+            # one real Shift per split instead of the single window-wide shift;
+            # each is deduped independently so re-confirming after adding one
+            # more split does not touch the already-materialised ones. Only
+            # KIOSK-kind splits are read here — any GRILL-kind splits coexisting
+            # on the same override are irrelevant to a Kiosk confirmation.
+            kiosk_splits = [split for split in item.splits if split.shift_type == ShiftType.KIOSK]
+            shift_specs = (
+                [
+                    (split.starts_at, split.ends_at, split.required_volunteers)
+                    for split in kiosk_splits
+                ]
+                if kiosk_splits
+                else [(current.start_at, current.end_at, current.proposed_kiosk_slots or 1)]
             )
-            if existing is None:
-                self.db.add(
-                    Shift(
-                        event_id=event_id,
-                        starts_at=current.start_at,
-                        ends_at=current.end_at,
-                        required_volunteers=current.proposed_kiosk_slots or 1,
-                        status=ShiftStatus.CLOSED,
-                        shift_type=ShiftType.KIOSK,
-                        assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
-                    )
-                )
+            self._materialize_shifts(event_id, ShiftType.KIOSK, ShiftStatus.CLOSED, shift_specs)
             self.db.add(
                 AuditEvent(
                     organization_id=self.organization_id,
@@ -329,47 +313,35 @@ class ProposalService:
                     action="PROPOSAL_CONFIRMED",
                     entity_type="proposal_override",
                     entity_id=item.id,
-                    event_metadata={"window_key": window_id, "kind": kind},
+                    event_metadata={
+                        "window_key": window_id,
+                        "kind": kind,
+                        "shift_count": len(shift_specs),
+                    },
                 )
             )
             self.db.commit()
             return next(
                 window for window in self.list_windows(include_past=True) if window.id == window_id
             )
-        event_id = current.covered_event_ids[0]
-        # An admin who split this window into several timed sub-shifts (see
-        # update_grill_shift_splits) gets one real Shift per split instead of the
-        # single window-wide shift; each is deduped independently so re-confirming
-        # after adding one more split does not touch the already-materialised ones.
+        if not current.grill_required:
+            raise ProposalValidationError("Grill ist für diesen Vorschlag deaktiviert")
+        # A grill proposal may only ever be tied to an already-confirmed Kiosk
+        # window; validate before mutating any state on this override.
+        if not item.kiosk_confirmed:
+            raise ProposalValidationError("Der Kiosk muss zuerst bestätigt werden")
+        item.grill_confirmed = True
+        required = max(1, current.proposed_grill_slots)
+        # Mirrors the Kiosk branch above: only GRILL-kind splits are read here,
+        # so an already-saved Kiosk split on the same override is never required
+        # by, nor consumed by, confirming Grill.
+        grill_splits = [split for split in item.splits if split.shift_type == ShiftType.GRILL]
         shift_specs = (
-            [(split.starts_at, split.ends_at, split.required_volunteers) for split in item.splits]
-            if item.splits
+            [(split.starts_at, split.ends_at, split.required_volunteers) for split in grill_splits]
+            if grill_splits
             else [(current.start_at, current.end_at, required)]
         )
-        for starts_at, ends_at, shift_required in shift_specs:
-            existing = self.db.scalar(
-                select(Shift)
-                .where(
-                    Shift.event_id == event_id,
-                    Shift.shift_type == shift_type,
-                    Shift.starts_at == starts_at,
-                    Shift.ends_at == ends_at,
-                    Shift.status != ShiftStatus.CANCELLED,
-                )
-                .with_for_update()
-            )
-            if existing is None:
-                self.db.add(
-                    Shift(
-                        event_id=event_id,
-                        starts_at=starts_at,
-                        ends_at=ends_at,
-                        required_volunteers=shift_required,
-                        status=ShiftStatus.OPEN,
-                        shift_type=shift_type,
-                        assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
-                    )
-                )
+        self._materialize_shifts(event_id, ShiftType.GRILL, ShiftStatus.OPEN, shift_specs)
         self.db.add(
             AuditEvent(
                 organization_id=self.organization_id,
@@ -388,6 +360,66 @@ class ProposalService:
         return next(
             window for window in self.list_windows(include_past=True) if window.id == window_id
         )
+
+    def _materialize_shifts(
+        self,
+        event_id: uuid.UUID,
+        shift_type: ShiftType,
+        status: ShiftStatus,
+        shift_specs: list[tuple[datetime, datetime, int]],
+    ) -> None:
+        """Create one real Shift per (starts_at, ends_at, required_volunteers)
+        spec, deduping each independently against an already-materialised Shift
+        of the same event/kind/time so a retried confirm never double-creates.
+
+        Also reconciles against whatever this event/kind previously had
+        materialised: an admin who first confirmed one whole-window shift and
+        later changes the split before re-confirming must not end up with both
+        the old and the new shifts. Any existing non-cancelled shift that no
+        longer matches a current spec is cancelled, unless it already has
+        signups — a real volunteer commitment is never silently dropped, and
+        the caller must resolve that in Anwesenheit first."""
+        target_ranges = {(starts_at, ends_at) for starts_at, ends_at, _ in shift_specs}
+        existing_shifts = self.db.scalars(
+            select(Shift)
+            .where(
+                Shift.event_id == event_id,
+                Shift.shift_type == shift_type,
+                Shift.status != ShiftStatus.CANCELLED,
+            )
+            .with_for_update()
+        ).all()
+        orphaned = [
+            shift
+            for shift in existing_shifts
+            if (shift.starts_at, shift.ends_at) not in target_ranges
+        ]
+        if any(shift.signups for shift in orphaned):
+            raise ProposalValidationError(
+                "Für eine abweichende Schichtzeit bestehen bereits Anmeldungen. "
+                "Bitte zuerst im Bereich Anwesenheit bereinigen, bevor die Aufteilung "
+                "geändert wird."
+            )
+        for shift in orphaned:
+            shift.status = ShiftStatus.CANCELLED
+        existing_by_range = {
+            (shift.starts_at, shift.ends_at): shift
+            for shift in existing_shifts
+            if shift not in orphaned
+        }
+        for starts_at, ends_at, required_volunteers in shift_specs:
+            if (starts_at, ends_at) not in existing_by_range:
+                self.db.add(
+                    Shift(
+                        event_id=event_id,
+                        starts_at=starts_at,
+                        ends_at=ends_at,
+                        required_volunteers=required_volunteers,
+                        status=status,
+                        shift_type=shift_type,
+                        assignment_mode=ShiftAssignmentMode.OPEN_SIGNUP,
+                    )
+                )
 
     def _response(
         self, window: ProposalWindow, override: ProposalOverride | None, rules: list[CrewSizeRule]
@@ -451,6 +483,12 @@ class ProposalService:
             grill_shift_splits=[
                 ProposalShiftSplitResponse.model_validate(split)
                 for split in (override.splits if override else [])
+                if split.shift_type == ShiftType.GRILL
+            ],
+            kiosk_shift_splits=[
+                ProposalShiftSplitResponse.model_validate(split)
+                for split in (override.splits if override else [])
+                if split.shift_type == ShiftType.KIOSK
             ],
         )
 
@@ -462,9 +500,46 @@ class ProposalService:
     ) -> ProposalWindowResponse:
         """Replace a window's admin-defined grill sub-shifts (full replace).
 
-        Splitting is scoped to the still-derived window date, mirroring update()'s
-        existing same-day guard, so a split cannot silently drift onto a different
-        calendar day than the proposal it belongs to.
+        Only touches this override's GRILL-kind splits; any KIOSK-kind splits
+        already saved on the same row (see update_kiosk_shift_splits) are left
+        untouched, since Kiosk and Grill splits coexist as independent rows.
+        """
+        return self._replace_shift_splits(
+            window_id, payload, actor_user_id, ShiftType.GRILL, "PROPOSAL_GRILL_SPLITS_CHANGED"
+        )
+
+    def update_kiosk_shift_splits(
+        self,
+        window_id: str,
+        payload: ProposalKioskSplitsUpdate,
+        actor_user_id: uuid.UUID,
+    ) -> ProposalWindowResponse:
+        """Replace a window's admin-defined Kiosk sub-shifts (full replace).
+
+        Mirrors update_grill_shift_splits exactly, except the new rows are
+        KIOSK-kind and only this override's KIOSK-kind splits are replaced; any
+        GRILL-kind splits already saved on the same row are left untouched.
+        """
+        return self._replace_shift_splits(
+            window_id, payload, actor_user_id, ShiftType.KIOSK, "PROPOSAL_KIOSK_SPLITS_CHANGED"
+        )
+
+    def _replace_shift_splits(
+        self,
+        window_id: str,
+        payload: ProposalGrillSplitsUpdate,
+        actor_user_id: uuid.UUID,
+        shift_type: ShiftType,
+        audit_action: str,
+    ) -> ProposalWindowResponse:
+        """Full-replace one kind (GRILL or KIOSK) of a window's admin-defined
+        sub-shifts, scoped to the still-derived window date (mirroring update()'s
+        existing same-day guard) so a split cannot silently drift onto a
+        different calendar day than the proposal it belongs to.
+
+        Grill and Kiosk splits coexist as independent rows on the same
+        ProposalOverride; a full replace here only ever removes and re-adds
+        rows matching `shift_type`, leaving the other kind's rows untouched.
         """
         windows = {window.id: window for window in self.list_windows(include_past=True)}
         current = windows.get(window_id)
@@ -490,13 +565,15 @@ class ProposalService:
             )
             self.db.add(item)
             self.db.flush()
-        item.splits.clear()
+        for existing_split in [split for split in item.splits if split.shift_type == shift_type]:
+            item.splits.remove(existing_split)
         for index, split in enumerate(payload.shifts):
             item.splits.append(
                 ProposalShiftSplit(
                     starts_at=split.starts_at,
                     ends_at=split.ends_at,
                     required_volunteers=split.required_volunteers,
+                    shift_type=shift_type,
                     sort_order=index,
                 )
             )
@@ -504,7 +581,7 @@ class ProposalService:
             AuditEvent(
                 organization_id=self.organization_id,
                 actor_user_id=actor_user_id,
-                action="PROPOSAL_GRILL_SPLITS_CHANGED",
+                action=audit_action,
                 entity_type="proposal_override",
                 entity_id=item.id,
                 event_metadata={"window_key": window_id, "split_count": len(payload.shifts)},

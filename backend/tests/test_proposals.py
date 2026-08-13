@@ -5,10 +5,11 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.models.planning import Shift, ShiftStatus, ShiftType
+from app.models.planning import Shift, ShiftStatus, ShiftType, Signup
 from app.models.proposal import ProposalOverride, ProposalShiftSplit
 from app.schemas.proposals import (
     ProposalGrillSplitsUpdate,
+    ProposalKioskSplitsUpdate,
     ProposalShiftSplitInput,
     ProposalWindowResponse,
 )
@@ -17,6 +18,7 @@ from app.services.proposals import (
     ProposalNotFoundError,
     ProposalService,
     ProposalValidationError,
+    ProposalWindow,
     derive_proposal_windows,
     exclude_past_windows,
 )
@@ -118,16 +120,34 @@ def _window(**overrides: object) -> ProposalWindowResponse:
     return ProposalWindowResponse(**defaults)
 
 
-class _ConfirmDb:
-    """Minimal fake session returning queued scalar() results in call order."""
+class _ScalarsResult:
+    """Minimal stand-in for SQLAlchemy's ScalarResult, only supporting .all()."""
 
-    def __init__(self, responses: list[object]) -> None:
+    def __init__(self, items: list[object]) -> None:
+        self._items = items
+
+    def all(self) -> list[object]:
+        return self._items
+
+
+class _ConfirmDb:
+    """Minimal fake session returning queued scalar()/scalars() results in call order."""
+
+    def __init__(
+        self,
+        responses: list[object],
+        scalars_responses: list[list[object]] | None = None,
+    ) -> None:
         self._responses = list(responses)
+        self._scalars_responses = list(scalars_responses or [])
         self.added: list[object] = []
         self.committed = False
 
     def scalar(self, _statement: object) -> object:
         return self._responses.pop(0)
+
+    def scalars(self, _statement: object) -> _ScalarsResult:
+        return _ScalarsResult(self._scalars_responses.pop(0))
 
     def add(self, obj: object) -> None:
         self.added.append(obj)
@@ -173,9 +193,10 @@ def test_confirm_grill_succeeds_once_kiosk_is_confirmed(monkeypatch: pytest.Monk
         kiosk_confirmed=True,
         grill_confirmed=False,
     )
-    # First scalar() call resolves the ProposalOverride row; the second
-    # resolves the "does a matching Shift already exist" lookup (none yet).
-    db = _ConfirmDb([override, None])
+    # scalar() resolves the ProposalOverride row; scalars() resolves the
+    # "which non-cancelled shifts already exist for this event/type" lookup
+    # used for reconciliation (none yet).
+    db = _ConfirmDb([override], scalars_responses=[[]])
     service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
     monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
 
@@ -207,18 +228,20 @@ def test_confirm_grill_with_splits_creates_one_shift_per_split(
             starts_at=datetime(2026, 8, 2, 10, tzinfo=ZoneInfo("UTC")),
             ends_at=datetime(2026, 8, 2, 14, tzinfo=ZoneInfo("UTC")),
             required_volunteers=1,
+            shift_type=ShiftType.GRILL,
             sort_order=0,
         ),
         ProposalShiftSplit(
             starts_at=datetime(2026, 8, 2, 14, tzinfo=ZoneInfo("UTC")),
             ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
             required_volunteers=2,
+            shift_type=ShiftType.GRILL,
             sort_order=1,
         ),
     ]
-    # scalar() call order: the ProposalOverride row, then one "existing shift?"
-    # lookup per split (none found either time).
-    db = _ConfirmDb([override, None, None])
+    # scalar() resolves the ProposalOverride row; scalars() resolves the
+    # existing-shifts reconciliation lookup (none found yet).
+    db = _ConfirmDb([override], scalars_responses=[[]])
     service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
     monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
 
@@ -231,6 +254,104 @@ def test_confirm_grill_with_splits_creates_one_shift_per_split(
     assert created[1].starts_at.hour == 14 and created[1].ends_at.hour == 20
     assert all(shift.shift_type == ShiftType.GRILL for shift in created)
     assert db.committed is True
+
+
+def test_confirm_grill_reconfirm_after_splitting_cancels_the_orphaned_whole_window_shift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An admin who first confirmed one whole-window shift and later splits the
+    window into several timed sub-shifts must not end up with both: the
+    orphaned whole-window shift is cancelled once it no longer matches any
+    current split, instead of lingering alongside the new ones."""
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=True,
+        grill_confirmed=True,
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 15, 30, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.GRILL,
+            sort_order=0,
+        ),
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 15, 30, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.GRILL,
+            sort_order=1,
+        ),
+    ]
+    orphaned_shift = Shift(
+        event_id=window.covered_event_ids[0],
+        starts_at=window.start_at,
+        ends_at=window.end_at,
+        required_volunteers=2,
+        status=ShiftStatus.OPEN,
+        shift_type=ShiftType.GRILL,
+    )
+    db = _ConfirmDb([override], scalars_responses=[[orphaned_shift]])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    service.confirm("window-1", "grill", uuid4())
+
+    assert orphaned_shift.status == ShiftStatus.CANCELLED
+    created = [item for item in db.added if isinstance(item, Shift)]
+    assert len(created) == 2
+    assert {(shift.starts_at.hour, shift.ends_at.hour) for shift in created} == {(11, 15), (15, 20)}
+    assert db.committed is True
+
+
+def test_confirm_grill_blocks_reconfirm_when_orphaned_shift_has_signups(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """If the shift that would become orphaned by a changed split already has
+    real signups, silently cancelling it would drop a volunteer's commitment.
+    The admin must resolve this in Anwesenheit first."""
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=True,
+        grill_confirmed=True,
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 20, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.GRILL,
+            sort_order=0,
+        ),
+    ]
+    orphaned_shift = Shift(
+        event_id=window.covered_event_ids[0],
+        starts_at=window.start_at,
+        ends_at=window.end_at,
+        required_volunteers=2,
+        status=ShiftStatus.OPEN,
+        shift_type=ShiftType.GRILL,
+    )
+    orphaned_shift.signups = [
+        Signup(shift_id=uuid4(), volunteer_id=uuid4(), public_name_snapshot="Test Helfer")
+    ]
+    db = _ConfirmDb([override], scalars_responses=[[orphaned_shift]])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    with pytest.raises(ProposalValidationError, match="bestehen bereits Anmeldungen"):
+        service.confirm("window-1", "grill", uuid4())
+
+    assert orphaned_shift.status == ShiftStatus.OPEN
+    assert db.added == []
+    assert db.committed is False
 
 
 class _SplitsDb:
@@ -267,6 +388,7 @@ def test_update_grill_shift_splits_replaces_existing_splits(
             starts_at=datetime(2026, 8, 2, 9, tzinfo=ZoneInfo("UTC")),
             ends_at=datetime(2026, 8, 2, 10, tzinfo=ZoneInfo("UTC")),
             required_volunteers=1,
+            shift_type=ShiftType.GRILL,
             sort_order=0,
         )
     ]
@@ -327,3 +449,238 @@ def test_update_grill_shift_splits_rejects_unknown_window(monkeypatch: pytest.Mo
         service.update_grill_shift_splits(
             "missing-window", ProposalGrillSplitsUpdate(shifts=[]), uuid4()
         )
+
+
+def test_confirm_kiosk_with_splits_creates_one_shift_per_split(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirrors test_confirm_grill_with_splits_creates_one_shift_per_split: an
+    admin-defined Kiosk split materialises one real (CLOSED) Shift per split."""
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=False,
+        grill_confirmed=False,
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 9, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.KIOSK,
+            sort_order=0,
+        ),
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 13, 30, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=2,
+            shift_type=ShiftType.KIOSK,
+            sort_order=1,
+        ),
+    ]
+    # scalar() resolves the ProposalOverride row; scalars() resolves the
+    # existing-shifts reconciliation lookup (none found yet).
+    db = _ConfirmDb([override], scalars_responses=[[]])
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+
+    service.confirm("window-1", "kiosk", uuid4())
+
+    created = [item for item in db.added if isinstance(item, Shift)]
+    assert len(created) == 2
+    assert [shift.required_volunteers for shift in created] == [1, 2]
+    assert created[0].starts_at.hour == 9 and created[0].ends_at.hour == 11
+    assert created[1].starts_at.hour == 11 and created[1].ends_at.hour == 13
+    assert all(shift.shift_type == ShiftType.KIOSK for shift in created)
+    assert all(shift.status == ShiftStatus.CLOSED for shift in created)
+    assert override.kiosk_confirmed is True
+    assert db.committed is True
+
+
+def test_update_kiosk_shift_splits_replaces_existing_splits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = _window()
+    override = ProposalOverride(
+        organization_id=uuid4(), window_key="window-1", proposal_date=window.date
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 9, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 10, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.KIOSK,
+            sort_order=0,
+        )
+    ]
+    db = _SplitsDb(override)
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+    payload = ProposalKioskSplitsUpdate(
+        shifts=[
+            ProposalShiftSplitInput(
+                starts_at=datetime(2026, 8, 2, 10, tzinfo=ZoneInfo("UTC")),
+                ends_at=datetime(2026, 8, 2, 12, tzinfo=ZoneInfo("UTC")),
+                required_volunteers=1,
+            ),
+            ProposalShiftSplitInput(
+                starts_at=datetime(2026, 8, 2, 12, tzinfo=ZoneInfo("UTC")),
+                ends_at=datetime(2026, 8, 2, 13, 30, tzinfo=ZoneInfo("UTC")),
+                required_volunteers=2,
+            ),
+        ]
+    )
+
+    service.update_kiosk_shift_splits("window-1", payload, uuid4())
+
+    assert [split.required_volunteers for split in override.splits] == [1, 2]
+    assert [split.sort_order for split in override.splits] == [0, 1]
+    assert all(split.shift_type == ShiftType.KIOSK for split in override.splits)
+    assert db.commits == 1
+
+
+def test_update_kiosk_shift_splits_rejects_a_split_on_another_day(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    window = _window()
+    db = _SplitsDb(None)
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+    payload = ProposalKioskSplitsUpdate(
+        shifts=[
+            ProposalShiftSplitInput(
+                starts_at=datetime(2026, 8, 3, 10, tzinfo=ZoneInfo("UTC")),
+                ends_at=datetime(2026, 8, 3, 14, tzinfo=ZoneInfo("UTC")),
+                required_volunteers=1,
+            )
+        ]
+    )
+
+    with pytest.raises(ProposalValidationError, match="proposal date"):
+        service.update_kiosk_shift_splits("window-1", payload, uuid4())
+
+    assert db.commits == 0
+
+
+def test_update_kiosk_shift_splits_rejects_unknown_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    db = _SplitsDb(None)
+    service = ProposalService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [])
+
+    with pytest.raises(ProposalNotFoundError):
+        service.update_kiosk_shift_splits(
+            "missing-window", ProposalKioskSplitsUpdate(shifts=[]), uuid4()
+        )
+
+
+def test_response_places_splits_under_their_matching_kind_list() -> None:
+    """list_windows()'s _response() must split a window's mixed-kind splits into
+    grill_shift_splits and kiosk_shift_splits by shift_type, not lump every row
+    into grill_shift_splits regardless of kind."""
+    window = ProposalWindow(
+        id="window-1",
+        date=date(2026, 8, 2),
+        start_at=datetime(2026, 8, 2, 9, 30, tzinfo=ZoneInfo("UTC")),
+        end_at=datetime(2026, 8, 2, 13, 30, tzinfo=ZoneInfo("UTC")),
+        games=(),
+        split_reason=None,
+    )
+    override = ProposalOverride(
+        organization_id=uuid4(), window_key="window-1", proposal_date=window.date
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            id=uuid4(),
+            starts_at=datetime(2026, 8, 2, 9, 30, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=1,
+            shift_type=ShiftType.KIOSK,
+            sort_order=0,
+        ),
+        ProposalShiftSplit(
+            id=uuid4(),
+            starts_at=datetime(2026, 8, 2, 11, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 13, 30, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=2,
+            shift_type=ShiftType.GRILL,
+            sort_order=0,
+        ),
+    ]
+    service = ProposalService(cast(object, None), uuid4())  # type: ignore[arg-type]
+
+    response = service._response(window, override, [])
+
+    assert [split.required_volunteers for split in response.kiosk_shift_splits] == [1]
+    assert [split.required_volunteers for split in response.grill_shift_splits] == [2]
+
+
+def test_grill_and_kiosk_splits_on_same_window_are_independent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Kiosk and Grill splits coexist as independent rows on the same
+    ProposalOverride: replacing one kind must never touch the other, and
+    confirming one kind must never require or consume the other's splits."""
+    window = _window()
+
+    # Replacing the KIOSK splits must leave an already-saved GRILL split intact.
+    override = ProposalOverride(
+        organization_id=uuid4(),
+        window_key="window-1",
+        proposal_date=window.date,
+        kiosk_confirmed=False,
+        grill_confirmed=False,
+    )
+    override.splits = [
+        ProposalShiftSplit(
+            starts_at=datetime(2026, 8, 2, 9, 30, tzinfo=ZoneInfo("UTC")),
+            ends_at=datetime(2026, 8, 2, 13, 30, tzinfo=ZoneInfo("UTC")),
+            required_volunteers=3,
+            shift_type=ShiftType.GRILL,
+            sort_order=0,
+        )
+    ]
+    splits_db = _SplitsDb(override)
+    splits_service = ProposalService(cast(object, splits_db), uuid4())  # type: ignore[arg-type]
+    monkeypatch.setattr(ProposalService, "list_windows", lambda _self, include_past=False: [window])
+    splits_service.update_kiosk_shift_splits(
+        "window-1",
+        ProposalKioskSplitsUpdate(
+            shifts=[
+                ProposalShiftSplitInput(
+                    starts_at=datetime(2026, 8, 2, 10, tzinfo=ZoneInfo("UTC")),
+                    ends_at=datetime(2026, 8, 2, 12, tzinfo=ZoneInfo("UTC")),
+                    required_volunteers=1,
+                )
+            ]
+        ),
+        uuid4(),
+    )
+    grill_remaining = [split for split in override.splits if split.shift_type == ShiftType.GRILL]
+    kiosk_added = [split for split in override.splits if split.shift_type == ShiftType.KIOSK]
+    assert len(grill_remaining) == 1 and grill_remaining[0].required_volunteers == 3
+    assert len(kiosk_added) == 1 and kiosk_added[0].required_volunteers == 1
+
+    # Confirming kiosk only ever materialises the KIOSK-kind split and never
+    # touches/consumes the still-unconfirmed GRILL split sitting on the same row.
+    kiosk_db = _ConfirmDb([override], scalars_responses=[[]])
+    kiosk_confirm_service = ProposalService(cast(object, kiosk_db), uuid4())  # type: ignore[arg-type]
+    kiosk_confirm_service.confirm("window-1", "kiosk", uuid4())
+    kiosk_created = [item for item in kiosk_db.added if isinstance(item, Shift)]
+    assert len(kiosk_created) == 1
+    assert kiosk_created[0].shift_type == ShiftType.KIOSK
+    assert kiosk_created[0].required_volunteers == 1
+    assert override.grill_confirmed is False
+    assert len(override.splits) == 2  # both splits still present, nothing consumed
+
+    # Confirming grill (now unblocked since kiosk_confirmed was just set) only
+    # ever materialises the GRILL-kind split; it never requires or reads the
+    # kiosk split that's still sitting on the same override.
+    grill_db = _ConfirmDb([override], scalars_responses=[[]])
+    grill_confirm_service = ProposalService(cast(object, grill_db), uuid4())  # type: ignore[arg-type]
+    grill_confirm_service.confirm("window-1", "grill", uuid4())
+    grill_created = [item for item in grill_db.added if isinstance(item, Shift)]
+    assert len(grill_created) == 1
+    assert grill_created[0].shift_type == ShiftType.GRILL
+    assert grill_created[0].required_volunteers == 3

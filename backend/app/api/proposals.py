@@ -12,6 +12,7 @@ from app.db.session import get_db
 from app.models.identity import StaffRole
 from app.schemas.proposals import (
     ProposalGrillSplitsUpdate,
+    ProposalKioskSplitsUpdate,
     ProposalOverrideUpdate,
     ProposalResponse,
     ProposalWindowResponse,
@@ -87,6 +88,27 @@ def update_grill_shift_splits(
     _ensure_origin_and_host(request, db, get_settings())
     try:
         return _service(organization_slug, current, db).update_grill_shift_splits(
+            window_id, payload, current.user.id
+        )
+    except ProposalNotFoundError:
+        raise HTTPException(status_code=404, detail="proposal not found") from None
+    except ProposalValidationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from None
+
+
+@router.put("/{window_id}/kiosk-shifts", response_model=ProposalWindowResponse)
+def update_kiosk_shift_splits(
+    organization_slug: str,
+    window_id: str,
+    payload: ProposalKioskSplitsUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> ProposalWindowResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        return _service(organization_slug, current, db).update_kiosk_shift_splits(
             window_id, payload, current.user.id
         )
     except ProposalNotFoundError:

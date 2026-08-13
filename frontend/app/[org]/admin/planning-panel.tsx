@@ -234,6 +234,9 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   const [typeFilter, setTypeFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<string>>(new Set());
+  const [bulkPublishOpen, setBulkPublishOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const requestId = useRef(0);
   const selectedCalendarWeek = useRef<HTMLHeadingElement | null>(null);
 
@@ -347,6 +350,17 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     };
   }, [refresh]);
 
+  useEffect(() => {
+    setSelectedEventIds((current) => {
+      if (current.size === 0) return current;
+      const selectableIds = new Set(
+        events.filter((event) => event.status === "DRAFT").map((event) => event.id),
+      );
+      const next = new Set([...current].filter((id) => selectableIds.has(id)));
+      return next.size === current.size ? current : next;
+    });
+  }, [events]);
+
   async function run(operation: () => Promise<unknown>, message: string): Promise<boolean> {
     setBusy(true);
     setError(null);
@@ -428,6 +442,52 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     );
   }
 
+  function toggleEventSelection(eventId: string) {
+    setSelectedEventIds((current) => {
+      const next = new Set(current);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+  }
+
+  function clearEventSelection() {
+    setSelectedEventIds(new Set());
+  }
+
+  async function publishSelectedEvents() {
+    const ids = [...selectedEventIds];
+    setBulkBusy(true);
+    setError(null);
+    setSuccess(null);
+    const results = await Promise.allSettled(
+      ids.map((id) => updateEventStatus(org, id, "PUBLISHED")),
+    );
+    const failedCount = results.filter((result) => result.status === "rejected").length;
+    const succeededCount = ids.length - failedCount;
+    if (failedCount === 0) {
+      setSuccess(
+        succeededCount === 1
+          ? "1 Anlass wurde veröffentlicht."
+          : `${succeededCount} Anlässe wurden veröffentlicht.`,
+      );
+    } else if (succeededCount > 0) {
+      setError(
+        `${succeededCount} von ${ids.length} Anlässen veröffentlicht — ${failedCount} Fehler.`,
+      );
+    } else {
+      setError(
+        ids.length === 1
+          ? "Der Anlass konnte nicht veröffentlicht werden."
+          : "Die Anlässe konnten nicht veröffentlicht werden.",
+      );
+    }
+    setSelectedEventIds(new Set());
+    setBulkPublishOpen(false);
+    await refresh();
+    setBulkBusy(false);
+  }
+
   function removeHistoricalEvent(planningEvent: PlanningEvent) {
     if (!window.confirm(`Anlass "${planningEvent.title}" endgültig löschen?`)) return;
     void run(() => deleteEvent(org, planningEvent.id), "Der Anlass wurde endgültig gelöscht.");
@@ -474,6 +534,8 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     );
   }
 
+  const selectedEventsForModal = events.filter((event) => selectedEventIds.has(event.id));
+
   const now = new Date();
   const unresolvedItems = loading
     ? []
@@ -513,6 +575,79 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
         >
           {success}
         </p>
+      ) : null}
+      {bulkPublishOpen ? (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bulk-publish-title"
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4"
+        >
+          <Card className="w-full max-w-2xl">
+            <CardBody>
+              <h2 id="bulk-publish-title" className="text-xl font-semibold">
+                {selectedEventsForModal.length === 1
+                  ? "1 Anlass veröffentlichen"
+                  : `${selectedEventsForModal.length} Anlässe veröffentlichen`}
+              </h2>
+              <p className="mt-2 text-sm">
+                Die ausgewählten Anlässe werden veröffentlicht und damit öffentlich sichtbar.
+              </p>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[28rem] text-left text-sm">
+                  <caption className="sr-only">Zur Veröffentlichung ausgewählte Anlässe</caption>
+                  <thead>
+                    <tr className="border-b">
+                      <th className="py-2 pr-3 font-semibold" scope="col">
+                        Datum
+                      </th>
+                      <th className="py-2 pr-3 font-semibold" scope="col">
+                        Uhrzeit
+                      </th>
+                      <th className="py-2 pr-3 font-semibold" scope="col">
+                        Kategorie
+                      </th>
+                      <th className="py-2 font-semibold" scope="col">
+                        Mannschaften
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedEventsForModal.map((item) => (
+                      <tr className="border-b last:border-0" key={item.id}>
+                        <td className="py-2 pr-3">{formatDate(item.date)}</td>
+                        <td className="py-2 pr-3">
+                          {item.kickoff_time ? item.kickoff_time.slice(0, 5) : "–"}
+                        </td>
+                        <td className="py-2 pr-3">{item.event_type}</td>
+                        <td className="py-2">{item.title}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-5 flex flex-wrap justify-end gap-3">
+                <Button
+                  className="min-h-11"
+                  variant="secondary"
+                  disabled={bulkBusy}
+                  onClick={() => setBulkPublishOpen(false)}
+                >
+                  Abbrechen
+                </Button>
+                <Button
+                  className="min-h-11"
+                  disabled={bulkBusy}
+                  onClick={() => void publishSelectedEvents()}
+                >
+                  {selectedEventsForModal.length === 1
+                    ? "1 Anlass veröffentlichen"
+                    : `${selectedEventsForModal.length} Anlässe veröffentlichen`}
+                </Button>
+              </div>
+            </CardBody>
+          </Card>
+        </div>
       ) : null}
       <section className="scroll-mt-4" id="attendance" aria-labelledby="handlungsbedarf-title">
         <Card
@@ -778,6 +913,33 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
               Filter zurücksetzen
             </Button>
           </section>
+          {selectedEventIds.size > 0 ? (
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4"
+              role="region"
+              aria-label="Mehrfachauswahl Anlässe"
+            >
+              <p className="text-sm font-medium">
+                {selectedEventIds.size} {selectedEventIds.size === 1 ? "Anlass" : "Anlässe"}{" "}
+                ausgewählt
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  className="min-h-11"
+                  variant="secondary"
+                  type="button"
+                  onClick={clearEventSelection}
+                >
+                  Auswahl aufheben
+                </Button>
+                <Button className="min-h-11" type="button" onClick={() => setBulkPublishOpen(true)}>
+                  {selectedEventIds.size === 1
+                    ? "1 Anlass veröffentlichen"
+                    : `Ausgewählte veröffentlichen (${selectedEventIds.size})`}
+                </Button>
+              </div>
+            </div>
+          ) : null}
           {dailySummaries.length ? (
             <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label="Tagesübersichten">
               {dailySummaries.map(([date, dayEvents]) => {
@@ -1035,300 +1197,321 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                             </li>
                           ) : null,
                           <li key={planningEvent.id}>
-                            <Card className="overflow-hidden border-border/80 transition-shadow hover:shadow-md">
-                              <details className="group">
-                                <summary
-                                  className="min-h-11 cursor-pointer list-none p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset [&::-webkit-details-marker]:hidden"
-                                  aria-label={`Anlass ${planningEvent.title} am ${formatDate(planningEvent.date)} anzeigen`}
-                                >
-                                  <div className="flex flex-wrap items-start justify-between gap-3">
-                                    <div className="flex min-w-0 gap-3">
-                                      <time
-                                        aria-hidden="true"
-                                        className="grid h-16 w-14 shrink-0 place-content-center rounded-md border border-primary/25 bg-primary/10 text-center text-primary shadow-sm"
-                                        dateTime={planningEvent.date}
-                                      >
-                                        <span className="text-[0.65rem] font-semibold uppercase leading-none">
-                                          {dateTile.weekday}
-                                        </span>
-                                        <span className="text-xl font-bold leading-tight">
-                                          {dateTile.day}
-                                        </span>
-                                        <span className="text-[0.65rem] font-semibold uppercase leading-none">
-                                          {dateTile.month}
-                                        </span>
-                                      </time>
-                                      <div className="min-w-0">
-                                        <p className="font-semibold">{planningEvent.title}</p>
-                                        <p className="mt-1 text-sm">
-                                          {formatDate(planningEvent.date)}
-                                          {planningEvent.kickoff_time
-                                            ? ` · ${planningEvent.kickoff_time.slice(0, 5)}`
-                                            : ""}{" "}
-                                          · {planningEvent.location}
-                                        </p>
-                                        {(() => {
-                                          const kiosk = serviceBadge(eventShifts, "KIOSK");
-                                          const grill = serviceBadge(eventShifts, "GRILL");
-                                          return (
-                                            <>
-                                              <Badge className="mt-2 mr-2" variant={kiosk.variant}>
-                                                {kiosk.label}
-                                              </Badge>
-                                              <Badge className="mt-2 mr-2" variant={grill.variant}>
-                                                {grill.label}
-                                              </Badge>
-                                            </>
-                                          );
-                                        })()}
-                                        {!planningEvent.source_import_id ? (
-                                          <Badge className="mt-2 mr-2" variant="neutral">
-                                            Manuell
-                                          </Badge>
-                                        ) : null}
-                                        <Badge className="mt-2" variant="neutral">
-                                          {eventShifts.length}{" "}
-                                          {eventShifts.length === 1 ? "Einsatz" : "Einsätze"} ·{" "}
-                                          {eventShifts.reduce(
-                                            (sum, item) => sum + item.occupied_volunteers,
-                                            0,
-                                          )}{" "}
-                                          von{" "}
-                                          {eventShifts.reduce(
-                                            (sum, item) => sum + item.required_volunteers,
-                                            0,
-                                          )}{" "}
-                                          Plätzen belegt
-                                        </Badge>
-                                      </div>
-                                    </div>
-                                    <Badge variant={eventStatusVariants[planningEvent.status]}>
-                                      {eventStatusLabels[planningEvent.status]}
-                                    </Badge>
-                                  </div>
-                                </summary>
-                                <div className="border-t p-4">
-                                  <p className="text-sm text-muted-foreground">
-                                    {planningEvent.event_type}
-                                  </p>
-                                  {planningEvent.public_description ? (
-                                    <p className="mt-2 text-sm">
-                                      {planningEvent.public_description}
-                                    </p>
-                                  ) : null}
-                                  {planningEvent.internal_note ? (
-                                    <p className="mt-2 text-sm">
-                                      Bemerkung: {planningEvent.internal_note}
-                                    </p>
-                                  ) : null}
-                                  {eventActions[planningEvent.status].length ? (
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                      {eventActions[planningEvent.status].map((next) => (
-                                        <Button
-                                          variant={
-                                            next === "CANCELLED" ? "destructive" : "secondary"
-                                          }
-                                          disabled={busy}
-                                          key={next}
-                                          aria-label={`Anlass ${planningEvent.title} ${eventActionLabels[next]?.toLocaleLowerCase("de-CH")}`}
-                                          onClick={() => changeEventStatus(planningEvent, next)}
-                                        >
-                                          {eventActionLabels[next]}
-                                        </Button>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                  {planningEvent.status === "CANCELLED" ||
-                                  planningEvent.status === "COMPLETED" ? (
-                                    <Button
-                                      className="mt-3"
-                                      variant="destructive"
-                                      onClick={() => removeHistoricalEvent(planningEvent)}
-                                      disabled={busy}
-                                    >
-                                      Anlass löschen
-                                    </Button>
-                                  ) : null}
-                                  <div className="mt-4 grid gap-3">
-                                    <h6 className="font-semibold">Einsätze</h6>
-                                    {eventShifts.length === 0 ? (
-                                      <p className="text-muted-foreground">
-                                        Für diesen Anlass sind noch keine Einsätze vorhanden.
-                                      </p>
-                                    ) : (
-                                      <ul className="grid gap-3">
-                                        {eventShifts.map((shift) => (
-                                          <li key={shift.id}>
-                                            <Card className="shadow-none">
-                                              <CardBody className="p-4">
-                                                <div className="flex flex-wrap items-start justify-between gap-2">
-                                                  <div>
-                                                    <p className="font-medium">
-                                                      {formatDateTime(shift.starts_at, timezone)} –{" "}
-                                                      {formatDateTime(shift.ends_at, timezone)}
-                                                    </p>
-                                                    <div className="mt-2 flex flex-wrap gap-2">
-                                                      <Badge variant="neutral">
-                                                        {shift.occupied_volunteers} von{" "}
-                                                        {shift.required_volunteers} belegt
-                                                      </Badge>
-                                                      {shift.menu_type ? (
-                                                        <Badge variant="success">
-                                                          {menuTypeLabels[shift.menu_type]}
-                                                        </Badge>
-                                                      ) : null}
-                                                    </div>
-                                                    <p className="text-sm text-muted-foreground">
-                                                      {shift.open_places === 0
-                                                        ? "Vollständig besetzt"
-                                                        : shift.open_places === 1
-                                                          ? "1 Platz offen"
-                                                          : `${shift.open_places} Plätze offen`}
-                                                    </p>
-                                                  </div>
-                                                  <Badge
-                                                    variant={shiftStatusVariants[shift.status]}
-                                                  >
-                                                    {shiftStatusLabels[shift.status]}
-                                                  </Badge>
-                                                </div>
-                                                {shift.public_note ? (
-                                                  <p className="mt-2 text-sm">
-                                                    Öffentlich: {shift.public_note}
-                                                  </p>
-                                                ) : null}
-                                                {shift.internal_note ? (
-                                                  <p className="mt-1 text-sm text-muted-foreground">
-                                                    Intern: {shift.internal_note}
-                                                  </p>
-                                                ) : null}
-                                                <div className="mt-3 border-t pt-3">
-                                                  <p className="text-sm font-medium">
-                                                    Eingetragene Helfende
-                                                  </p>
-                                                  <p className="mt-0.5 text-xs text-muted-foreground">
-                                                    Teilnahmestatus erfassen (keine automatische
-                                                    Stunden- oder Auszahlungsbuchung).
-                                                  </p>
-                                                  {shift.signups.length === 0 ? (
-                                                    <p className="mt-1 text-sm text-muted-foreground">
-                                                      Noch niemand eingetragen.
-                                                    </p>
-                                                  ) : (
-                                                    <ul className="mt-2 grid gap-2">
-                                                      {shift.signups.map((signup) => (
-                                                        <li
-                                                          className="flex flex-col gap-2 rounded-md border bg-muted/30 p-2.5 text-sm sm:flex-row sm:items-center sm:justify-between"
-                                                          key={signup.id}
-                                                        >
-                                                          <span className="font-medium">
-                                                            {signup.public_name}
-                                                          </span>
-                                                          <div className="flex flex-wrap items-center gap-2">
-                                                            <label className="grid gap-1 text-xs font-medium">
-                                                              <span>Anwesenheit</span>
-                                                              <select
-                                                                className="min-h-11 rounded-md border bg-background px-3 py-1"
-                                                                value={signup.outcome}
-                                                                disabled={busy}
-                                                                aria-label={`Anwesenheit von ${signup.public_name} im Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title}`}
-                                                                onChange={(event) => {
-                                                                  if (
-                                                                    !changeAttendance(
-                                                                      signup,
-                                                                      event.target
-                                                                        .value as SignupOutcome,
-                                                                    )
-                                                                  )
-                                                                    keepPersistedAttendance(signup);
-                                                                }}
-                                                              >
-                                                                {attendanceOutcomes.map(
-                                                                  (outcome) => (
-                                                                    <option
-                                                                      key={outcome}
-                                                                      value={outcome}
-                                                                    >
-                                                                      {attendanceLabels[outcome]}
-                                                                    </option>
-                                                                  ),
-                                                                )}
-                                                              </select>
-                                                            </label>
-                                                            <a
-                                                              className="inline-flex min-h-11 items-center rounded-md border bg-background px-3 py-1 text-xs font-medium underline transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                              href={`tel:${signup.phone}`}
-                                                              aria-label={`Telefonnummer von ${signup.public_name} anrufen: ${signup.phone}`}
-                                                            >
-                                                              {signup.phone}
-                                                            </a>
-                                                            <a
-                                                              className="inline-flex min-h-11 items-center break-all rounded-md border bg-background px-3 py-1 text-xs font-medium underline transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                                              href={`mailto:${signup.email}`}
-                                                              aria-label={`E-Mail an ${signup.public_name} senden: ${signup.email}`}
-                                                            >
-                                                              {signup.email}
-                                                            </a>
-                                                            <Button
-                                                              size="sm"
-                                                              variant="destructive"
-                                                              disabled={busy}
-                                                              aria-label={`Eintragung von ${signup.public_name} absagen`}
-                                                              onClick={() =>
-                                                                cancelVolunteerSignup(signup)
-                                                              }
-                                                            >
-                                                              Eintragung absagen
-                                                            </Button>
-                                                          </div>
-                                                        </li>
-                                                      ))}
-                                                    </ul>
-                                                  )}
-                                                </div>
-                                                {shiftActions[shift.status].length ? (
-                                                  <div className="mt-3 flex flex-wrap gap-2">
-                                                    {shiftActions[shift.status].map((next) => (
-                                                      <Button
-                                                        variant={
-                                                          next === "CANCELLED"
-                                                            ? "destructive"
-                                                            : "secondary"
-                                                        }
-                                                        disabled={busy}
-                                                        key={next}
-                                                        aria-label={`Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title} ${shiftActionLabels[next].toLocaleLowerCase("de-CH")}`}
-                                                        onClick={() =>
-                                                          changeShiftStatus(
-                                                            shift,
-                                                            planningEvent.title,
-                                                            next,
-                                                          )
-                                                        }
-                                                      >
-                                                        {shiftActionLabels[next]}
-                                                      </Button>
-                                                    ))}
-                                                  </div>
-                                                ) : null}
-                                              </CardBody>
-                                            </Card>
-                                          </li>
-                                        ))}
-                                      </ul>
-                                    )}
-                                    <ShiftCreateForm
-                                      org={org}
-                                      eventId={planningEvent.id}
-                                      eventTitle={planningEvent.title}
-                                      control={control}
-                                      busy={busy}
-                                      onSubmit={submitShift}
-                                    />
-                                  </div>
+                            <div className="flex items-start gap-2">
+                              {planningEvent.status === "DRAFT" ? (
+                                <div className="flex min-h-11 min-w-11 shrink-0 items-center justify-center">
+                                  <input
+                                    aria-label={`Anlass ${planningEvent.title} am ${formatDate(planningEvent.date)} auswählen`}
+                                    checked={selectedEventIds.has(planningEvent.id)}
+                                    className="size-5"
+                                    onChange={() => toggleEventSelection(planningEvent.id)}
+                                    type="checkbox"
+                                  />
                                 </div>
-                              </details>
-                            </Card>
+                              ) : null}
+                              <Card className="min-w-0 flex-1 overflow-hidden border-border/80 transition-shadow hover:shadow-md">
+                                <details className="group">
+                                  <summary
+                                    className="min-h-11 cursor-pointer list-none p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset [&::-webkit-details-marker]:hidden"
+                                    aria-label={`Anlass ${planningEvent.title} am ${formatDate(planningEvent.date)} anzeigen`}
+                                  >
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                      <div className="flex min-w-0 gap-3">
+                                        <time
+                                          aria-hidden="true"
+                                          className="grid h-16 w-14 shrink-0 place-content-center rounded-md border border-primary/25 bg-primary/10 text-center text-primary shadow-sm"
+                                          dateTime={planningEvent.date}
+                                        >
+                                          <span className="text-[0.65rem] font-semibold uppercase leading-none">
+                                            {dateTile.weekday}
+                                          </span>
+                                          <span className="text-xl font-bold leading-tight">
+                                            {dateTile.day}
+                                          </span>
+                                          <span className="text-[0.65rem] font-semibold uppercase leading-none">
+                                            {dateTile.month}
+                                          </span>
+                                        </time>
+                                        <div className="min-w-0">
+                                          <p className="font-semibold">{planningEvent.title}</p>
+                                          <p className="mt-1 text-sm">
+                                            {formatDate(planningEvent.date)}
+                                            {planningEvent.kickoff_time
+                                              ? ` · ${planningEvent.kickoff_time.slice(0, 5)}`
+                                              : ""}{" "}
+                                            · {planningEvent.location}
+                                          </p>
+                                          {(() => {
+                                            const kiosk = serviceBadge(eventShifts, "KIOSK");
+                                            const grill = serviceBadge(eventShifts, "GRILL");
+                                            return (
+                                              <>
+                                                <Badge
+                                                  className="mt-2 mr-2"
+                                                  variant={kiosk.variant}
+                                                >
+                                                  {kiosk.label}
+                                                </Badge>
+                                                <Badge
+                                                  className="mt-2 mr-2"
+                                                  variant={grill.variant}
+                                                >
+                                                  {grill.label}
+                                                </Badge>
+                                              </>
+                                            );
+                                          })()}
+                                          {!planningEvent.source_import_id ? (
+                                            <Badge className="mt-2 mr-2" variant="neutral">
+                                              Manuell
+                                            </Badge>
+                                          ) : null}
+                                          <Badge className="mt-2" variant="neutral">
+                                            {eventShifts.length}{" "}
+                                            {eventShifts.length === 1 ? "Einsatz" : "Einsätze"} ·{" "}
+                                            {eventShifts.reduce(
+                                              (sum, item) => sum + item.occupied_volunteers,
+                                              0,
+                                            )}{" "}
+                                            von{" "}
+                                            {eventShifts.reduce(
+                                              (sum, item) => sum + item.required_volunteers,
+                                              0,
+                                            )}{" "}
+                                            Plätzen belegt
+                                          </Badge>
+                                        </div>
+                                      </div>
+                                      <Badge variant={eventStatusVariants[planningEvent.status]}>
+                                        {eventStatusLabels[planningEvent.status]}
+                                      </Badge>
+                                    </div>
+                                  </summary>
+                                  <div className="border-t p-4">
+                                    <p className="text-sm text-muted-foreground">
+                                      {planningEvent.event_type}
+                                    </p>
+                                    {planningEvent.public_description ? (
+                                      <p className="mt-2 text-sm">
+                                        {planningEvent.public_description}
+                                      </p>
+                                    ) : null}
+                                    {planningEvent.internal_note ? (
+                                      <p className="mt-2 text-sm">
+                                        Bemerkung: {planningEvent.internal_note}
+                                      </p>
+                                    ) : null}
+                                    {eventActions[planningEvent.status].length ? (
+                                      <div className="mt-3 flex flex-wrap gap-2">
+                                        {eventActions[planningEvent.status].map((next) => (
+                                          <Button
+                                            variant={
+                                              next === "CANCELLED" ? "destructive" : "secondary"
+                                            }
+                                            disabled={busy}
+                                            key={next}
+                                            aria-label={`Anlass ${planningEvent.title} ${eventActionLabels[next]?.toLocaleLowerCase("de-CH")}`}
+                                            onClick={() => changeEventStatus(planningEvent, next)}
+                                          >
+                                            {eventActionLabels[next]}
+                                          </Button>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                    {planningEvent.status === "CANCELLED" ||
+                                    planningEvent.status === "COMPLETED" ? (
+                                      <Button
+                                        className="mt-3"
+                                        variant="destructive"
+                                        onClick={() => removeHistoricalEvent(planningEvent)}
+                                        disabled={busy}
+                                      >
+                                        Anlass löschen
+                                      </Button>
+                                    ) : null}
+                                    <div className="mt-4 grid gap-3">
+                                      <h6 className="font-semibold">Einsätze</h6>
+                                      {eventShifts.length === 0 ? (
+                                        <p className="text-muted-foreground">
+                                          Für diesen Anlass sind noch keine Einsätze vorhanden.
+                                        </p>
+                                      ) : (
+                                        <ul className="grid gap-3">
+                                          {eventShifts.map((shift) => (
+                                            <li key={shift.id}>
+                                              <Card className="shadow-none">
+                                                <CardBody className="p-4">
+                                                  <div className="flex flex-wrap items-start justify-between gap-2">
+                                                    <div>
+                                                      <p className="font-medium">
+                                                        {formatDateTime(shift.starts_at, timezone)}{" "}
+                                                        – {formatDateTime(shift.ends_at, timezone)}
+                                                      </p>
+                                                      <div className="mt-2 flex flex-wrap gap-2">
+                                                        <Badge variant="neutral">
+                                                          {shift.occupied_volunteers} von{" "}
+                                                          {shift.required_volunteers} belegt
+                                                        </Badge>
+                                                        {shift.menu_type ? (
+                                                          <Badge variant="success">
+                                                            {menuTypeLabels[shift.menu_type]}
+                                                          </Badge>
+                                                        ) : null}
+                                                      </div>
+                                                      <p className="text-sm text-muted-foreground">
+                                                        {shift.open_places === 0
+                                                          ? "Vollständig besetzt"
+                                                          : shift.open_places === 1
+                                                            ? "1 Platz offen"
+                                                            : `${shift.open_places} Plätze offen`}
+                                                      </p>
+                                                    </div>
+                                                    <Badge
+                                                      variant={shiftStatusVariants[shift.status]}
+                                                    >
+                                                      {shiftStatusLabels[shift.status]}
+                                                    </Badge>
+                                                  </div>
+                                                  {shift.public_note ? (
+                                                    <p className="mt-2 text-sm">
+                                                      Öffentlich: {shift.public_note}
+                                                    </p>
+                                                  ) : null}
+                                                  {shift.internal_note ? (
+                                                    <p className="mt-1 text-sm text-muted-foreground">
+                                                      Intern: {shift.internal_note}
+                                                    </p>
+                                                  ) : null}
+                                                  <div className="mt-3 border-t pt-3">
+                                                    <p className="text-sm font-medium">
+                                                      Eingetragene Helfende
+                                                    </p>
+                                                    <p className="mt-0.5 text-xs text-muted-foreground">
+                                                      Teilnahmestatus erfassen (keine automatische
+                                                      Stunden- oder Auszahlungsbuchung).
+                                                    </p>
+                                                    {shift.signups.length === 0 ? (
+                                                      <p className="mt-1 text-sm text-muted-foreground">
+                                                        Noch niemand eingetragen.
+                                                      </p>
+                                                    ) : (
+                                                      <ul className="mt-2 grid gap-2">
+                                                        {shift.signups.map((signup) => (
+                                                          <li
+                                                            className="flex flex-col gap-2 rounded-md border bg-muted/30 p-2.5 text-sm sm:flex-row sm:items-center sm:justify-between"
+                                                            key={signup.id}
+                                                          >
+                                                            <span className="font-medium">
+                                                              {signup.public_name}
+                                                            </span>
+                                                            <div className="flex flex-wrap items-center gap-2">
+                                                              <label className="grid gap-1 text-xs font-medium">
+                                                                <span>Anwesenheit</span>
+                                                                <select
+                                                                  className="min-h-11 rounded-md border bg-background px-3 py-1"
+                                                                  value={signup.outcome}
+                                                                  disabled={busy}
+                                                                  aria-label={`Anwesenheit von ${signup.public_name} im Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title}`}
+                                                                  onChange={(event) => {
+                                                                    if (
+                                                                      !changeAttendance(
+                                                                        signup,
+                                                                        event.target
+                                                                          .value as SignupOutcome,
+                                                                      )
+                                                                    )
+                                                                      keepPersistedAttendance(
+                                                                        signup,
+                                                                      );
+                                                                  }}
+                                                                >
+                                                                  {attendanceOutcomes.map(
+                                                                    (outcome) => (
+                                                                      <option
+                                                                        key={outcome}
+                                                                        value={outcome}
+                                                                      >
+                                                                        {attendanceLabels[outcome]}
+                                                                      </option>
+                                                                    ),
+                                                                  )}
+                                                                </select>
+                                                              </label>
+                                                              <a
+                                                                className="inline-flex min-h-11 items-center rounded-md border bg-background px-3 py-1 text-xs font-medium underline transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                                href={`tel:${signup.phone}`}
+                                                                aria-label={`Telefonnummer von ${signup.public_name} anrufen: ${signup.phone}`}
+                                                              >
+                                                                {signup.phone}
+                                                              </a>
+                                                              <a
+                                                                className="inline-flex min-h-11 items-center break-all rounded-md border bg-background px-3 py-1 text-xs font-medium underline transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                                                href={`mailto:${signup.email}`}
+                                                                aria-label={`E-Mail an ${signup.public_name} senden: ${signup.email}`}
+                                                              >
+                                                                {signup.email}
+                                                              </a>
+                                                              <Button
+                                                                size="sm"
+                                                                variant="destructive"
+                                                                disabled={busy}
+                                                                aria-label={`Eintragung von ${signup.public_name} absagen`}
+                                                                onClick={() =>
+                                                                  cancelVolunteerSignup(signup)
+                                                                }
+                                                              >
+                                                                Eintragung absagen
+                                                              </Button>
+                                                            </div>
+                                                          </li>
+                                                        ))}
+                                                      </ul>
+                                                    )}
+                                                  </div>
+                                                  {shiftActions[shift.status].length ? (
+                                                    <div className="mt-3 flex flex-wrap gap-2">
+                                                      {shiftActions[shift.status].map((next) => (
+                                                        <Button
+                                                          variant={
+                                                            next === "CANCELLED"
+                                                              ? "destructive"
+                                                              : "secondary"
+                                                          }
+                                                          disabled={busy}
+                                                          key={next}
+                                                          aria-label={`Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title} ${shiftActionLabels[next].toLocaleLowerCase("de-CH")}`}
+                                                          onClick={() =>
+                                                            changeShiftStatus(
+                                                              shift,
+                                                              planningEvent.title,
+                                                              next,
+                                                            )
+                                                          }
+                                                        >
+                                                          {shiftActionLabels[next]}
+                                                        </Button>
+                                                      ))}
+                                                    </div>
+                                                  ) : null}
+                                                </CardBody>
+                                              </Card>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                      <ShiftCreateForm
+                                        org={org}
+                                        eventId={planningEvent.id}
+                                        eventTitle={planningEvent.title}
+                                        control={control}
+                                        busy={busy}
+                                        onSubmit={submitShift}
+                                      />
+                                    </div>
+                                  </div>
+                                </details>
+                              </Card>
+                            </div>
                           </li>,
                         ];
                       })}
