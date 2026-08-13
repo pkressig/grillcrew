@@ -23,6 +23,10 @@ vi.mock("@/lib/proposals", () => ({
   updateGrillShiftSplits,
 }));
 
+const { loadShifts } = vi.hoisted(() => ({ loadShifts: vi.fn() }));
+
+vi.mock("@/lib/planning", () => ({ loadShifts }));
+
 import { GrillPlanningPanel } from "@/app/[org]/admin/grill-planning-panel";
 
 const openWindow = {
@@ -54,6 +58,7 @@ describe("GrillPlanningPanel", () => {
     });
     updatePlanningProposal.mockResolvedValue({ ...openWindow, override_state: "MANUAL" });
     updateGrillShiftSplits.mockResolvedValue({ ...openWindow });
+    loadShifts.mockResolvedValue([]);
   });
 
   it("shows only open kiosk windows with games, rule context and proposal separation", async () => {
@@ -197,6 +202,55 @@ describe("GrillPlanningPanel", () => {
     // whatever is already saved.
     expect(updatePlanningProposal).not.toHaveBeenCalled();
     expect(updateGrillShiftSplits).not.toHaveBeenCalled();
+  });
+
+  it("hides cancelled shifts in the confirmed shift list (e.g. after reconciling)", async () => {
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, grill_confirmed: true, covered_event_ids: ["event-1"] }],
+    });
+    loadShifts.mockResolvedValue([
+      {
+        id: "stale-shift",
+        event_id: "event-1",
+        starts_at: "2026-08-08T18:00:00Z",
+        ends_at: "2026-08-08T20:00:00Z",
+        required_volunteers: 2,
+        occupied_volunteers: 0,
+        open_places: 2,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "CANCELLED",
+        sort_order: 0,
+        shift_type: "GRILL",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+      {
+        id: "active-shift",
+        event_id: "event-1",
+        starts_at: "2026-08-08T18:00:00Z",
+        ends_at: "2026-08-08T19:00:00Z",
+        required_volunteers: 1,
+        occupied_volunteers: 0,
+        open_places: 1,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "OPEN",
+        sort_order: 0,
+        shift_type: "GRILL",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Junioren A – Gäste");
+    expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
+    expect(screen.queryByText("20:00–22:00 Uhr")).not.toBeInTheDocument();
   });
 
   it("switches to the past tab and requests past proposals separately", async () => {

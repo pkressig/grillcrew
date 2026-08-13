@@ -604,44 +604,47 @@ function KioskWindowCard({
             role="status"
           >
             <p className="font-medium text-status-success">Kiosk-Entwurf angelegt</p>
-            {shifts.map((shift) =>
-              editingShiftId === shift.id ? (
-                <ShiftEditRow
-                  key={shift.id}
-                  org={org}
-                  timezone={timezone}
-                  dateStr={window.date}
-                  shift={shift}
-                  onCancel={() => setEditingShiftId(null)}
-                  onSaved={(updated) => {
-                    onShiftsChanged(
-                      shifts.map((item) => (item.id === updated.id ? updated : item)),
-                    );
-                    setEditingShiftId(null);
-                  }}
-                />
-              ) : (
-                <div key={shift.id} className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="text-sm">
-                    <p className="font-medium">
-                      {formatTime(shift.starts_at, timezone)}–{formatTime(shift.ends_at, timezone)}{" "}
-                      Uhr
-                    </p>
-                    <p>
-                      {shift.occupied_volunteers} von {shift.required_volunteers} Helfer angemeldet
-                    </p>
+            {shifts
+              .filter((shift) => shift.status !== "CANCELLED")
+              .map((shift) =>
+                editingShiftId === shift.id ? (
+                  <ShiftEditRow
+                    key={shift.id}
+                    org={org}
+                    timezone={timezone}
+                    dateStr={window.date}
+                    shift={shift}
+                    onCancel={() => setEditingShiftId(null)}
+                    onSaved={(updated) => {
+                      onShiftsChanged(
+                        shifts.map((item) => (item.id === updated.id ? updated : item)),
+                      );
+                      setEditingShiftId(null);
+                    }}
+                  />
+                ) : (
+                  <div key={shift.id} className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="text-sm">
+                      <p className="font-medium">
+                        {formatTime(shift.starts_at, timezone)}–
+                        {formatTime(shift.ends_at, timezone)} Uhr
+                      </p>
+                      <p>
+                        {shift.occupied_volunteers} von {shift.required_volunteers} Helfer
+                        angemeldet
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setEditingShiftId(shift.id)}
+                    >
+                      Anpassen
+                    </Button>
                   </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setEditingShiftId(shift.id)}
-                  >
-                    Anpassen
-                  </Button>
-                </div>
-              ),
-            )}
+                ),
+              )}
             <Button
               className="justify-self-start"
               type="button"

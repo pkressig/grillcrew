@@ -303,4 +303,56 @@ describe("Kiosk planning", () => {
     );
     expect(proposals.updateKioskShiftSplits).not.toHaveBeenCalled();
   });
+
+  it("hides cancelled shifts in the confirmed shift list (e.g. after reconciling)", async () => {
+    const confirmedWindow = {
+      ...windowProposal,
+      kiosk_confirmed: true,
+      covered_event_ids: ["event-1"],
+    };
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [confirmedWindow] });
+    vi.mocked(planningLib.loadShifts).mockResolvedValue([
+      {
+        id: "stale-shift",
+        event_id: "event-1",
+        starts_at: "2026-09-12T08:30:00Z",
+        ends_at: "2026-09-12T12:30:00Z",
+        required_volunteers: 2,
+        occupied_volunteers: 0,
+        open_places: 2,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "CANCELLED",
+        sort_order: 0,
+        shift_type: "KIOSK",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+      {
+        id: "active-shift",
+        event_id: "event-1",
+        starts_at: "2026-09-12T08:30:00Z",
+        ends_at: "2026-09-12T10:30:00Z",
+        required_volunteers: 1,
+        occupied_volunteers: 0,
+        open_places: 1,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "CLOSED",
+        sort_order: 0,
+        shift_type: "KIOSK",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Kiosk-Entwurf angelegt");
+    expect(await screen.findByText("10:30–12:30 Uhr")).toBeInTheDocument();
+    expect(screen.queryByText("10:30–14:30 Uhr")).not.toBeInTheDocument();
+  });
 });
