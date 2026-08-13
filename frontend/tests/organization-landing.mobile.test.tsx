@@ -84,6 +84,26 @@ const plan = {
         },
       ],
     },
+    {
+      id: "e3",
+      title: "Senioren",
+      date: "2026-09-06",
+      location: "Platz C",
+      event_type: "Freundschaftsspiel",
+      public_description: null,
+      shifts: [
+        {
+          id: "s3",
+          starts_at: "2026-09-06T09:00:00+02:00",
+          ends_at: "2026-09-06T11:00:00+02:00",
+          required_volunteers: 2,
+          occupied_volunteers: 0,
+          public_note: null,
+          status: "OPEN" as const,
+          volunteer_names: [],
+        },
+      ],
+    },
   ],
 };
 const profile = {
@@ -136,21 +156,40 @@ describe("mobile public plan", () => {
     fireEvent.click(details);
     expect(details).toHaveAttribute("aria-pressed", "true");
     expect(localStorage.getItem("grillcrew:public-plan-view:example")).toBe("details");
-    expect(screen.getByText("Spiele und Anlässe")).toBeInTheDocument();
-    expect(screen.getByText("Erstes Spiel")).toBeInTheDocument();
+    const dayButton = screen.getByRole("button", { name: /Samstag, 05. September 2026/ });
+    expect(dayButton).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(dayButton);
+    expect(dayButton).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Junioren")).toBeInTheDocument();
   });
 
-  it("groups multiple games under one day and lists shifts chronologically", async () => {
+  it("shows all games and their times in a single-open-day accordion", async () => {
     renderPage();
     await screen.findByRole("button", { name: "Details" });
     fireEvent.click(screen.getByRole("button", { name: "Details" }));
-    expect(screen.getAllByText(/Samstag, 05. September 2026/)).toHaveLength(1);
-    const day = screen.getByText("Spiele und Anlässe").closest("details")!;
-    expect(within(day).getByText("Junioren")).toBeInTheDocument();
-    expect(within(day).getByText("Aktive")).toBeInTheDocument();
-    const headings = within(day).getAllByRole("heading", { level: 3 });
-    expect(headings[1]).toHaveTextContent("08:00–10:00");
-    expect(headings[2]).toHaveTextContent("11:00–13:00");
+    const firstDay = screen.getByRole("button", { name: /Samstag, 05. September 2026/ });
+    const secondDay = screen.getByRole("button", { name: /Sonntag, 06. September 2026/ });
+    fireEvent.click(firstDay);
+    expect(screen.getByText("Junioren")).toBeInTheDocument();
+    expect(screen.getByText("Aktive")).toBeInTheDocument();
+    expect(screen.getByText("Meisterschaft · 08:00–10:00 Uhr")).toBeInTheDocument();
+    expect(screen.getByText("Cup · 11:00–13:00 Uhr")).toBeInTheDocument();
+    expect(screen.queryByText("Platz A")).not.toBeInTheDocument();
+    fireEvent.click(secondDay);
+    expect(firstDay).toHaveAttribute("aria-expanded", "false");
+    expect(secondDay).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByText("Junioren")).not.toBeInTheDocument();
+  });
+
+  it("shows calendar tiles on cards and no event or location rows in the compact list", async () => {
+    renderPage();
+    expect(await screen.findAllByLabelText(/Kalender:/)).toHaveLength(3);
+    expect(screen.getAllByText("Samstag, 05. September 2026")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Kompakte Liste" }));
+    expect(screen.getAllByLabelText(/Kalender:/)).toHaveLength(2);
+    expect(screen.queryByText("Junioren")).not.toBeInTheDocument();
+    expect(screen.queryByText("Platz A")).not.toBeInTheDocument();
+    expect(screen.queryByText("Meisterschaft")).not.toBeInTheDocument();
   });
 
   it("shows compact capacity, status and 44px signup actions", async () => {
@@ -168,11 +207,16 @@ describe("mobile public plan", () => {
     authState.isAuthenticated = true;
     renderPage();
     const section = await screen.findByRole("region", { name: "Meine kommenden Einsätze" });
-    expect(within(section).getByText("Platz A · Status: Angemeldet")).toBeInTheDocument();
+    expect(within(section).getByText("Status: Angemeldet")).toBeInTheDocument();
     expect(screen.queryByText("private@example.test")).not.toBeInTheDocument();
     const ownAction = await screen.findByRole("button", { name: /Bereits angemeldet: Junioren/ });
     expect(ownAction).toBeDisabled();
     fireEvent.click(within(section).getByRole("button", { name: /Junioren/ }));
+    expect(screen.getByRole("button", { name: "Details" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: /Samstag, 05. September 2026/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     await waitFor(() => expect(document.getElementById("shift-s1")).toHaveClass("ring-2"));
   });
 

@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, Clock3, MapPin, Users, X } from "lucide-react";
+import { ChevronDown, Clock3, Users, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { useOrganization } from "@/components/organization-provider";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,9 @@ const shortDateFormatter = new Intl.DateTimeFormat("de-CH", {
   year: "numeric",
   timeZone: "UTC",
 });
+const weekdayFormatter = new Intl.DateTimeFormat("de-CH", { weekday: "short", timeZone: "UTC" });
+const monthFormatter = new Intl.DateTimeFormat("de-CH", { month: "short", timeZone: "UTC" });
+const dayFormatter = new Intl.DateTimeFormat("de-CH", { day: "2-digit", timeZone: "UTC" });
 
 export function OrganizationLanding() {
   const organization = useOrganization();
@@ -62,6 +65,7 @@ export function OrganizationLanding() {
   const [accountModal, setAccountModal] = useState<"login" | "register" | null>(null);
   const [pendingShiftId, setPendingShiftId] = useState<string | null>(null);
   const [registerOpened, setRegisterOpened] = useState(false);
+  const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const storageKey = `grillcrew:public-plan-view:${organization.slug}`;
 
@@ -209,6 +213,8 @@ export function OrganizationLanding() {
     if (!plan) return;
     const match = findSignupShift(plan, signup);
     if (!match) return;
+    setView("details");
+    setExpandedDay(match.event.date);
     setHighlightedShift(match.shift.id);
     window.requestAnimationFrame(() => {
       const target = document.getElementById(`shift-${match.shift.id}`);
@@ -347,7 +353,16 @@ export function OrganizationLanding() {
             {success ? <SuccessMessage success={success} onClose={() => setSuccess(null)} /> : null}
             <section aria-label="Kommende Anlässe" className="space-y-4">
               {days.map((day) => (
-                <Day key={day.date} day={day} view={view} shiftProps={shiftProps} />
+                <Day
+                  key={day.date}
+                  day={day}
+                  view={view}
+                  expanded={expandedDay === day.date}
+                  onToggle={() =>
+                    setExpandedDay((current) => (current === day.date ? null : day.date))
+                  }
+                  shiftProps={shiftProps}
+                />
               ))}
             </section>
           </>
@@ -427,7 +442,7 @@ function OwnSignups({
                   {formatTime(entry.shift_ends_at, "Europe/Zurich")} Uhr
                 </span>
                 <span className="block text-sm text-muted-foreground">
-                  {entry.event_location} · Status: {signupStatus(entry)}
+                  Status: {signupStatus(entry)}
                 </span>
               </button>
             </li>
@@ -441,62 +456,106 @@ function OwnSignups({
 function Day({
   day,
   view,
+  expanded,
+  onToggle,
   shiftProps,
-}: Readonly<{ day: DayGroup; view: PlanView; shiftProps: ShiftProps }>) {
+}: Readonly<{
+  day: DayGroup;
+  view: PlanView;
+  expanded: boolean;
+  onToggle: () => void;
+  shiftProps: ShiftProps;
+}>) {
   const shifts = day.events
     .flatMap((event) => event.shifts.map((shift) => ({ event, shift })))
     .sort((a, b) => a.shift.starts_at.localeCompare(b.shift.starts_at));
   if (view === "details")
     return (
-      <details className="rounded-xl border bg-background" open>
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between p-4 font-bold">
+      <section className="overflow-hidden rounded-xl border bg-background">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={`day-${day.date}`}
+          onClick={onToggle}
+          className="flex min-h-11 w-full items-center justify-between p-4 text-left font-bold"
+        >
           <span>{dateFormatter.format(new Date(`${day.date}T00:00:00Z`))}</span>
-          <ChevronDown aria-hidden="true" className="h-5 w-5" />
-        </summary>
-        <div className="border-t p-4">
-          <h3 className="font-semibold">Spiele und Anlässe</h3>
-          <ul className="mt-2 space-y-2">
+          <ChevronDown
+            aria-hidden="true"
+            className={cn("h-5 w-5 transition-transform", expanded && "rotate-180")}
+          />
+        </button>
+        {expanded ? (
+          <div id={`day-${day.date}`} className="divide-y border-t">
             {day.events.map((event) => (
-              <li key={event.id}>
-                <p className="font-semibold">{event.title}</p>
-                <p className="text-sm text-muted-foreground">
-                  {event.event_type} · {event.location}
-                </p>
-                {event.public_description ? (
-                  <p className="text-sm">{event.public_description}</p>
-                ) : null}
-              </li>
+              <section key={event.id} aria-labelledby={`event-${event.id}-title`}>
+                <div className="p-4 pb-3">
+                  <h3 id={`event-${event.id}-title`} className="font-bold">
+                    {event.title}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {event.event_type} · {eventTimeRange(event, shiftProps.organizationTimezone)}{" "}
+                    Uhr
+                  </p>
+                </div>
+                <div className="divide-y border-t">
+                  {[...event.shifts]
+                    .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+                    .map((shift) => (
+                      <Shift key={shift.id} event={event} shift={shift} compact {...shiftProps} />
+                    ))}
+                </div>
+              </section>
             ))}
-          </ul>
-        </div>
-        <div className="divide-y border-t">
-          {shifts.map(({ event, shift }) => (
-            <Shift key={shift.id} event={event} shift={shift} compact={false} {...shiftProps} />
-          ))}
-        </div>
-      </details>
+          </div>
+        ) : null}
+      </section>
+    );
+  if (view === "cards")
+    return (
+      <div className="space-y-3">
+        {day.events.map((event) => (
+          <Card key={event.id}>
+            <CardHeader className="flex-row items-center gap-3 border-b p-4">
+              <CalendarTile date={day.date} />
+              <div className="min-w-0">
+                <time dateTime={day.date} className="block font-bold">
+                  {dateFormatter.format(new Date(`${day.date}T00:00:00Z`))}
+                </time>
+                <h2 className="mt-1 text-lg font-bold">{event.title}</h2>
+                {event.event_type ? (
+                  <p className="text-sm text-muted-foreground">{event.event_type}</p>
+                ) : null}
+              </div>
+            </CardHeader>
+            <div className="divide-y">
+              {[...event.shifts]
+                .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+                .map((shift) => (
+                  <Shift
+                    key={shift.id}
+                    event={event}
+                    shift={shift}
+                    compact={false}
+                    {...shiftProps}
+                  />
+                ))}
+            </div>
+          </Card>
+        ))}
+      </div>
     );
   return (
     <Card>
-      <CardHeader className="border-b p-4">
+      <CardHeader className="flex-row items-center gap-3 border-b p-3">
+        <CalendarTile date={day.date} />
         <time dateTime={day.date} className="font-bold">
           {dateFormatter.format(new Date(`${day.date}T00:00:00Z`))}
         </time>
-        {view === "cards" ? (
-          <p className="mt-1 text-sm text-muted-foreground">
-            {day.events.map((event) => event.title).join(" · ")}
-          </p>
-        ) : null}
       </CardHeader>
       <div className="divide-y">
         {shifts.map(({ event, shift }) => (
-          <Shift
-            key={shift.id}
-            event={event}
-            shift={shift}
-            compact={view === "compact"}
-            {...shiftProps}
-          />
+          <Shift key={shift.id} event={event} shift={shift} compact {...shiftProps} />
         ))}
       </div>
     </Card>
@@ -548,20 +607,12 @@ function Shift({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-muted-foreground">
-            {event.title} · {event.event_type}
-          </p>
+          {!compact ? <p className="text-sm font-semibold text-muted-foreground">Schicht</p> : null}
           <h3 id={`shift-${shift.id}-title`} className="mt-1 flex items-center gap-2 font-bold">
             <Clock3 aria-hidden="true" className="h-4 w-4" />
             {formatTime(shift.starts_at, organizationTimezone)}–
             {formatTime(shift.ends_at, organizationTimezone)} Uhr
           </h3>
-          {!compact ? (
-            <p className="mt-1 flex gap-2 text-sm">
-              <MapPin aria-hidden="true" className="h-4 w-4 shrink-0" />
-              {event.location}
-            </p>
-          ) : null}
         </div>
         <Badge id={`shift-${shift.id}-status`} variant={status === "Offen" ? "success" : "neutral"}>
           {status}
@@ -845,6 +896,30 @@ function signupStatus(entry: VolunteerSignupSummary) {
 function formatTime(value: string, timeZone: string) {
   return new Intl.DateTimeFormat("de-CH", { hour: "2-digit", minute: "2-digit", timeZone }).format(
     new Date(value),
+  );
+}
+function eventTimeRange(event: PublicPlanEvent, timeZone: string) {
+  const shifts = [...event.shifts].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  if (shifts.length === 0) return "Keine Schichtzeit";
+  return `${formatTime(shifts[0]!.starts_at, timeZone)}–${formatTime(shifts.at(-1)!.ends_at, timeZone)}`;
+}
+function CalendarTile({ date }: Readonly<{ date: string }>) {
+  const value = new Date(`${date}T00:00:00Z`);
+  return (
+    <div
+      aria-label={`Kalender: ${dateFormatter.format(value)}`}
+      className="w-14 shrink-0 overflow-hidden rounded-lg border bg-background text-center shadow-sm"
+    >
+      <span className="block bg-primary px-1 py-1 text-[11px] font-bold uppercase text-primary-foreground">
+        {monthFormatter.format(value)}
+      </span>
+      <span className="block pt-1 text-[11px] font-semibold uppercase text-muted-foreground">
+        {weekdayFormatter.format(value)}
+      </span>
+      <span className="block pb-1 text-xl font-bold leading-none">
+        {dayFormatter.format(value)}
+      </span>
+    </div>
   );
 }
 function Summary({ value, label }: Readonly<{ value: number; label: string }>) {
