@@ -191,11 +191,8 @@ def delete_volunteer(
         _service(organization_slug, current, db).delete_volunteer(volunteer_id, current.user.id)
     except VolunteerNotFoundError:
         raise HTTPException(status_code=404, detail="volunteer not found") from None
-    except VolunteerHasRecordsError:
-        raise HTTPException(
-            status_code=409,
-            detail="volunteer has signups or work records and cannot be deleted",
-        ) from None
+    except VolunteerHasRecordsError as error:
+        raise HTTPException(status_code=409, detail=error.detail) from None
 
 
 @router.get("/volunteers/{volunteer_id}/family", response_model=VolunteerFamilyResponse | None)

@@ -781,10 +781,16 @@ def test_set_password_route_maps_service_errors(
 
 
 class _DeleteDb:
-    def __init__(self, scalars: list[object | None]) -> None:
+    def __init__(
+        self,
+        scalars: list[object | None],
+        blocking_signup: tuple[str, object] | None = None,
+    ) -> None:
         self.scalar_results = iter(scalars)
         self.scalar_statements: list[object] = []
+        self.blocking_signup = blocking_signup
         self.executed: list[object] = []
+        self.execute_statements: list[object] = []
         self.added: list[object] = []
         self.deleted: list[object] = []
         self.commits = 0
@@ -795,7 +801,8 @@ class _DeleteDb:
 
     def execute(self, statement: object) -> SimpleNamespace:
         self.executed.append(statement)
-        return SimpleNamespace(rowcount=0)
+        self.execute_statements.append(statement)
+        return SimpleNamespace(rowcount=0, first=lambda: self.blocking_signup)
 
     def add(self, item: object) -> None:
         self.added.append(item)
@@ -811,16 +818,19 @@ def test_delete_volunteer_removes_row_unlinks_family_member_and_audits() -> None
     organization_id = uuid4()
     actor_id = uuid4()
     volunteer = SimpleNamespace(id=uuid4(), organization_id=organization_id)
-    db = _DeleteDb([volunteer, None, None])
+    db = _DeleteDb([volunteer, None])
     service = FamilyService(cast(object, db), organization_id)  # type: ignore[arg-type]
 
     service.delete_volunteer(volunteer.id, actor_id)
 
     assert db.deleted == [volunteer]
     assert db.commits == 1
-    assert len(db.executed) == 2
-    assert "family_member" in str(db.executed[0]).lower()
-    assert "DELETE FROM signup" in str(db.executed[1])
+    assert len(db.executed) == 3
+    signup_query = str(db.executed[0])
+    assert "JOIN shift" in signup_query
+    assert "shift.status" in signup_query
+    assert "family_member" in str(db.executed[1]).lower()
+    assert "DELETE FROM signup" in str(db.executed[2])
     audit = cast(AuditEvent, db.added[-1])
     assert audit.action == "VOLUNTEER_DELETED_BY_ADMIN"
     assert audit.entity_id == volunteer.id
@@ -828,31 +838,22 @@ def test_delete_volunteer_removes_row_unlinks_family_member_and_audits() -> None
     assert audit.actor_user_id == actor_id
 
 
-def test_delete_volunteer_blocks_when_volunteer_has_signups() -> None:
+def test_delete_volunteer_blocks_when_volunteer_has_signups_with_detail() -> None:
     volunteer = SimpleNamespace(id=uuid4())
-    db = _DeleteDb([volunteer, SimpleNamespace(), None])
+    blocking_date = SimpleNamespace(isoformat=lambda: "2026-08-01")
+    db = _DeleteDb([volunteer], blocking_signup=("Freundschaftsspiel", blocking_date))
     service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
-    with pytest.raises(VolunteerHasRecordsError):
+    with pytest.raises(VolunteerHasRecordsError) as excinfo:
         service.delete_volunteer(volunteer.id, uuid4())
+    assert "Freundschaftsspiel" in excinfo.value.detail
+    assert "2026-08-01" in excinfo.value.detail
     assert db.deleted == []
     assert db.commits == 0
 
 
-def test_delete_volunteer_signup_query_joins_shift_and_excludes_cancelled() -> None:
-    volunteer = SimpleNamespace(id=uuid4())
-    db = _DeleteDb([volunteer, None, None])
-    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
-
-    service.delete_volunteer(volunteer.id, uuid4())
-
-    signup_query = str(db.scalar_statements[1])
-    assert "JOIN shift" in signup_query
-    assert "shift.status" in signup_query
-
-
 def test_delete_volunteer_blocks_when_volunteer_has_work_records() -> None:
     volunteer = SimpleNamespace(id=uuid4())
-    db = _DeleteDb([volunteer, None, SimpleNamespace()])
+    db = _DeleteDb([volunteer, SimpleNamespace()])
     service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
     with pytest.raises(VolunteerHasRecordsError):
         service.delete_volunteer(volunteer.id, uuid4())
@@ -915,14 +916,14 @@ def test_delete_volunteer_route_requires_csrf_and_origin(
 @pytest.mark.parametrize(
     ("raised", "expected_status"),
     [
-        (VolunteerNotFoundError, 404),
-        (VolunteerHasRecordsError, 409),
+        (VolunteerNotFoundError(), 404),
+        (VolunteerHasRecordsError("Anmeldung verhindert das Löschen."), 409),
     ],
 )
 def test_delete_volunteer_route_maps_service_errors(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
-    raised: type[Exception],
+    raised: Exception,
     expected_status: int,
 ) -> None:
     current = _current()

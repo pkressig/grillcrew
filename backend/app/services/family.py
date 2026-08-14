@@ -10,7 +10,15 @@ from app.core.config import Settings
 from app.core.security.password import hash_password, validate_password_policy
 from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStatus
 from app.models.identity import AuditEvent, RefreshToken, User, UserStatus
-from app.models.planning import Shift, ShiftStatus, Signup, SignupSource, Volunteer, VolunteerStatus
+from app.models.planning import (
+    Event,
+    Shift,
+    ShiftStatus,
+    Signup,
+    SignupSource,
+    Volunteer,
+    VolunteerStatus,
+)
 from app.models.work_record import WorkRecord
 from app.schemas.family import (
     FamilyCreate,
@@ -45,6 +53,10 @@ class VolunteerHasNoAccountError(Exception):
 
 class VolunteerHasRecordsError(Exception):
     """Raised when deleting a volunteer would silently orphan signups or work records."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
 
 
 class FamilyService:
@@ -280,17 +292,24 @@ class FamilyService:
         # delete_confirmed_window() cancels shifts unconditionally without touching their
         # signups, so a signup on an already-cancelled shift is defunct, not a real
         # commitment worth blocking deletion for.
-        has_signups = self.db.scalar(
-            select(Signup.id)
+        blocking_signup = self.db.execute(
+            select(Event.title, Event.date)
+            .select_from(Signup)
             .join(Shift, Shift.id == Signup.shift_id)
+            .join(Event, Event.id == Shift.event_id)
             .where(Signup.volunteer_id == volunteer.id, Shift.status != ShiftStatus.CANCELLED)
             .limit(1)
-        )
+        ).first()
+        if blocking_signup is not None:
+            title, event_date = blocking_signup
+            raise VolunteerHasRecordsError(
+                f"Anmeldung für „{title}“ am {event_date.isoformat()} verhindert das Löschen."
+            )
         has_work_records = self.db.scalar(
             select(WorkRecord.id).where(WorkRecord.volunteer_id == volunteer.id).limit(1)
         )
-        if has_signups is not None or has_work_records is not None:
-            raise VolunteerHasRecordsError
+        if has_work_records is not None:
+            raise VolunteerHasRecordsError("Erfasste Arbeitszeiten verhindern das Löschen.")
         self.db.execute(
             update(FamilyMember)
             .where(FamilyMember.volunteer_id == volunteer.id)

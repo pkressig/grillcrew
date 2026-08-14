@@ -473,14 +473,14 @@ describe("volunteer (Helfer) admin — primary view", () => {
     confirmSpy.mockRestore();
   });
 
-  it("shows a clear error and keeps the volunteer when deletion is blocked by existing records", async () => {
+  it("shows the backend's specific reason and keeps the volunteer when deletion is blocked by existing records", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderAdmin(
       "ADMIN",
       adminFetch("ADMIN", {
         allVolunteersResponses: [Response.json([directoryVolunteer])],
         deleteVolunteerResponse: Response.json(
-          { detail: "volunteer has signups or work records and cannot be deleted" },
+          { detail: "Anmeldung für „Freundschaftsspiel“ am 2026-08-01 verhindert das Löschen." },
           { status: 409 },
         ),
       }),
@@ -489,7 +489,7 @@ describe("volunteer (Helfer) admin — primary view", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Helfer endgültig löschen" }));
     expect(
       await screen.findByText(
-        "Der Helfer hat Anmeldungen oder Arbeitszeiten und kann nicht gelöscht werden.",
+        "Anmeldung für „Freundschaftsspiel“ am 2026-08-01 verhindert das Löschen.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Anna Zeta" })).toBeInTheDocument();

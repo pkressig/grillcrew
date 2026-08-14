@@ -238,11 +238,7 @@ export async function deleteVolunteer(org: string, volunteerId: string): Promise
   } catch {
     // Use the stable German fallback for non-JSON intermediary responses.
   }
-  throw new Error(
-    response.status === 409
-      ? "Der Helfer hat Anmeldungen oder Arbeitszeiten und kann nicht gelöscht werden."
-      : (detail ?? "Der Helfer konnte nicht gelöscht werden."),
-  );
+  throw new Error(detail ?? "Der Helfer konnte nicht gelöscht werden.");
 }
 
 export const updateFamilyMemberVolunteer = (
