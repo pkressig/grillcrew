@@ -227,7 +227,7 @@ export const setVolunteerPassword = (org: string, volunteerId: string, newPasswo
 
 export async function deleteVolunteer(org: string, volunteerId: string): Promise<void> {
   const response = await fetch(
-    `${familiesPath(org)}/volunteers/${encodeURIComponent(volunteerId)}`,
+    `${apiBaseUrl}${familiesPath(org)}/volunteers/${encodeURIComponent(volunteerId)}`,
     { method: "DELETE", credentials: "include", headers: { ...csrfHeaders() } },
   );
   if (response.ok) return;
