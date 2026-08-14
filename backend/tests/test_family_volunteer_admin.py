@@ -783,12 +783,14 @@ def test_set_password_route_maps_service_errors(
 class _DeleteDb:
     def __init__(self, scalars: list[object | None]) -> None:
         self.scalar_results = iter(scalars)
+        self.scalar_statements: list[object] = []
         self.executed: list[object] = []
         self.added: list[object] = []
         self.deleted: list[object] = []
         self.commits = 0
 
-    def scalar(self, _statement: object) -> object | None:
+    def scalar(self, statement: object) -> object | None:
+        self.scalar_statements.append(statement)
         return next(self.scalar_results)
 
     def execute(self, statement: object) -> SimpleNamespace:
@@ -816,7 +818,9 @@ def test_delete_volunteer_removes_row_unlinks_family_member_and_audits() -> None
 
     assert db.deleted == [volunteer]
     assert db.commits == 1
-    assert len(db.executed) == 1
+    assert len(db.executed) == 2
+    assert "family_member" in str(db.executed[0]).lower()
+    assert "DELETE FROM signup" in str(db.executed[1])
     audit = cast(AuditEvent, db.added[-1])
     assert audit.action == "VOLUNTEER_DELETED_BY_ADMIN"
     assert audit.entity_id == volunteer.id
@@ -832,6 +836,18 @@ def test_delete_volunteer_blocks_when_volunteer_has_signups() -> None:
         service.delete_volunteer(volunteer.id, uuid4())
     assert db.deleted == []
     assert db.commits == 0
+
+
+def test_delete_volunteer_signup_query_joins_shift_and_excludes_cancelled() -> None:
+    volunteer = SimpleNamespace(id=uuid4())
+    db = _DeleteDb([volunteer, None, None])
+    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
+
+    service.delete_volunteer(volunteer.id, uuid4())
+
+    signup_query = str(db.scalar_statements[1])
+    assert "JOIN shift" in signup_query
+    assert "shift.status" in signup_query
 
 
 def test_delete_volunteer_blocks_when_volunteer_has_work_records() -> None:

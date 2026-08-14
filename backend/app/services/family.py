@@ -3,14 +3,14 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
 from app.core.security.password import hash_password, validate_password_policy
 from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStatus
 from app.models.identity import AuditEvent, RefreshToken, User, UserStatus
-from app.models.planning import Signup, SignupSource, Volunteer, VolunteerStatus
+from app.models.planning import Shift, ShiftStatus, Signup, SignupSource, Volunteer, VolunteerStatus
 from app.models.work_record import WorkRecord
 from app.schemas.family import (
     FamilyCreate,
@@ -277,8 +277,14 @@ class FamilyService:
 
     def delete_volunteer(self, volunteer_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
         volunteer = self.get_volunteer(volunteer_id)
+        # delete_confirmed_window() cancels shifts unconditionally without touching their
+        # signups, so a signup on an already-cancelled shift is defunct, not a real
+        # commitment worth blocking deletion for.
         has_signups = self.db.scalar(
-            select(Signup.id).where(Signup.volunteer_id == volunteer.id).limit(1)
+            select(Signup.id)
+            .join(Shift, Shift.id == Signup.shift_id)
+            .where(Signup.volunteer_id == volunteer.id, Shift.status != ShiftStatus.CANCELLED)
+            .limit(1)
         )
         has_work_records = self.db.scalar(
             select(WorkRecord.id).where(WorkRecord.volunteer_id == volunteer.id).limit(1)
@@ -290,6 +296,9 @@ class FamilyService:
             .where(FamilyMember.volunteer_id == volunteer.id)
             .values(volunteer_id=None)
         )
+        # Signup.volunteer_id is NOT NULL, so any remaining signups (guaranteed to be on
+        # cancelled shifts by the check above) must be deleted rather than unlinked.
+        self.db.execute(delete(Signup).where(Signup.volunteer_id == volunteer.id))
         self.db.add(
             AuditEvent(
                 organization_id=self.organization_id,
