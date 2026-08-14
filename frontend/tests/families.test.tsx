@@ -68,6 +68,7 @@ type FetchOptions = {
   familyVolunteersResponses?: Response[];
   allVolunteersResponses?: Response[];
   volunteerFamilyResponses?: Response[];
+  deleteVolunteerResponse?: Response;
   extra?: (url: string, init: RequestInit | undefined) => Response | undefined;
 };
 
@@ -119,6 +120,8 @@ function adminFetch(role: StaffRole, options: FetchOptions = {}) {
       return Response.json({ ok: true }, { status: 202 });
     if (url.includes("/families/volunteers/") && url.endsWith("/set-password"))
       return Response.json({ ok: true });
+    if (url.includes("/families/volunteers/") && method === "DELETE")
+      return options.deleteVolunteerResponse ?? new Response(null, { status: 204 });
     if (url.includes("/families/volunteers/") && method === "PATCH") {
       const payload = JSON.parse(String(init?.body)) as Record<string, unknown>;
       return Response.json({ id: url.split("/").at(-1), ...payload });
@@ -161,7 +164,7 @@ describe("volunteer (Helfer) admin — primary view", () => {
     );
     await screen.findByRole("heading", { name: "Helfer" });
     expect(screen.getByText("Zum Inhalt")).toHaveAttribute("href", "#admin-content");
-    expect(screen.getAllByRole("link", { name: "Familien" })[0]).toHaveAttribute(
+    expect(screen.getAllByRole("link", { name: "Helfer" })[0]).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -426,6 +429,71 @@ describe("volunteer (Helfer) admin — primary view", () => {
       ),
     );
     expect(await screen.findByText("Das neue Passwort wurde gesetzt.")).toBeInTheDocument();
+  });
+
+  it("deletes a volunteer after confirmation and removes it from the list", async () => {
+    document.cookie = "gc_csrf=delete-token";
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", { allVolunteersResponses: [Response.json([directoryVolunteer])] }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Anna Zeta" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Helfer endgültig löschen" }));
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringMatching(/Anna Zeta/));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/volunteers\/volunteer-1$/),
+        expect.objectContaining({
+          method: "DELETE",
+          headers: expect.objectContaining({ "X-CSRF-Token": "delete-token" }),
+        }),
+      ),
+    );
+    expect(await screen.findByText("Helfer wurde gelöscht.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Anna Zeta" })).not.toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it("does not delete when the confirmation is dismissed", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const fetchMock = renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", { allVolunteersResponses: [Response.json([directoryVolunteer])] }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Anna Zeta" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Helfer endgültig löschen" }));
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.some(
+        ([, init]) => (init as RequestInit | undefined)?.method === "DELETE",
+      ),
+    ).toBe(false);
+    expect(screen.getByRole("button", { name: "Anna Zeta" })).toBeInTheDocument();
+    confirmSpy.mockRestore();
+  });
+
+  it("shows a clear error and keeps the volunteer when deletion is blocked by existing records", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", {
+        allVolunteersResponses: [Response.json([directoryVolunteer])],
+        deleteVolunteerResponse: Response.json(
+          { detail: "volunteer has signups or work records and cannot be deleted" },
+          { status: 409 },
+        ),
+      }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Anna Zeta" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Helfer endgültig löschen" }));
+    expect(
+      await screen.findByText(
+        "Der Helfer hat Anmeldungen oder Arbeitszeiten und kann nicht gelöscht werden.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Anna Zeta" })).toBeInTheDocument();
+    confirmSpy.mockRestore();
   });
 
   it("supports query selection, mobile back, and browser back for the selected volunteer", async () => {

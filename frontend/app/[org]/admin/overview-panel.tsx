@@ -231,7 +231,7 @@ export function OverviewPanel({ org, timezone }: Readonly<{ org: string; timezon
                 Anwesenheit
               </QuickLink>
               <QuickLink href={`${base}/families`} icon={<Users aria-hidden="true" />}>
-                Familien
+                Helfer
               </QuickLink>
             </CardBody>
           </Card>

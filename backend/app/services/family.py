@@ -10,7 +10,8 @@ from app.core.config import Settings
 from app.core.security.password import hash_password, validate_password_policy
 from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStatus
 from app.models.identity import AuditEvent, RefreshToken, User, UserStatus
-from app.models.planning import SignupSource, Volunteer, VolunteerStatus
+from app.models.planning import Signup, SignupSource, Volunteer, VolunteerStatus
+from app.models.work_record import WorkRecord
 from app.schemas.family import (
     FamilyCreate,
     FamilyMemberCreate,
@@ -40,6 +41,10 @@ class VolunteerNotFoundError(Exception):
 
 class VolunteerHasNoAccountError(Exception):
     """Raised when a password action targets a volunteer without a login account."""
+
+
+class VolunteerHasRecordsError(Exception):
+    """Raised when deleting a volunteer would silently orphan signups or work records."""
 
 
 class FamilyService:
@@ -269,6 +274,34 @@ class FamilyService:
         self.db.commit()
         self.db.refresh(volunteer)
         return volunteer
+
+    def delete_volunteer(self, volunteer_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
+        volunteer = self.get_volunteer(volunteer_id)
+        has_signups = self.db.scalar(
+            select(Signup.id).where(Signup.volunteer_id == volunteer.id).limit(1)
+        )
+        has_work_records = self.db.scalar(
+            select(WorkRecord.id).where(WorkRecord.volunteer_id == volunteer.id).limit(1)
+        )
+        if has_signups is not None or has_work_records is not None:
+            raise VolunteerHasRecordsError
+        self.db.execute(
+            update(FamilyMember)
+            .where(FamilyMember.volunteer_id == volunteer.id)
+            .values(volunteer_id=None)
+        )
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="VOLUNTEER_DELETED_BY_ADMIN",
+                entity_type="volunteer",
+                entity_id=volunteer.id,
+                event_metadata={},
+            )
+        )
+        self.db.delete(volunteer)
+        self.db.commit()
 
     def get_volunteer_family(
         self, volunteer_id: uuid.UUID

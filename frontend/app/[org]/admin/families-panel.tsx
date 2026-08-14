@@ -9,6 +9,7 @@ import {
   createFamily,
   createFamilyMember,
   createVolunteer,
+  deleteVolunteer,
   loadAllVolunteers,
   loadFamilies,
   loadFamilyMembers,
@@ -206,7 +207,7 @@ function VolunteersView({
           {success}
         </p>
       ) : null}
-      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(22rem,34rem)_minmax(0,1fr)]">
         <section
           className={`${selected || creating ? "hidden lg:block" : "block"} min-w-0`}
           aria-label="Helferliste"
@@ -242,7 +243,15 @@ function VolunteersView({
                 <p className="mt-4">Keine Helfer für diese Suche gefunden.</p>
               ) : (
                 <div className="mt-4 overflow-x-auto rounded-md border">
-                  <table className="w-full border-collapse text-left" aria-label="Helfer">
+                  <table
+                    className="w-full table-fixed border-collapse text-left"
+                    aria-label="Helfer"
+                  >
+                    <colgroup>
+                      <col className="w-[55%]" />
+                      <col className="w-[25%]" />
+                      <col className="w-[20%]" />
+                    </colgroup>
                     <thead className="bg-muted/60 text-sm text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2 font-medium" scope="col">
@@ -270,7 +279,7 @@ function VolunteersView({
                             <th className="p-0 font-medium" scope="row">
                               <button
                                 aria-current={active ? "true" : undefined}
-                                className="min-h-11 w-full px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                                className="min-h-11 w-full truncate px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
                                 type="button"
                                 onClick={() => select(volunteer.id)}
                               >
@@ -351,6 +360,12 @@ function VolunteersView({
                     )
                   }
                   onShowFamily={onShowFamily}
+                  onDeleted={() => {
+                    const deletedId = selected.id;
+                    setVolunteers((current) => current.filter((item) => item.id !== deletedId));
+                    setSuccess("Helfer wurde gelöscht.");
+                    select(null, true);
+                  }}
                 />
               ) : (
                 <p>Wählen Sie einen Helfer aus, um die Details anzuzeigen.</p>
@@ -501,11 +516,13 @@ function VolunteerDetail({
   volunteer,
   onSaved,
   onShowFamily,
+  onDeleted,
 }: Readonly<{
   org: string;
   volunteer: VolunteerDirectoryEntry;
   onSaved: (volunteer: FamilyVolunteer) => void;
   onShowFamily: (familyId: string) => void;
+  onDeleted: () => void;
 }>) {
   const [family, setFamily] = useState<VolunteerFamily | null | undefined>(undefined);
   const [familyError, setFamilyError] = useState<string | null>(null);
@@ -620,7 +637,64 @@ function VolunteerDetail({
         )}
       </section>
       <VolunteerPasswordActions org={org} volunteer={volunteer} />
+      <VolunteerDeleteAction org={org} volunteer={volunteer} onDeleted={onDeleted} />
     </div>
+  );
+}
+
+function VolunteerDeleteAction({
+  org,
+  volunteer,
+  onDeleted,
+}: Readonly<{ org: string; volunteer: VolunteerDirectoryEntry; onDeleted: () => void }>) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    if (
+      !window.confirm(
+        `${volunteer.first_name} ${volunteer.last_name} endgültig löschen? Dies kann nicht rückgängig gemacht werden.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteVolunteer(org, volunteer.id);
+      onDeleted();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Der Helfer konnte nicht gelöscht werden.",
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-5 border-t pt-4" aria-labelledby={`delete-heading-${volunteer.id}`}>
+      <h3 id={`delete-heading-${volunteer.id}`} className="font-semibold">
+        Helfer löschen
+      </h3>
+      <Button
+        className="mt-3"
+        type="button"
+        variant="destructive"
+        size="sm"
+        disabled={busy}
+        onClick={() => void remove()}
+      >
+        {busy ? "Wird gelöscht …" : "Helfer endgültig löschen"}
+      </Button>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Entfernt den Helfer dauerhaft. Nicht möglich, solange Anmeldungen oder Arbeitszeiten
+        bestehen — in dem Fall den Helfer stattdessen auf „Inaktiv&rdquo; setzen.
+      </p>
+      {error ? (
+        <p className="mt-2 text-sm text-status-error" role="alert">
+          {error}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

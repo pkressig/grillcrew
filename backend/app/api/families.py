@@ -40,6 +40,7 @@ from app.services.family import (
     FamilyNotFoundError,
     FamilyService,
     VolunteerHasNoAccountError,
+    VolunteerHasRecordsError,
     VolunteerNotFoundError,
 )
 
@@ -174,6 +175,27 @@ def update_family_volunteer(
         raise HTTPException(status_code=404, detail="volunteer not found") from None
     except FamilyMemberLinkError as error:
         raise HTTPException(status_code=422, detail=str(error)) from None
+
+
+@router.delete("/volunteers/{volunteer_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_volunteer(
+    organization_slug: str,
+    volunteer_id: uuid.UUID,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> None:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        _service(organization_slug, current, db).delete_volunteer(volunteer_id, current.user.id)
+    except VolunteerNotFoundError:
+        raise HTTPException(status_code=404, detail="volunteer not found") from None
+    except VolunteerHasRecordsError:
+        raise HTTPException(
+            status_code=409,
+            detail="volunteer has signups or work records and cannot be deleted",
+        ) from None
 
 
 @router.get("/volunteers/{volunteer_id}/family", response_model=VolunteerFamilyResponse | None)

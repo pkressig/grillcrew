@@ -180,7 +180,7 @@ describe("admin overview", () => {
         "href",
         "/example/admin/attendance",
       );
-      expect(screen.getAllByRole("link", { name: "Familien" })[0]).toHaveAttribute(
+      expect(screen.getAllByRole("link", { name: "Helfer" })[0]).toHaveAttribute(
         "href",
         "/example/admin/families",
       );

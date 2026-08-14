@@ -29,6 +29,7 @@ from app.services.family import (
     FamilyMemberLinkError,
     FamilyService,
     VolunteerHasNoAccountError,
+    VolunteerHasRecordsError,
     VolunteerNotFoundError,
 )
 
@@ -769,6 +770,161 @@ def test_set_password_route_maps_service_errors(
             f"/api/admin/tenant-a/families/volunteers/{uuid4()}/set-password",
             json={"new_password": "a-very-long-password"},
         )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == expected_status
+
+
+# ---------------------------------------------------------------------------
+# FamilyService.delete_volunteer
+# ---------------------------------------------------------------------------
+
+
+class _DeleteDb:
+    def __init__(self, scalars: list[object | None]) -> None:
+        self.scalar_results = iter(scalars)
+        self.executed: list[object] = []
+        self.added: list[object] = []
+        self.deleted: list[object] = []
+        self.commits = 0
+
+    def scalar(self, _statement: object) -> object | None:
+        return next(self.scalar_results)
+
+    def execute(self, statement: object) -> SimpleNamespace:
+        self.executed.append(statement)
+        return SimpleNamespace(rowcount=0)
+
+    def add(self, item: object) -> None:
+        self.added.append(item)
+
+    def delete(self, item: object) -> None:
+        self.deleted.append(item)
+
+    def commit(self) -> None:
+        self.commits += 1
+
+
+def test_delete_volunteer_removes_row_unlinks_family_member_and_audits() -> None:
+    organization_id = uuid4()
+    actor_id = uuid4()
+    volunteer = SimpleNamespace(id=uuid4(), organization_id=organization_id)
+    db = _DeleteDb([volunteer, None, None])
+    service = FamilyService(cast(object, db), organization_id)  # type: ignore[arg-type]
+
+    service.delete_volunteer(volunteer.id, actor_id)
+
+    assert db.deleted == [volunteer]
+    assert db.commits == 1
+    assert len(db.executed) == 1
+    audit = cast(AuditEvent, db.added[-1])
+    assert audit.action == "VOLUNTEER_DELETED_BY_ADMIN"
+    assert audit.entity_id == volunteer.id
+    assert audit.organization_id == organization_id
+    assert audit.actor_user_id == actor_id
+
+
+def test_delete_volunteer_blocks_when_volunteer_has_signups() -> None:
+    volunteer = SimpleNamespace(id=uuid4())
+    db = _DeleteDb([volunteer, SimpleNamespace(), None])
+    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    with pytest.raises(VolunteerHasRecordsError):
+        service.delete_volunteer(volunteer.id, uuid4())
+    assert db.deleted == []
+    assert db.commits == 0
+
+
+def test_delete_volunteer_blocks_when_volunteer_has_work_records() -> None:
+    volunteer = SimpleNamespace(id=uuid4())
+    db = _DeleteDb([volunteer, None, SimpleNamespace()])
+    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    with pytest.raises(VolunteerHasRecordsError):
+        service.delete_volunteer(volunteer.id, uuid4())
+    assert db.deleted == []
+    assert db.commits == 0
+
+
+def test_delete_volunteer_raises_not_found() -> None:
+    db = _DeleteDb([None])
+    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    with pytest.raises(VolunteerNotFoundError):
+        service.delete_volunteer(uuid4(), uuid4())
+
+
+def test_delete_volunteer_route_returns_204_on_success(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    captured: dict[str, object] = {}
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def delete_volunteer(self, volunteer_id: UUID, _actor_id: UUID) -> None:
+            captured["volunteer_id"] = volunteer_id
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    volunteer_id = uuid4()
+    try:
+        response = client.delete(f"/api/admin/tenant-a/families/volunteers/{volunteer_id}")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 204
+    assert captured["volunteer_id"] == volunteer_id
+
+
+def test_delete_volunteer_route_requires_csrf_and_origin(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(auth, "_organization_domains", lambda _db: set())
+    volunteer_id = uuid4()
+    try:
+        missing_csrf = client.delete(f"/api/admin/tenant-a/families/volunteers/{volunteer_id}")
+        app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+        missing_origin = client.delete(f"/api/admin/tenant-a/families/volunteers/{volunteer_id}")
+    finally:
+        app.dependency_overrides.clear()
+    assert missing_csrf.status_code == 403
+    assert missing_origin.status_code == 403
+
+
+@pytest.mark.parametrize(
+    ("raised", "expected_status"),
+    [
+        (VolunteerNotFoundError, 404),
+        (VolunteerHasRecordsError, 409),
+    ],
+)
+def test_delete_volunteer_route_maps_service_errors(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    raised: type[Exception],
+    expected_status: int,
+) -> None:
+    current = _current()
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def delete_volunteer(self, *_args: object, **_kwargs: object) -> None:
+            raise raised
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.delete(f"/api/admin/tenant-a/families/volunteers/{uuid4()}")
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == expected_status

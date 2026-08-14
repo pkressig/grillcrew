@@ -225,6 +225,26 @@ export const setVolunteerPassword = (org: string, volunteerId: string, newPasswo
     "Das Passwort konnte nicht gesetzt werden.",
   );
 
+export async function deleteVolunteer(org: string, volunteerId: string): Promise<void> {
+  const response = await fetch(
+    `${familiesPath(org)}/volunteers/${encodeURIComponent(volunteerId)}`,
+    { method: "DELETE", credentials: "include", headers: { ...csrfHeaders() } },
+  );
+  if (response.ok) return;
+  let detail: string | undefined;
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") detail = body.detail;
+  } catch {
+    // Use the stable German fallback for non-JSON intermediary responses.
+  }
+  throw new Error(
+    response.status === 409
+      ? "Der Helfer hat Anmeldungen oder Arbeitszeiten und kann nicht gelöscht werden."
+      : (detail ?? "Der Helfer konnte nicht gelöscht werden."),
+  );
+}
+
 export const updateFamilyMemberVolunteer = (
   org: string,
   familyId: string,

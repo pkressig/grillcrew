@@ -63,7 +63,7 @@ const NAV_ITEMS: ReadonlyArray<{
   },
   {
     view: "families",
-    label: "Familien",
+    label: "Helfer",
     icon: <Users aria-hidden="true" size={18} />,
     path: "/families",
     roles: ["ADMIN", "KOORDINATION"],
