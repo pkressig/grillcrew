@@ -238,6 +238,43 @@ describe("mobile public plan", () => {
     expect(await screen.findByText("Du hast noch keine kommenden Einsätze.")).toBeInTheDocument();
   });
 
+  it("shows an open/filled summary badge on each collapsed day in the details view", async () => {
+    // Scoped to this test only: a second plan where the Sunday shift is
+    // already fully staffed, so both the "still needs helpers" and the
+    // "fully covered" badge states are exercised without mutating the
+    // shared fixture other tests in this file rely on.
+    mockedPlan.mockReset().mockResolvedValue({
+      events: plan.events.map((eventItem) =>
+        eventItem.id === "e3"
+          ? {
+              ...eventItem,
+              shifts: eventItem.shifts.map((shift) => ({
+                ...shift,
+                occupied_volunteers: shift.required_volunteers,
+                volunteer_names: ["Chris", "Deniz"],
+              })),
+            }
+          : eventItem,
+      ),
+    });
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Details" }));
+    expect(
+      screen.getByRole("button", {
+        name: /Samstag, 05\. September 2026.*1 Schicht offen.*2 Plätze/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Sonntag, 06\. September 2026.*Alle Schicht belegt/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Samstag, 05\. September 2026.*Alle Schicht/ }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Sonntag, 06\. September 2026.*offen/ }),
+    ).not.toBeInTheDocument();
+  });
+
   it("does not render the private section when signed out", async () => {
     renderPage();
     await screen.findByRole("button", { name: "Karten" });

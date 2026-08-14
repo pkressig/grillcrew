@@ -470,6 +470,7 @@ function Day({
   const shifts = day.events
     .flatMap((event) => event.shifts.map((shift) => ({ event, shift })))
     .sort((a, b) => a.shift.starts_at.localeCompare(b.shift.starts_at));
+  const dayStats = summarizeDayShifts(shifts.map(({ shift }) => shift));
   if (view === "details")
     return (
       <section className="overflow-hidden rounded-xl border bg-background">
@@ -478,13 +479,16 @@ function Day({
           aria-expanded={expanded}
           aria-controls={`day-${day.date}`}
           onClick={onToggle}
-          className="flex min-h-11 w-full items-center justify-between p-4 text-left font-bold"
+          className="flex min-h-11 w-full items-center justify-between gap-3 p-4 text-left font-bold"
         >
           <span>{dateFormatter.format(new Date(`${day.date}T00:00:00Z`))}</span>
-          <ChevronDown
-            aria-hidden="true"
-            className={cn("h-5 w-5 transition-transform", expanded && "rotate-180")}
-          />
+          <span className="flex items-center gap-2">
+            <DayStatusBadge stats={dayStats} />
+            <ChevronDown
+              aria-hidden="true"
+              className={cn("h-5 w-5 shrink-0 transition-transform", expanded && "rotate-180")}
+            />
+          </span>
         </button>
         {expanded ? (
           <div id={`day-${day.date}`} className="border-t">
@@ -871,6 +875,35 @@ function SuccessMessage({
         ×
       </Button>
     </div>
+  );
+}
+type DayShiftStats = { totalShifts: number; openShifts: number; openPlaces: number };
+function summarizeDayShifts(shifts: PublicShift[]): DayShiftStats {
+  const open = shifts.filter(
+    (shift) => shift.status === "OPEN" && shift.occupied_volunteers < shift.required_volunteers,
+  );
+  return {
+    totalShifts: shifts.length,
+    openShifts: open.length,
+    openPlaces: open.reduce(
+      (total, shift) => total + Math.max(shift.required_volunteers - shift.occupied_volunteers, 0),
+      0,
+    ),
+  };
+}
+function DayStatusBadge({ stats }: Readonly<{ stats: DayShiftStats }>) {
+  if (stats.totalShifts === 0) return null;
+  if (stats.openShifts === 0)
+    return (
+      <Badge variant="success">
+        Alle {stats.totalShifts === 1 ? "Schicht" : "Schichten"} belegt
+      </Badge>
+    );
+  return (
+    <Badge variant="error">
+      {stats.openShifts} {stats.openShifts === 1 ? "Schicht" : "Schichten"} offen ·{" "}
+      {stats.openPlaces} {stats.openPlaces === 1 ? "Platz" : "Plätze"}
+    </Badge>
   );
 }
 function groupByDay(events: PublicPlanEvent[]): DayGroup[] {
