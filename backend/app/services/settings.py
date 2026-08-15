@@ -6,13 +6,21 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.organization import CrewSizeRule, HomeVenue, MenuType, OrganizationSettings
+from app.models.organization import (
+    CrewSizeRule,
+    HomeVenue,
+    MenuType,
+    Organization,
+    OrganizationSettings,
+    Theme,
+)
 from app.schemas.settings import (
     CrewSizeRuleCreate,
     CrewSizeRuleUpdate,
     HomeVenueCreate,
     HomeVenueUpdate,
     OrganizationSettingsUpdate,
+    ThemeUpdate,
 )
 
 _DEFAULT_CATCHALL_MENU_TYPE = MenuType.FRIES_NUGGETS
@@ -61,6 +69,27 @@ class SettingsService:
         self.db.commit()
         self.db.refresh(settings)
         return settings
+
+    # -- Theme / branding --------------------------------------------------------
+
+    def get_theme(self) -> Theme:
+        organization = self.db.scalar(
+            select(Organization).where(Organization.id == self.organization_id)
+        )
+        if organization is None:
+            raise SettingsNotFoundError
+        theme = self.db.scalar(select(Theme).where(Theme.id == organization.theme_id))
+        if theme is None:
+            raise SettingsNotFoundError
+        return theme
+
+    def update_theme(self, payload: ThemeUpdate) -> Theme:
+        theme = self.get_theme()
+        for field, value in payload.model_dump(exclude_unset=True).items():
+            setattr(theme, field, value)
+        self.db.commit()
+        self.db.refresh(theme)
+        return theme
 
     # -- Home venues -------------------------------------------------------------
 

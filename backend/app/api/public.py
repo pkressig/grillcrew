@@ -396,6 +396,7 @@ def to_public_response(organization: Organization) -> PublicOrganizationResponse
         theme=PublicTheme(
             name=theme.name,
             logo_url=theme.logo_url,
+            banner_url=theme.banner_url,
             primary_color=theme.primary_color,
             secondary_color=theme.secondary_color,
         ),

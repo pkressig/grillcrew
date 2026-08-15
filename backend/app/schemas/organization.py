@@ -19,6 +19,7 @@ class PublicOrganizationSettings(BaseModel):  # type: ignore[explicit-any]
 class PublicTheme(BaseModel):  # type: ignore[explicit-any]
     name: str
     logo_url: str | None
+    banner_url: str | None
     primary_color: str
     secondary_color: str
 

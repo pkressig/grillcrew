@@ -22,6 +22,8 @@ from app.schemas.settings import (
     HomeVenueUpdate,
     OrganizationSettingsResponse,
     OrganizationSettingsUpdate,
+    ThemeResponse,
+    ThemeUpdate,
 )
 from app.services.settings import (
     SettingsConflictError,
@@ -77,6 +79,36 @@ def update_organization_settings(
         settings = _service(organization_slug, current, db).update_organization_settings(payload)
         return OrganizationSettingsResponse.model_validate(settings)
     except (SettingsNotFoundError, SettingsConflictError, SettingsValidationError) as error:
+        raise _translate(error) from None
+
+
+@router.get("/theme", response_model=ThemeResponse)
+def get_theme(
+    organization_slug: str,
+    current: CurrentStaffMembership = Depends(manage),
+    db: Session = Depends(get_db),
+) -> ThemeResponse:
+    try:
+        theme = _service(organization_slug, current, db).get_theme()
+        return ThemeResponse.model_validate(theme)
+    except SettingsNotFoundError as error:
+        raise _translate(error) from None
+
+
+@router.patch("/theme", response_model=ThemeResponse)
+def update_theme(
+    organization_slug: str,
+    payload: ThemeUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> ThemeResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        theme = _service(organization_slug, current, db).update_theme(payload)
+        return ThemeResponse.model_validate(theme)
+    except SettingsNotFoundError as error:
         raise _translate(error) from None
 
 

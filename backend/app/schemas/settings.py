@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
 
@@ -148,3 +149,48 @@ class CrewSizeRuleReorder(BaseModel):  # type: ignore[explicit-any]
     model_config = ConfigDict(extra="forbid")
 
     ordered_ids: list[uuid.UUID] = Field(min_length=1)
+
+
+_HEX_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{3}$|^#[0-9a-fA-F]{6}$")
+
+
+class ThemeUpdate(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+
+    logo_url: str | None = Field(default=None, max_length=500)
+    banner_url: str | None = Field(default=None, max_length=500)
+    primary_color: str | None = Field(default=None, max_length=16)
+    secondary_color: str | None = Field(default=None, max_length=16)
+
+    @field_validator("logo_url", "banner_url", mode="before")
+    @classmethod
+    def trim_url(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @field_validator("primary_color", "secondary_color")
+    @classmethod
+    def validate_hex_color(cls, value: str | None) -> str | None:
+        if value is not None and not _HEX_COLOR_PATTERN.fullmatch(value):
+            raise ValueError("color must be a hex value like #123 or #112233")
+        return value
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self) -> ThemeUpdate:
+        required = {"primary_color", "secondary_color"}
+        if any(name in self.model_fields_set and getattr(self, name) is None for name in required):
+            raise ValueError("primary_color and secondary_color cannot be null")
+        return self
+
+
+class ThemeResponse(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    logo_url: str | None
+    banner_url: str | None
+    primary_color: str
+    secondary_color: str

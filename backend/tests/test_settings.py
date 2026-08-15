@@ -22,6 +22,7 @@ from app.models.organization import (
     MenuType,
     Organization,
     OrganizationSettings,
+    Theme,
 )
 from app.schemas.settings import (
     CrewSizeRuleCreate,
@@ -29,6 +30,7 @@ from app.schemas.settings import (
     HomeVenueCreate,
     HomeVenueUpdate,
     OrganizationSettingsUpdate,
+    ThemeUpdate,
 )
 from app.services.settings import (
     SettingsConflictError,
@@ -136,6 +138,27 @@ def test_crew_size_rule_update_rejects_null_required_fields() -> None:
         CrewSizeRuleUpdate.model_validate({"is_active": None})
 
 
+def test_theme_update_accepts_short_and_long_hex_colors() -> None:
+    ThemeUpdate(primary_color="#012", secondary_color="#f8ce3c")
+
+
+@pytest.mark.parametrize("color", ["012", "#01", "#gggggg", "#12345", "red"])
+def test_theme_update_rejects_invalid_hex_colors(color: str) -> None:
+    with pytest.raises(ValidationError):
+        ThemeUpdate(primary_color=color, secondary_color="#f8ce3c")
+
+
+def test_theme_update_rejects_null_required_colors() -> None:
+    with pytest.raises(ValidationError):
+        ThemeUpdate.model_validate({"primary_color": None})
+
+
+def test_theme_update_trims_blank_urls_to_none() -> None:
+    payload = ThemeUpdate.model_validate({"logo_url": "  ", "banner_url": "  /branding/x.png  "})
+    assert payload.logo_url is None
+    assert payload.banner_url == "/branding/x.png"
+
+
 # -- Service: normalization ----------------------------------------------------
 
 
@@ -176,6 +199,47 @@ def test_update_organization_settings_only_applies_provided_fields() -> None:
     )
     assert result.payout_rate_minor_per_hour == 1000
     assert result.signup_rate_limit_per_contact == 5
+    assert db.commits == 1
+
+
+# -- Service: theme / branding --------------------------------------------------
+
+
+def test_get_theme_raises_when_organization_missing() -> None:
+    service = SettingsService(cast(object, _FakeDb(scalar_results=[None])), uuid4())  # type: ignore[arg-type]
+    with pytest.raises(SettingsNotFoundError):
+        service.get_theme()
+
+
+def test_get_theme_raises_when_theme_record_missing() -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), theme_id=uuid4()))
+    db = _FakeDb(scalar_results=[organization, None])
+    service = SettingsService(cast(object, db), organization.id)  # type: ignore[arg-type]
+    with pytest.raises(SettingsNotFoundError):
+        service.get_theme()
+
+
+def test_update_theme_only_applies_provided_fields() -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), theme_id=uuid4()))
+    existing = cast(
+        Theme,
+        SimpleNamespace(
+            id=organization.theme_id,
+            name="FC Beispiel",
+            logo_url=None,
+            banner_url=None,
+            primary_color="#262626",
+            secondary_color="#525252",
+        ),
+    )
+    db = _FakeDb(scalar_results=[organization, existing])
+    service = SettingsService(cast(object, db), organization.id)  # type: ignore[arg-type]
+    result = service.update_theme(
+        ThemeUpdate(logo_url="/branding/fctc-logo.png", primary_color="#01417e")
+    )
+    assert result.logo_url == "/branding/fctc-logo.png"
+    assert result.primary_color == "#01417e"
+    assert result.secondary_color == "#525252"
     assert db.commits == 1
 
 
@@ -454,6 +518,65 @@ def test_wrong_organization_slug_is_forbidden(client: TestClient) -> None:
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 403
+
+
+def test_update_theme_route_saves_and_returns_updated_fields(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    organization_id = uuid4()
+    theme = SimpleNamespace(
+        id=uuid4(),
+        name="FC Thusis-Cazis",
+        logo_url="/branding/fctc-logo.png",
+        banner_url=None,
+        primary_color="#01417e",
+        secondary_color="#f8ce3c",
+    )
+
+    class FakeService:
+        def __init__(self, _db: object, received_organization_id: UUID) -> None:
+            assert received_organization_id == organization_id
+
+        def update_theme(self, payload: ThemeUpdate) -> object:
+            assert payload.logo_url == "/branding/fctc-logo.png"
+            return theme
+
+    current = _current(StaffRole.ADMIN)
+    current.organization.id = organization_id
+    app.dependency_overrides[settings_api.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: _FakeDb()
+    monkeypatch.setattr(settings_api, "SettingsService", FakeService)
+    monkeypatch.setattr(settings_api, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.patch(
+            "/api/admin/tenant-a/settings/theme",
+            json={"logo_url": "/branding/fctc-logo.png", "primary_color": "#01417e"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["logo_url"] == "/branding/fctc-logo.png"
+    assert body["primary_color"] == "#01417e"
+
+
+def test_update_theme_route_requires_csrf_and_origin(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current(StaffRole.ADMIN)
+    app.dependency_overrides[settings_api.manage] = lambda: current
+    app.dependency_overrides[get_db] = lambda: _FakeDb()
+    monkeypatch.setattr("app.api.auth._organization_domains", lambda _db: set())
+    payload = {"primary_color": "#01417e"}
+    try:
+        missing_csrf = client.patch("/api/admin/tenant-a/settings/theme", json=payload)
+        app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+        missing_origin = client.patch("/api/admin/tenant-a/settings/theme", json=payload)
+    finally:
+        app.dependency_overrides.clear()
+    assert missing_csrf.status_code == 403
+    assert missing_origin.status_code == 403
 
 
 def test_list_home_venues_returns_admin_fields(

@@ -39,6 +39,7 @@ def test_public_organization_returns_public_theme_and_settings(
     assert body["theme"] == {
         "name": "Example Theme",
         "logo_url": None,
+        "banner_url": None,
         "primary_color": "#111111",
         "secondary_color": "#eeeeee",
     }
@@ -119,6 +120,7 @@ def _organization(
             theme=SimpleNamespace(
                 name="Example Theme",
                 logo_url=None,
+                banner_url=None,
                 primary_color=primary_color,
                 secondary_color=secondary_color,
             ),
