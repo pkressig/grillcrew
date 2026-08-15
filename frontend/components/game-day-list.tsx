@@ -25,19 +25,21 @@ export function GameDayList({
       <h3 className="text-sm font-semibold text-muted-foreground">{heading}</h3>
       <ul className="mt-2 grid gap-2">
         {sortedGames.map((game) => (
-          <li key={game.id} className="flex items-start gap-3 rounded-md bg-muted p-3 text-sm">
-            <span className="min-w-12 shrink-0 font-semibold tabular-nums">
-              {game.startsAt ? (
-                <time dateTime={game.startsAt}>{formatTime(game.startsAt, timezone)}</time>
-              ) : (
-                <span className="text-muted-foreground">Zeit nicht angegeben</span>
-              )}
-            </span>
-            <span className="min-w-0 flex-1 font-medium">
+          <li key={game.id} className="rounded-md bg-muted p-3 text-sm">
+            <div className="flex items-center gap-3">
+              <span className="shrink-0 font-semibold tabular-nums">
+                {game.startsAt ? (
+                  <time dateTime={game.startsAt}>{formatTime(game.startsAt, timezone)}</time>
+                ) : (
+                  <span className="text-muted-foreground">Zeit nicht angegeben</span>
+                )}
+              </span>
+              {game.type ? <Badge variant="neutral">{game.type}</Badge> : null}
+            </div>
+            <p className="mt-1 font-medium">
               {game.title}
               {game.matchDescription ? ` – ${game.matchDescription}` : null}
-            </span>
-            {game.type ? <Badge variant="neutral">{game.type}</Badge> : null}
+            </p>
           </li>
         ))}
       </ul>

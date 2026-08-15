@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import type { PublicOrganization } from "@/lib/organization";
+import { OrganizationLogo } from "@/components/organization-logo";
 import { cn } from "@/lib/utils";
 
 export function AuthCard({
@@ -40,26 +41,10 @@ export function AuthCard({
         </button>
       ) : null}
       <header className="flex items-center gap-3">
-        {organization?.theme.logo_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            alt=""
-            className="h-12 w-12 rounded border object-contain"
-            src={organization.theme.logo_url}
-          />
+        {organization ? (
+          <OrganizationLogo organization={organization} className="h-12 w-12 rounded border" />
         ) : (
-          <div
-            aria-hidden="true"
-            className="h-12 w-12 rounded border"
-            style={
-              organization
-                ? {
-                    backgroundColor: organization.theme.primary_color,
-                    borderColor: organization.theme.secondary_color,
-                  }
-                : undefined
-            }
-          />
+          <div aria-hidden="true" className="h-12 w-12 rounded border" />
         )}
         <div>
           <p className="text-sm text-muted-foreground">

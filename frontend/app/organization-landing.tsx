@@ -8,11 +8,12 @@ import { PageHeader } from "@/components/page-header";
 import { useOrganization } from "@/components/organization-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardBody } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
 import { LogoutButton } from "@/components/logout-button";
 import { GameDayList } from "@/components/game-day-list";
+import { OrganizationLogo } from "@/components/organization-logo";
 import { apiBaseUrl } from "@/lib/api";
 import {
   fetchVolunteerProfile,
@@ -29,7 +30,6 @@ import {
   type PublicShift,
 } from "@/lib/public-plan";
 
-type PlanView = "cards" | "compact" | "details";
 type DayGroup = { date: string; events: PublicPlanEvent[] };
 
 const dateFormatter = new Intl.DateTimeFormat("de-CH", {
@@ -45,9 +45,6 @@ const shortDateFormatter = new Intl.DateTimeFormat("de-CH", {
   year: "numeric",
   timeZone: "UTC",
 });
-const weekdayFormatter = new Intl.DateTimeFormat("de-CH", { weekday: "short", timeZone: "UTC" });
-const monthFormatter = new Intl.DateTimeFormat("de-CH", { month: "short", timeZone: "UTC" });
-const dayFormatter = new Intl.DateTimeFormat("de-CH", { day: "2-digit", timeZone: "UTC" });
 
 export function OrganizationLanding() {
   const organization = useOrganization();
@@ -55,7 +52,6 @@ export function OrganizationLanding() {
   const router = useRouter();
   const [plan, setPlan] = useState<PublicPlan | null>(null);
   const [error, setError] = useState(false);
-  const [view, setView] = useState<PlanView>("cards");
   const [selectedShift, setSelectedShift] = useState<string | null>(null);
   const [highlightedShift, setHighlightedShift] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -68,26 +64,6 @@ export function OrganizationLanding() {
   const [accountModal, setAccountModal] = useState<"login" | null>(null);
   const [pendingShiftId, setPendingShiftId] = useState<string | null>(null);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
-
-  const storageKey = `grillcrew:public-plan-view:${organization.slug}`;
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(storageKey);
-      if (saved === "cards" || saved === "compact" || saved === "details") setView(saved);
-    } catch {
-      // Storage can be unavailable in privacy-focused browsers.
-    }
-  }, [storageKey]);
-
-  function selectView(nextView: PlanView) {
-    setView(nextView);
-    try {
-      window.localStorage.setItem(storageKey, nextView);
-    } catch {
-      // The view still works for the current visit.
-    }
-  }
 
   function goToRegister() {
     const params = new URLSearchParams({ org: organization.slug });
@@ -126,11 +102,19 @@ export function OrganizationLanding() {
 
   // Once authenticated (from either the login modal or a register-page return) with
   // a shift still pending, open it — the single place that consumes pendingShiftId.
+  // The containing day must also be expanded, since its shifts (and thus the signup
+  // form) only render while expanded.
   useEffect(() => {
-    if (!auth.isAuthenticated || !pendingShiftId) return;
+    // Wait for the plan to load before consuming pendingShiftId, so a slow plan
+    // fetch can't race this into opening the shift without expanding its day.
+    if (!auth.isAuthenticated || !pendingShiftId || !plan) return;
+    const match = plan.events.find((event) =>
+      event.shifts.some((shift) => shift.id === pendingShiftId),
+    );
+    if (match) setExpandedDay(match.date);
     openSignup(pendingShiftId);
     setPendingShiftId(null);
-  }, [auth.isAuthenticated, pendingShiftId]);
+  }, [auth.isAuthenticated, pendingShiftId, plan]);
 
   async function submitSignup(event: FormEvent<HTMLFormElement>, shiftId: string) {
     event.preventDefault();
@@ -237,7 +221,6 @@ export function OrganizationLanding() {
     if (!plan) return;
     const match = findSignupShift(plan, signup);
     if (!match) return;
-    setView("details");
     setExpandedDay(match.event.date);
     setHighlightedShift(match.shift.id);
     window.requestAnimationFrame(() => {
@@ -275,22 +258,9 @@ export function OrganizationLanding() {
         style={{ borderColor: organization.theme.secondary_color }}
       >
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3">
-          {organization.theme.logo_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              className="h-11 w-11 rounded-lg object-contain"
-              src={organization.theme.logo_url}
-              alt=""
-            />
-          ) : (
-            <div
-              aria-hidden="true"
-              className="h-11 w-11 rounded-lg"
-              style={{ backgroundColor: organization.theme.primary_color }}
-            />
-          )}
+          <OrganizationLogo organization={organization} className="h-11 w-11 rounded-lg" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-muted-foreground">Öffentlicher Einsatzplan</p>
+            <p className="text-xs font-semibold text-muted-foreground">Grill Helfer Einsatzplan</p>
             <h1 className="truncate text-xl font-bold">{organization.name}</h1>
           </div>
           <nav className="flex items-center gap-2" aria-label="Konto">
@@ -366,14 +336,12 @@ export function OrganizationLanding() {
               <Summary value={summary.shifts} label="kommende Einsätze" />
               <Summary value={summary.places} label="offene Plätze" />
             </section>
-            <ViewSwitcher view={view} onChange={selectView} />
             {success ? <SuccessMessage success={success} onClose={() => setSuccess(null)} /> : null}
             <section aria-label="Kommende Anlässe" className="space-y-4">
               {days.map((day) => (
                 <Day
                   key={day.date}
                   day={day}
-                  view={view}
                   expanded={expandedDay === day.date}
                   onToggle={() =>
                     setExpandedDay((current) => (current === day.date ? null : day.date))
@@ -386,40 +354,6 @@ export function OrganizationLanding() {
         )}
       </div>
     </main>
-  );
-}
-
-function ViewSwitcher({
-  view,
-  onChange,
-}: Readonly<{ view: PlanView; onChange: (view: PlanView) => void }>) {
-  return (
-    <div
-      className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1"
-      role="group"
-      aria-label="Planansicht"
-    >
-      {(
-        [
-          ["cards", "Karten"],
-          ["compact", "Kompakte Liste"],
-          ["details", "Details"],
-        ] as const
-      ).map(([value, label]) => (
-        <button
-          key={value}
-          type="button"
-          aria-pressed={view === value}
-          onClick={() => onChange(value)}
-          className={cn(
-            "min-h-11 rounded-md px-2 text-sm font-semibold",
-            view === value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
   );
 }
 
@@ -472,13 +406,11 @@ function OwnSignups({
 
 function Day({
   day,
-  view,
   expanded,
   onToggle,
   shiftProps,
 }: Readonly<{
   day: DayGroup;
-  view: PlanView;
   expanded: boolean;
   onToggle: () => void;
   shiftProps: ShiftProps;
@@ -487,99 +419,49 @@ function Day({
     .flatMap((event) => event.shifts.map((shift) => ({ event, shift })))
     .sort((a, b) => a.shift.starts_at.localeCompare(b.shift.starts_at));
   const dayStats = summarizeDayShifts(shifts.map(({ shift }) => shift));
-  if (view === "details")
-    return (
-      <section className="overflow-hidden rounded-xl border bg-background">
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={`day-${day.date}`}
-          onClick={onToggle}
-          className="flex min-h-11 w-full items-center justify-between gap-3 p-4 text-left font-bold"
-        >
-          <span>{dateFormatter.format(new Date(`${day.date}T00:00:00Z`))}</span>
-          <span className="flex items-center gap-2">
-            <DayStatusBadge stats={dayStats} />
-            <ChevronDown
-              aria-hidden="true"
-              className={cn("h-5 w-5 shrink-0 transition-transform", expanded && "rotate-180")}
+  return (
+    <section className="overflow-hidden rounded-xl border bg-background">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={`day-${day.date}`}
+        onClick={onToggle}
+        className="flex min-h-11 w-full items-center justify-between gap-3 p-4 text-left font-bold"
+      >
+        <span>{dateFormatter.format(new Date(`${day.date}T00:00:00Z`))}</span>
+        <span className="flex items-center gap-2">
+          <DayStatusBadge stats={dayStats} />
+          <ChevronDown
+            aria-hidden="true"
+            className={cn("h-5 w-5 shrink-0 transition-transform", expanded && "rotate-180")}
+          />
+        </span>
+      </button>
+      {expanded ? (
+        <div id={`day-${day.date}`} className="border-t">
+          <div className="p-4">
+            <GameDayList
+              timezone={shiftProps.organizationTimezone}
+              games={day.events.map((event) => ({
+                id: event.id,
+                title: event.title,
+                matchDescription: event.public_description,
+                type: event.event_type,
+                startsAt: event.kickoff_time ?? earliestShiftStart(event),
+              }))}
             />
-          </span>
-        </button>
-        {expanded ? (
-          <div id={`day-${day.date}`} className="border-t">
-            <div className="p-4">
-              <GameDayList
-                timezone={shiftProps.organizationTimezone}
-                games={day.events.map((event) => ({
-                  id: event.id,
-                  title: event.title,
-                  matchDescription: event.public_description,
-                  type: event.event_type,
-                  startsAt: event.kickoff_time ?? earliestShiftStart(event),
-                }))}
-              />
-            </div>
-            <div className="border-t">
-              <h3 className="px-4 pt-4 text-sm font-semibold text-muted-foreground">Schichten</h3>
-              <div className="divide-y">
-                {shifts.map(({ event, shift }) => (
-                  <Shift key={shift.id} event={event} shift={shift} compact {...shiftProps} />
-                ))}
-              </div>
+          </div>
+          <div className="border-t">
+            <h3 className="px-4 pt-4 text-sm font-semibold text-muted-foreground">Schichten</h3>
+            <div className="divide-y">
+              {shifts.map(({ event, shift }) => (
+                <Shift key={shift.id} event={event} shift={shift} {...shiftProps} />
+              ))}
             </div>
           </div>
-        ) : null}
-      </section>
-    );
-  if (view === "cards")
-    return (
-      <div className="space-y-3">
-        {day.events.map((event) => (
-          <Card key={event.id}>
-            <CardHeader className="flex-row items-center gap-3 border-b p-4">
-              <CalendarTile date={day.date} />
-              <div className="min-w-0">
-                <time dateTime={day.date} className="block font-bold">
-                  {dateFormatter.format(new Date(`${day.date}T00:00:00Z`))}
-                </time>
-                <h2 className="mt-1 text-lg font-bold">{event.title}</h2>
-                {event.event_type ? (
-                  <p className="text-sm text-muted-foreground">{event.event_type}</p>
-                ) : null}
-              </div>
-            </CardHeader>
-            <div className="divide-y">
-              {[...event.shifts]
-                .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
-                .map((shift) => (
-                  <Shift
-                    key={shift.id}
-                    event={event}
-                    shift={shift}
-                    compact={false}
-                    {...shiftProps}
-                  />
-                ))}
-            </div>
-          </Card>
-        ))}
-      </div>
-    );
-  return (
-    <Card>
-      <CardHeader className="flex-row items-center gap-3 border-b p-3">
-        <CalendarTile date={day.date} />
-        <time dateTime={day.date} className="font-bold">
-          {dateFormatter.format(new Date(`${day.date}T00:00:00Z`))}
-        </time>
-      </CardHeader>
-      <div className="divide-y">
-        {shifts.map(({ event, shift }) => (
-          <Shift key={shift.id} event={event} shift={shift} compact {...shiftProps} />
-        ))}
-      </div>
-    </Card>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -600,7 +482,6 @@ type ShiftProps = {
 function Shift({
   event,
   shift,
-  compact,
   organizationTimezone,
   authIsAuthenticated,
   ownShiftIds,
@@ -612,7 +493,7 @@ function Shift({
   onChoose,
   onCancel,
   onSubmit,
-}: Readonly<{ event: PublicPlanEvent; shift: PublicShift; compact: boolean } & ShiftProps>) {
+}: Readonly<{ event: PublicPlanEvent; shift: PublicShift } & ShiftProps>) {
   const full = shift.occupied_volunteers >= shift.required_volunteers;
   const status = shift.status === "CLOSED" ? "Geschlossen" : full ? "Vollständig belegt" : "Offen";
   const isOwn = ownShiftIds.has(shift.id);
@@ -621,35 +502,32 @@ function Shift({
       id={`shift-${shift.id}`}
       tabIndex={-1}
       aria-labelledby={`shift-${shift.id}-title`}
-      className={cn(
-        compact ? "p-3" : "p-4",
-        highlightedShift === shift.id && "ring-2 ring-inset ring-primary",
-      )}
+      className={cn("p-3", highlightedShift === shift.id && "ring-2 ring-inset ring-primary")}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          {!compact ? <p className="text-sm font-semibold text-muted-foreground">Schicht</p> : null}
-          <h3 id={`shift-${shift.id}-title`} className="mt-1 flex items-center gap-2 font-bold">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <h3 id={`shift-${shift.id}-title`} className="flex items-center gap-2 font-bold">
             <Clock3 aria-hidden="true" className="h-4 w-4" />
             {formatTime(shift.starts_at, organizationTimezone)}–
             {formatTime(shift.ends_at, organizationTimezone)} Uhr
           </h3>
+          <p
+            id={`shift-${shift.id}-capacity`}
+            className="flex items-center gap-1 text-sm text-muted-foreground"
+          >
+            <Users aria-hidden="true" className="h-4 w-4" />
+            {shift.occupied_volunteers} von {shift.required_volunteers} Plätzen besetzt
+          </p>
         </div>
-        <Badge id={`shift-${shift.id}-status`} variant={status === "Offen" ? "success" : "neutral"}>
+        <Badge
+          id={`shift-${shift.id}-status`}
+          variant={
+            status === "Offen" ? "error" : status === "Vollständig belegt" ? "success" : "neutral"
+          }
+        >
           {status}
         </Badge>
       </div>
-      <p
-        id={`shift-${shift.id}-capacity`}
-        className="mt-2 flex items-center gap-2 text-sm text-muted-foreground"
-      >
-        <Users aria-hidden="true" className="h-4 w-4" />
-        {shift.occupied_volunteers} von {shift.required_volunteers} Plätzen besetzt
-      </p>
-      {!compact && shift.public_note ? <p className="mt-2 text-sm">{shift.public_note}</p> : null}
-      {!compact && shift.volunteer_names.length > 0 ? (
-        <p className="mt-2 text-sm">Eingetragen: {shift.volunteer_names.join(", ")}</p>
-      ) : null}
       <Button
         type="button"
         disabled={shift.status !== "OPEN" || full || isOwn}
@@ -995,25 +873,6 @@ function formatTime(value: string, timeZone: string) {
 function earliestShiftStart(event: PublicPlanEvent): string | null {
   return (
     [...event.shifts].sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0]?.starts_at ?? null
-  );
-}
-function CalendarTile({ date }: Readonly<{ date: string }>) {
-  const value = new Date(`${date}T00:00:00Z`);
-  return (
-    <div
-      aria-label={`Kalender: ${dateFormatter.format(value)}`}
-      className="w-14 shrink-0 overflow-hidden rounded-lg border bg-background text-center shadow-sm"
-    >
-      <span className="block bg-primary px-1 py-1 text-[11px] font-bold uppercase text-primary-foreground">
-        {monthFormatter.format(value)}
-      </span>
-      <span className="block pt-1 text-[11px] font-semibold uppercase text-muted-foreground">
-        {weekdayFormatter.format(value)}
-      </span>
-      <span className="block pb-1 text-xl font-bold leading-none">
-        {dayFormatter.format(value)}
-      </span>
-    </div>
   );
 }
 function Summary({ value, label }: Readonly<{ value: number; label: string }>) {
