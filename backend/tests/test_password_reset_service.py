@@ -11,8 +11,15 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.core.security.password import PasswordPolicyError, hash_password, verify_password
+from app.core.security.password import (
+    MIN_PASSWORD_LENGTH,
+    PasswordPolicyError,
+    hash_password,
+    verify_password,
+)
 from app.models.identity import AuditEvent, PasswordResetToken, User, UserStatus
+from app.models.organization import Organization, OrganizationSettings
+from app.models.planning import Volunteer
 from app.services.auth import (
     InvalidPasswordResetTokenError,
     PasswordResetService,
@@ -52,7 +59,7 @@ def test_forgot_password_creates_hashed_token_only_for_active_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
-    db = FakeSession(scalar_values=[user])
+    db = FakeSession(scalar_values=[user, None])
     monkeypatch.setattr("app.services.auth.secrets.token_urlsafe", lambda _bytes: RAW_TOKEN)
 
     issue = PasswordResetService(cast(Session, db), Settings()).request_reset(
@@ -62,6 +69,7 @@ def test_forgot_password_creates_hashed_token_only_for_active_user(
     assert issue is not None
     assert issue.recipient == "user@example.test"
     assert issue.raw_token == RAW_TOKEN
+    assert issue.organization_slug is None
     added_token = _only_added(db, PasswordResetToken)
     assert added_token.user_id == user.id
     assert added_token.token_hash == hash_password_reset_token(RAW_TOKEN)
@@ -69,6 +77,23 @@ def test_forgot_password_creates_hashed_token_only_for_active_user(
     assert len(added_token.token_hash) == 64
     assert db.executed
     assert db.committed is True
+
+
+def test_forgot_password_resolves_organization_slug_for_a_linked_volunteer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    volunteer = Volunteer(id=uuid.uuid4(), organization_id=uuid.uuid4(), user_id=user.id)
+    organization = Organization(id=volunteer.organization_id, slug="example-club")
+    db = FakeSession(scalar_values=[user, volunteer, organization])
+    monkeypatch.setattr("app.services.auth.secrets.token_urlsafe", lambda _bytes: RAW_TOKEN)
+
+    issue = PasswordResetService(cast(Session, db), Settings()).request_reset(
+        email="user@example.test"
+    )
+
+    assert issue is not None
+    assert issue.organization_slug == "example-club"
 
 
 @pytest.mark.parametrize("status", [UserStatus.DISABLED, UserStatus.INVITED])
@@ -102,9 +127,9 @@ def test_forgot_password_does_not_issue_for_missing_user() -> None:
 def test_reset_password_succeeds_updates_hash_consumes_token_and_revokes_sessions() -> None:
     user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
     token = _reset_token(user=user, expires_at=datetime.now(UTC) + timedelta(hours=1))
-    db = FakeSession(scalar_values=[token])
+    db = FakeSession(scalar_values=[token, None])
 
-    PasswordResetService(cast(Session, db), Settings()).reset_password(
+    session, session_body = PasswordResetService(cast(Session, db), Settings()).reset_password(
         raw_token=RAW_TOKEN,
         new_password="new-password-123",
     )
@@ -115,6 +140,48 @@ def test_reset_password_succeeds_updates_hash_consumes_token_and_revokes_session
     assert len(db.executed) == 1
     assert _only_added(db, AuditEvent).action == "PASSWORD_RESET"
     assert db.committed is True
+    assert session.access_token
+    assert session_body.user.id == str(user.id)
+
+
+def test_reset_password_uses_the_linked_volunteers_organization_minimum_length() -> None:
+    user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    token = _reset_token(user=user, expires_at=datetime.now(UTC) + timedelta(hours=1))
+    volunteer = Volunteer(id=uuid.uuid4(), organization_id=uuid.uuid4(), user_id=user.id)
+    org_settings = OrganizationSettings(
+        organization_id=volunteer.organization_id, volunteer_password_min_length=6
+    )
+    db = FakeSession(scalar_values=[token, volunteer, org_settings])
+
+    # 8 characters: shorter than the platform default of MIN_PASSWORD_LENGTH (10),
+    # but satisfies this organization's configured minimum of 6.
+    assert MIN_PASSWORD_LENGTH > 8
+    PasswordResetService(cast(Session, db), Settings()).reset_password(
+        raw_token=RAW_TOKEN,
+        new_password="short8ch",
+    )
+
+    assert token.consumed_at is not None
+
+
+def test_reset_password_rejects_a_password_below_the_organizations_configured_minimum() -> None:
+    user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    token = _reset_token(user=user, expires_at=datetime.now(UTC) + timedelta(hours=1))
+    volunteer = Volunteer(id=uuid.uuid4(), organization_id=uuid.uuid4(), user_id=user.id)
+    org_settings = OrganizationSettings(
+        organization_id=volunteer.organization_id, volunteer_password_min_length=12
+    )
+    db = FakeSession(scalar_values=[token, volunteer, org_settings])
+
+    with pytest.raises(PasswordPolicyError):
+        PasswordResetService(cast(Session, db), Settings()).reset_password(
+            raw_token=RAW_TOKEN,
+            new_password="eleven-char",
+        )
+
+    assert token.consumed_at is None
+    assert db.added == []
+    assert db.committed is False
 
 
 @pytest.mark.parametrize("token_state", ["missing", "consumed", "expired"])
@@ -139,8 +206,13 @@ def test_reset_password_rejects_invalid_consumed_or_expired_token(token_state: s
     assert db.committed is False
 
 
-def test_reset_password_enforces_password_policy_before_token_lookup() -> None:
-    db = FakeSession(scalar_values=[])
+def test_reset_password_enforces_password_policy_before_any_mutation() -> None:
+    # The organization-specific minimum length can only be resolved once the
+    # token's linked user (and volunteer, if any) is known, so the token lookup
+    # now necessarily happens before policy validation. No mutation may occur
+    # either way once the password is rejected.
+    token = _reset_token(expires_at=datetime.now(UTC) + timedelta(hours=1))
+    db = FakeSession(scalar_values=[token, None])
 
     with pytest.raises(PasswordPolicyError):
         PasswordResetService(cast(Session, db), Settings()).reset_password(
@@ -148,6 +220,7 @@ def test_reset_password_enforces_password_policy_before_token_lookup() -> None:
             new_password="short",
         )
 
+    assert token.consumed_at is None
     assert db.added == []
     assert db.executed == []
     assert db.committed is False
@@ -163,6 +236,7 @@ def test_send_password_reset_email_failure_never_logs_raw_token(
             sender,
             recipient="user@example.test",
             raw_token=RAW_TOKEN,
+            organization_slug=None,
             frontend_public_url="http://localhost:3000",
         )
 
@@ -187,7 +261,9 @@ def test_dispatch_password_reset_email_sends_via_configured_sender(
 
     monkeypatch.setattr("app.services.auth.build_email_sender", lambda _settings: RecordingSender())
 
-    dispatch_password_reset_email(Settings(), recipient="user@example.test", raw_token=RAW_TOKEN)
+    dispatch_password_reset_email(
+        Settings(), recipient="user@example.test", raw_token=RAW_TOKEN, organization_slug=None
+    )
 
     assert len(sent) == 1
     assert sent[0].to == "user@example.test"
@@ -204,7 +280,7 @@ def test_dispatch_password_reset_email_never_raises_or_logs_token_when_sender_un
 
     with caplog.at_level(logging.DEBUG):
         dispatch_password_reset_email(
-            Settings(), recipient="user@example.test", raw_token=RAW_TOKEN
+            Settings(), recipient="user@example.test", raw_token=RAW_TOKEN, organization_slug=None
         )
 
     assert RAW_TOKEN not in caplog.text

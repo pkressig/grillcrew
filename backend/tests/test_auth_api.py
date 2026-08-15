@@ -464,9 +464,13 @@ def test_forgot_password_returns_generic_success_and_sends_for_eligible_user(
 
         def request_reset(self, *, email: str) -> object:
             assert email == "user@example.test"
-            return SimpleNamespace(recipient=email, raw_token="raw-reset-token")
+            return SimpleNamespace(
+                recipient=email, raw_token="raw-reset-token", organization_slug=None
+            )
 
-    def fake_dispatch(_settings: object, *, recipient: str, raw_token: str) -> None:
+    def fake_dispatch(
+        _settings: object, *, recipient: str, raw_token: str, organization_slug: str | None
+    ) -> None:
         sent.append((recipient, raw_token))
 
     app.dependency_overrides[get_db] = _fake_db
@@ -522,7 +526,7 @@ def test_forgot_password_email_failure_still_returns_generic_success(
             pass
 
         def request_reset(self, *, email: str) -> object:
-            return SimpleNamespace(recipient=email, raw_token=raw_token)
+            return SimpleNamespace(recipient=email, raw_token=raw_token, organization_slug=None)
 
     class FailingSender:
         def send(self, _message: object) -> None:
@@ -566,7 +570,7 @@ def test_forgot_password_returns_generic_success_even_when_email_sender_unavaila
             pass
 
         def request_reset(self, *, email: str) -> object:
-            return SimpleNamespace(recipient=email, raw_token=raw_token)
+            return SimpleNamespace(recipient=email, raw_token=raw_token, organization_slug=None)
 
     def _raise_sender_unavailable(_settings: object) -> None:
         raise ValueError("SMTP_HOST must be configured outside development/test")
@@ -657,8 +661,11 @@ def test_reset_password_returns_success_for_valid_token(
         def __init__(self, _db: object, _settings: object) -> None:
             pass
 
-        def reset_password(self, *, raw_token: str, new_password: str) -> None:
+        def reset_password(
+            self, *, raw_token: str, new_password: str
+        ) -> tuple[IssuedSession, object]:
             calls.append((raw_token, new_password))
+            return _session(), _body()
 
     app.dependency_overrides[get_db] = _fake_db
     monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
@@ -672,8 +679,13 @@ def test_reset_password_returns_success_for_valid_token(
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"ok": True}
+    body = response.json()
+    assert body["ok"] is True
+    assert body["session"]["user"]["email_normalized"] == "user@example.test"
     assert calls == [("raw-token", "new-password-123")]
+    set_cookie = response.headers.get_list("set-cookie")
+    assert _cookie_header(set_cookie, ACCESS_TOKEN_COOKIE_NAME)
+    assert _cookie_header(set_cookie, REFRESH_TOKEN_COOKIE_NAME)
 
 
 def test_reset_password_rejects_invalid_token(

@@ -14,6 +14,7 @@ class PublicOrganizationSettings(BaseModel):  # type: ignore[explicit-any]
     signup_rate_limit_per_contact: int = Field(default=5, ge=1)
     signup_rate_limit_window_minutes: int = Field(default=60, ge=1)
     coordination_contact_label: str | None = None
+    volunteer_password_min_length: int = Field(default=6, ge=6, le=128)
 
 
 class PublicTheme(BaseModel):  # type: ignore[explicit-any]

@@ -106,6 +106,7 @@ class ResetPasswordRequest(BaseModel):  # type: ignore[explicit-any]
 
 class ResetPasswordResponse(BaseModel):  # type: ignore[explicit-any]
     ok: bool = True
+    session: AuthSessionResponse
 
 
 class AcceptInvitationRequest(BaseModel):  # type: ignore[explicit-any]

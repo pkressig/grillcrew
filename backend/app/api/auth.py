@@ -240,6 +240,7 @@ def forgot_password(
             settings,
             recipient=issue.recipient,
             raw_token=issue.raw_token,
+            organization_slug=issue.organization_slug,
         )
     return ForgotPasswordResponse()
 
@@ -248,12 +249,13 @@ def forgot_password(
 def reset_password(
     payload: ResetPasswordRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> ResetPasswordResponse:
     settings = get_settings()
     _ensure_origin_and_host(request, db, settings)
     try:
-        PasswordResetService(db, settings).reset_password(
+        session, session_body = PasswordResetService(db, settings).reset_password(
             raw_token=payload.token,
             new_password=payload.new_password,
         )
@@ -267,7 +269,8 @@ def reset_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid reset token",
         ) from None
-    return ResetPasswordResponse()
+    set_auth_cookies(response, session, settings)
+    return ResetPasswordResponse(session=session_body)
 
 
 @router.post("/accept-invitation", response_model=AcceptInvitationResponse)

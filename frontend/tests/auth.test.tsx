@@ -5,7 +5,6 @@ import { OrganizationSwitcher } from "@/components/organization-switcher";
 import { LoginForm } from "@/app/login/login-form";
 import { AdminShell } from "@/app/[org]/admin/admin-shell";
 import { LogoutButton } from "@/components/logout-button";
-import { ResetPasswordForm } from "@/app/reset-password/[token]/reset-password-form";
 import { InvitationForm } from "@/app/invite/[token]/invitation-form";
 import type { AuthSession } from "@/lib/auth";
 import { clearCsrfToken } from "@/lib/api";
@@ -223,26 +222,8 @@ it("renders one organization switch link per membership", () => {
 });
 
 describe("public token forms", () => {
-  it("shows reset success and invalid states", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(Response.json({ ok: true }))
-      .mockResolvedValueOnce(new Response(null, { status: 400 }));
-    vi.stubGlobal("fetch", fetchMock);
-    const first = render(<ResetPasswordForm token="reset-token" />);
-    fireEvent.change(screen.getByLabelText("Neues Passwort"), {
-      target: { value: "long-password" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Passwort speichern" }));
-    expect(await screen.findByText("Ihr Passwort wurde geändert.")).toBeInTheDocument();
-    first.unmount();
-    render(<ResetPasswordForm token="bad-token" />);
-    fireEvent.change(screen.getByLabelText("Neues Passwort"), {
-      target: { value: "long-password" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Passwort speichern" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("ungültig");
-  });
+  // ResetPasswordForm's success/invalid/branding/auto-login behavior is
+  // covered by tests/reset-password-form.test.tsx.
 
   it("lets an existing active user accept without a display name", async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));

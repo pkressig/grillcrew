@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { AuthCard } from "@/components/auth-card";
+import { useAuth } from "@/components/auth-provider";
 import type { PublicOrganization } from "@/lib/organization";
 import { registerVolunteer } from "@/lib/volunteer-profile";
 
@@ -85,6 +86,8 @@ export function RegisterForm({
   pendingShiftId?: string | null;
 }>) {
   const router = useRouter();
+  const auth = useAuth();
+  const minimumLength = organization.settings.volunteer_password_min_length;
   const backUrl = `/${encodeURIComponent(organization.slug)}`;
   const successUrl = pendingShiftId
     ? `${backUrl}?shift=${encodeURIComponent(pendingShiftId)}`
@@ -136,6 +139,7 @@ export function RegisterForm({
         child_team_name: fields.child_team_name || undefined,
       });
       clearDraft(organization.slug);
+      await auth.refresh();
       if (onSuccess) {
         onSuccess();
       } else {
@@ -147,7 +151,7 @@ export function RegisterForm({
         detail === "email already registered"
           ? "Diese E-Mail-Adresse ist bereits registriert. Bitte melde dich an."
           : detail === "password policy violation"
-            ? "Das Passwort muss mindestens 10 Zeichen lang sein."
+            ? `Das Passwort muss mindestens ${minimumLength} Zeichen lang sein.`
             : detail === "organization not found"
               ? "Die Organisation wurde nicht gefunden."
               : detail ||
@@ -202,9 +206,11 @@ export function RegisterForm({
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             required
+            minLength={minimumLength}
             autoComplete="new-password"
           />
         </label>
+        <p className="text-sm text-muted-foreground">Mindestens {minimumLength} Zeichen.</p>
         <label className="flex flex-col gap-1 font-medium">
           Einsatzvergütung (optional)
           <select

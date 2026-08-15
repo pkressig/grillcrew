@@ -18,6 +18,7 @@ from app.core.config import Settings
 from app.core.security.csrf import derive_csrf_secret, generate_csrf_token
 from app.core.security.jwt import create_access_token
 from app.core.security.password import (
+    MIN_PASSWORD_LENGTH,
     hash_password,
     validate_password_policy,
     verify_password_or_dummy,
@@ -30,6 +31,8 @@ from app.models.identity import (
     User,
     UserStatus,
 )
+from app.models.organization import Organization, OrganizationSettings
+from app.models.planning import Volunteer
 from app.schemas.auth import AuthMembershipResponse, AuthSessionResponse, AuthUserResponse
 from app.services.email.base import EmailMessage, EmailSender, EmailSendError
 from app.services.email.factory import build_email_sender
@@ -73,6 +76,7 @@ class RefreshTokenValidation:
 class PasswordResetIssue:
     recipient: str
     raw_token: str
+    organization_slug: str | None
 
 
 class LoginService:
@@ -211,10 +215,16 @@ class PasswordResetService:
             )
         )
         self._db.commit()
-        return PasswordResetIssue(recipient=user.email_normalized, raw_token=raw_token)
+        organization_slug = self._resolve_organization_slug(user.id)
+        return PasswordResetIssue(
+            recipient=user.email_normalized,
+            raw_token=raw_token,
+            organization_slug=organization_slug,
+        )
 
-    def reset_password(self, *, raw_token: str, new_password: str) -> None:
-        validate_password_policy(new_password)
+    def reset_password(
+        self, *, raw_token: str, new_password: str
+    ) -> tuple[IssuedSession, AuthSessionResponse]:
         token = self._db.scalar(
             select(PasswordResetToken)
             .where(PasswordResetToken.token_hash == hash_password_reset_token(raw_token))
@@ -228,6 +238,9 @@ class PasswordResetService:
             or token.user.status != UserStatus.ACTIVE
         ):
             raise InvalidPasswordResetTokenError
+
+        minimum_length = self._resolve_password_minimum_length(token.user_id)
+        validate_password_policy(new_password, minimum_length=minimum_length)
 
         token.user.password_hash = hash_password(new_password)
         token.consumed_at = now
@@ -246,7 +259,29 @@ class PasswordResetService:
                 event_metadata={},
             )
         )
+        session = issue_session(db=self._db, user=token.user, settings=self._settings, now=now)
         self._db.commit()
+        return session, build_session_response(token.user)
+
+    def _resolve_organization_slug(self, user_id: uuid.UUID) -> str | None:
+        volunteer = self._db.scalar(select(Volunteer).where(Volunteer.user_id == user_id))
+        if volunteer is None:
+            return None
+        organization = self._db.scalar(
+            select(Organization).where(Organization.id == volunteer.organization_id)
+        )
+        return organization.slug if organization is not None else None
+
+    def _resolve_password_minimum_length(self, user_id: uuid.UUID) -> int:
+        volunteer = self._db.scalar(select(Volunteer).where(Volunteer.user_id == user_id))
+        if volunteer is None:
+            return MIN_PASSWORD_LENGTH
+        settings_record = self._db.scalar(
+            select(OrganizationSettings).where(
+                OrganizationSettings.organization_id == volunteer.organization_id
+            )
+        )
+        return settings_record.volunteer_password_min_length if settings_record else 6
 
 
 def issue_session(
@@ -307,7 +342,9 @@ def hash_password_reset_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode()).hexdigest()
 
 
-def dispatch_password_reset_email(settings: Settings, *, recipient: str, raw_token: str) -> None:
+def dispatch_password_reset_email(
+    settings: Settings, *, recipient: str, raw_token: str, organization_slug: str | None
+) -> None:
     """Build the configured `EmailSender` and send, deferred until after the response.
 
     Building the sender can fail if SMTP is not configured outside development/test.
@@ -325,15 +362,23 @@ def dispatch_password_reset_email(settings: Settings, *, recipient: str, raw_tok
         sender,
         recipient=recipient,
         raw_token=raw_token,
+        organization_slug=organization_slug,
         frontend_public_url=settings.frontend_public_url,
     )
 
 
 def send_password_reset_email(
-    sender: EmailSender, *, recipient: str, raw_token: str, frontend_public_url: str
+    sender: EmailSender,
+    *,
+    recipient: str,
+    raw_token: str,
+    organization_slug: str | None,
+    frontend_public_url: str,
 ) -> None:
     subject = "Passwort zurücksetzen"
     reset_url = f"{frontend_public_url}/reset-password/{raw_token}"
+    if organization_slug:
+        reset_url = f"{reset_url}?org={organization_slug}"
     message = EmailMessage(
         to=recipient,
         subject=subject,

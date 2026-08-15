@@ -259,6 +259,7 @@ def send_volunteer_password_reset(
             settings,
             recipient=issue.recipient,
             raw_token=issue.raw_token,
+            organization_slug=issue.organization_slug,
         )
     return AdminVolunteerPasswordActionResponse()
 

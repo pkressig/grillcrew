@@ -628,9 +628,13 @@ def test_send_password_reset_route_dispatches_email_in_background(
             self, volunteer_id: UUID, _actor_id: UUID, _settings: object
         ) -> object:
             captured["volunteer_id"] = volunteer_id
-            return SimpleNamespace(recipient="anna@example.invalid", raw_token="tok")
+            return SimpleNamespace(
+                recipient="anna@example.invalid", raw_token="tok", organization_slug=None
+            )
 
-    def fake_dispatch(_settings: object, *, recipient: str, raw_token: str) -> None:
+    def fake_dispatch(
+        _settings: object, *, recipient: str, raw_token: str, organization_slug: str | None
+    ) -> None:
         captured["dispatched"] = (recipient, raw_token)
 
     app.dependency_overrides[families.manage] = lambda: current

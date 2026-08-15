@@ -1,12 +1,21 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AuthCard } from "@/components/auth-card";
+import { useAuth } from "@/components/auth-provider";
 import { apiBaseUrl } from "@/lib/api";
+import type { PublicOrganization } from "@/lib/organization";
 
-export function ResetPasswordForm({ token }: Readonly<{ token: string }>) {
-  const [state, setState] = useState<"idle" | "pending" | "success" | "invalid">("idle");
+export function ResetPasswordForm({
+  token,
+  organization,
+}: Readonly<{ token: string; organization: PublicOrganization }>) {
+  const router = useRouter();
+  const auth = useAuth();
+  const [state, setState] = useState<"idle" | "pending" | "invalid">("idle");
+  const minimumLength = organization.settings.volunteer_password_min_length;
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setState("pending");
@@ -18,51 +27,50 @@ export function ResetPasswordForm({ token }: Readonly<{ token: string }>) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, new_password: data.get("password") }),
       });
-      setState(response.ok ? "success" : "invalid");
+      if (!response.ok) {
+        setState("invalid");
+        return;
+      }
+      await auth.refresh();
+      const body = (await response.json()) as {
+        session: { memberships: { organization_slug: string }[] };
+      };
+      const firstMembership = body.session.memberships[0];
+      router.replace(
+        firstMembership ? `/${firstMembership.organization_slug}/admin` : `/${organization.slug}`,
+      );
     } catch {
       setState("invalid");
     }
   }
   return (
-    <AuthCard title="Passwort zurücksetzen">
-      {state === "success" ? (
-        <div role="status">
-          <p>Ihr Passwort wurde geändert.</p>
-          <Link
-            className="mt-4 inline-flex min-h-11 items-center rounded border px-4"
-            href="/login"
-          >
-            Zur Anmeldung
-          </Link>
-        </div>
-      ) : (
-        <form className="flex flex-col gap-4" onSubmit={submit}>
-          <label className="flex flex-col gap-1 font-medium">
-            Neues Passwort
-            <input
-              className="min-h-11 rounded border px-3 font-normal"
-              name="password"
-              type="password"
-              minLength={10}
-              autoComplete="new-password"
-              required
-            />
-          </label>
-          <p className="text-sm text-muted-foreground">Mindestens 10 Zeichen.</p>
-          {state === "invalid" ? (
-            <p className="text-sm text-status-error" role="alert">
-              Der Link ist ungültig oder abgelaufen. Fordern Sie einen neuen Link an.
-            </p>
-          ) : null}
-          <button
-            className="min-h-11 rounded bg-primary px-4 font-medium text-primary-foreground disabled:opacity-60"
-            disabled={state === "pending"}
-            type="submit"
-          >
-            Passwort speichern
-          </button>
-        </form>
-      )}
+    <AuthCard organization={organization} title="Passwort zurücksetzen">
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        <label className="flex flex-col gap-1 font-medium">
+          Neues Passwort
+          <input
+            className="min-h-11 rounded border px-3 font-normal"
+            name="password"
+            type="password"
+            minLength={minimumLength}
+            autoComplete="new-password"
+            required
+          />
+        </label>
+        <p className="text-sm text-muted-foreground">Mindestens {minimumLength} Zeichen.</p>
+        {state === "invalid" ? (
+          <p className="text-sm text-status-error" role="alert">
+            Der Link ist ungültig oder abgelaufen. Fordern Sie einen neuen Link an.
+          </p>
+        ) : null}
+        <button
+          className="min-h-11 rounded bg-primary px-4 font-medium text-primary-foreground disabled:opacity-60"
+          disabled={state === "pending"}
+          type="submit"
+        >
+          Passwort speichern
+        </button>
+      </form>
     </AuthCard>
   );
 }

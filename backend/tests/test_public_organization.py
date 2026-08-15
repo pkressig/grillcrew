@@ -136,6 +136,7 @@ def _organization(
                 signup_rate_limit_per_contact=5,
                 signup_rate_limit_window_minutes=60,
                 coordination_contact_label=None,
+                volunteer_password_min_length=6,
             ),
         ),
     )

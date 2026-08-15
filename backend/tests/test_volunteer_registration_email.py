@@ -38,12 +38,30 @@ def test_send_password_reset_email_builds_an_absolute_reset_url() -> None:
         sender,
         recipient="user@example.test",
         raw_token=RAW_TOKEN,
+        organization_slug=None,
         frontend_public_url="https://grillcrew.vercel.app",
     )
 
     assert len(sender.sent) == 1
     assert sender.sent[0].body_text.count("https://grillcrew.vercel.app/reset-password/") == 1
     assert f"https://grillcrew.vercel.app/reset-password/{RAW_TOKEN}" in sender.sent[0].body_text
+
+
+def test_send_password_reset_email_carries_the_organization_slug_for_branding() -> None:
+    sender = RecordingSender()
+
+    send_password_reset_email(
+        sender,
+        recipient="user@example.test",
+        raw_token=RAW_TOKEN,
+        organization_slug="fc-beispiel",
+        frontend_public_url="https://grillcrew.vercel.app",
+    )
+
+    assert (
+        f"https://grillcrew.vercel.app/reset-password/{RAW_TOKEN}?org=fc-beispiel"
+        in sender.sent[0].body_text
+    )
 
 
 def test_dispatch_password_reset_email_uses_configured_frontend_public_url(
@@ -56,6 +74,7 @@ def test_dispatch_password_reset_email_uses_configured_frontend_public_url(
         Settings(frontend_public_url="https://grillcrew.vercel.app"),
         recipient="user@example.test",
         raw_token=RAW_TOKEN,
+        organization_slug=None,
     )
 
     assert f"https://grillcrew.vercel.app/reset-password/{RAW_TOKEN}" in sender.sent[0].body_text
