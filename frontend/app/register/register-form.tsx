@@ -89,6 +89,9 @@ export function RegisterForm({
   const successUrl = pendingShiftId
     ? `${backUrl}?shift=${encodeURIComponent(pendingShiftId)}`
     : backUrl;
+  const loginUrl = pendingShiftId
+    ? `${backUrl}?shift=${encodeURIComponent(pendingShiftId)}&login=1`
+    : `${backUrl}?login=1`;
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [fields, setFields] = useState<DraftFields>(() => readDraft(organization.slug));
@@ -271,7 +274,7 @@ export function RegisterForm({
             Bereits registriert? Anmelden
           </button>
         ) : (
-          <a className="text-center text-sm underline" href={successUrl}>
+          <a className="text-center text-sm underline" href={loginUrl}>
             Bereits registriert? Zur Anmeldung
           </a>
         )}

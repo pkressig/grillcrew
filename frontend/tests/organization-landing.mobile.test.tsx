@@ -263,6 +263,13 @@ describe("mobile public plan", () => {
     expect(replaceMock).toHaveBeenCalledWith("/example");
   });
 
+  it("opens the login modal when returning from registration with ?login=1", async () => {
+    window.history.pushState({}, "", "/example?login=1");
+    renderPage();
+    expect(await screen.findByRole("heading", { name: "Helfer-Login" })).toBeInTheDocument();
+    expect(replaceMock).toHaveBeenCalledWith("/example");
+  });
+
   it("shows own upcoming signups only when authenticated and prevents duplicate signup", async () => {
     authState.isAuthenticated = true;
     renderPage();

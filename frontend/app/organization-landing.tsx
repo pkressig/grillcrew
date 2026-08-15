@@ -86,18 +86,22 @@ export function OrganizationLanding() {
   // A visitor sent to /register (or asked to log in) while trying to sign up for a
   // shift returns here with ?shift=<id> in the URL, since a full page navigation
   // loses in-memory state. Restore it into pendingShiftId and strip the query param
-  // so a refresh doesn't reopen it.
+  // so a refresh doesn't reopen it. ?login=1 likewise reopens the login modal for a
+  // visitor who followed the "already registered" link from the register page.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const shiftId = params.get("shift");
-    if (!shiftId) return;
-    setPendingShiftId(shiftId);
+    const wantsLogin = params.has("login");
+    if (!shiftId && !wantsLogin) return;
+    if (shiftId) setPendingShiftId(shiftId);
+    if (wantsLogin) setAccountModal("login");
     params.delete("shift");
+    params.delete("login");
     const nextSearch = params.toString();
     router.replace(
       `/${encodeURIComponent(organization.slug)}${nextSearch ? `?${nextSearch}` : ""}`,
     );
-    // Runs once on mount to consume the redirect-carried query param.
+    // Runs once on mount to consume the redirect-carried query params.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

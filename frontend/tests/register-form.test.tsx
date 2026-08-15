@@ -117,11 +117,18 @@ describe("RegisterForm page navigation (default variant)", () => {
     expect(replaceMock).toHaveBeenCalledWith("/example");
   });
 
-  it("carries the pending shift into the 'already registered' link", () => {
+  it("carries the pending shift and opens the login modal via the 'already registered' link", () => {
     render(<RegisterForm organization={organization} pendingShiftId="shift-1" />);
     expect(
       screen.getByRole("link", { name: "Bereits registriert? Zur Anmeldung" }),
-    ).toHaveAttribute("href", "/example?shift=shift-1");
+    ).toHaveAttribute("href", "/example?shift=shift-1&login=1");
+  });
+
+  it("opens the login modal via the 'already registered' link without a pending shift", () => {
+    render(<RegisterForm organization={organization} />);
+    expect(
+      screen.getByRole("link", { name: "Bereits registriert? Zur Anmeldung" }),
+    ).toHaveAttribute("href", "/example?login=1");
   });
 
   it("does not show a back button or the direct login link for the modal variant", () => {
