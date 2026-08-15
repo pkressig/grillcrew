@@ -1,27 +1,89 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { AuthCard } from "@/components/auth-card";
+import { Badge, type BadgeProps } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
+  cancelSignup,
+  createChild,
+  deleteChild,
   fetchVolunteerProfile,
+  updateChild,
+  updateSignupCompensation,
   updateVolunteerProfile,
+  type CompensationType,
+  type FamilyChild,
   type VolunteerProfile,
+  type VolunteerSignupSummary,
 } from "@/lib/volunteer-profile";
+
+function formatShiftRange(startsAt: string, endsAt: string, timezone: string) {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+  const dateFormatter = new Intl.DateTimeFormat("de-CH", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: timezone,
+  });
+  const timeFormatter = new Intl.DateTimeFormat("de-CH", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: timezone,
+  });
+  return `${dateFormatter.format(start)}, ${timeFormatter.format(start)}–${timeFormatter.format(end)}`;
+}
+
+function statusBadge(entry: VolunteerSignupSummary): {
+  label: string;
+  variant: BadgeProps["variant"];
+} {
+  if (entry.signup_status === "CANCELLED_BY_VOLUNTEER")
+    return { label: "Abgemeldet", variant: "neutral" };
+  if (entry.signup_status === "CANCELLED_BY_ADMIN")
+    return { label: "Von Admin storniert", variant: "neutral" };
+  switch (entry.outcome) {
+    case "ATTENDED":
+      return { label: "Erschienen", variant: "success" };
+    case "EXCUSED_CANCELLED":
+      return { label: "Entschuldigt abgesagt", variant: "neutral" };
+    case "LATE_CANCELLED":
+      return { label: "Kurzfristig abgesagt", variant: "warning" };
+    case "NO_SHOW":
+      return { label: "Unentschuldigt nicht erschienen", variant: "error" };
+    case "SUBSTITUTE_ORGANIZED":
+      return { label: "Ersatz organisiert", variant: "success" };
+    default:
+      return { label: "Angemeldet", variant: "neutral" };
+  }
+}
 
 export default function ProfilePage() {
   const auth = useAuth();
   const router = useRouter();
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<VolunteerSignupSummary | null>(null);
+
+  const reload = useCallback(async () => {
+    try {
+      const loaded = await fetchVolunteerProfile();
+      setProfile(loaded);
+      return loaded;
+    } catch {
+      setMessage("Profil konnte nicht geladen werden.");
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
-    if (auth.isAuthenticated)
-      void fetchVolunteerProfile()
-        .then(setProfile)
-        .catch(() => setMessage("Profil konnte nicht geladen werden."));
-  }, [auth.isAuthenticated]);
+    if (auth.isAuthenticated) void reload();
+  }, [auth.isAuthenticated, reload]);
+
   function goBack() {
     if (typeof window !== "undefined" && window.history.length > 1) {
       router.back();
@@ -29,6 +91,7 @@ export default function ProfilePage() {
       router.push("/");
     }
   }
+
   if (auth.isLoading) return <main className="p-6">Profil wird geladen …</main>;
   if (!auth.isAuthenticated)
     return (
@@ -40,6 +103,7 @@ export default function ProfilePage() {
       </AuthCard>
     );
   if (!profile) return <main className="p-6">{message ?? "Profil wird geladen …"}</main>;
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -60,8 +124,28 @@ export default function ProfilePage() {
       setMessage("Profil konnte nicht gespeichert werden.");
     }
   }
+
+  async function handleSignupUpdate(
+    signupId: string,
+    payload: {
+      compensation_type: CompensationType | null;
+      credited_family_member_id: string | null;
+    },
+  ) {
+    try {
+      const updated = await updateSignupCompensation(signupId, payload);
+      setProfile(updated);
+    } catch {
+      setMessage("Die Änderung konnte nicht gespeichert werden.");
+    }
+  }
+
   return (
-    <AuthCard title="Mein Helferprofil" back={{ label: "Zurück", onClick: goBack }}>
+    <AuthCard
+      organization={profile.organization}
+      title="Mein Helferprofil"
+      back={{ label: "Zurück", onClick: goBack }}
+    >
       <form className="flex flex-col gap-4" onSubmit={submit}>
         {(
           [
@@ -82,7 +166,7 @@ export default function ProfilePage() {
         ))}
         <p className="text-sm text-muted-foreground">E-Mail: {profile.email}</p>
         <label className="flex flex-col gap-1 font-medium">
-          Einsatzvergütung
+          Standard-Einsatzvergütung
           <select
             className="min-h-11 rounded border px-3"
             name="compensation_preference"
@@ -93,6 +177,9 @@ export default function ProfilePage() {
             <option value="VOLUNTARY">Unentgeltlich</option>
             <option value="PAYOUT">Bezahlt</option>
           </select>
+          <span className="text-sm font-normal text-muted-foreground">
+            Gilt automatisch für neue Einsätze; pro Einsatz unten anpassbar.
+          </span>
         </label>
         <label className="flex flex-col gap-1 font-medium">
           Zugeordnetes Kind
@@ -109,39 +196,427 @@ export default function ProfilePage() {
             ))}
           </select>
         </label>
-        <SignupList title="Kommende Einsätze" entries={profile.upcoming_signups} />
-        <SignupList title="Geleistete Einsätze" entries={profile.completed_signups} />
         {message ? <p role="status">{message}</p> : null}
         <button className="min-h-11 rounded bg-primary px-4 text-primary-foreground">
           Speichern
         </button>
       </form>
+      <ChildrenSection
+        familyChildren={profile.family_children}
+        onChanged={reload}
+        onError={(text) => setMessage(text)}
+      />
+      <SignupList
+        title="Kommende Einsätze"
+        entries={profile.upcoming_signups}
+        familyChildren={profile.family_children}
+        timezone={profile.organization.timezone}
+        onUpdate={handleSignupUpdate}
+        onCancelRequested={setCancelTarget}
+      />
+      <SignupList
+        title="Geleistete Einsätze"
+        entries={profile.completed_signups}
+        familyChildren={profile.family_children}
+        timezone={profile.organization.timezone}
+        onUpdate={handleSignupUpdate}
+        onCancelRequested={setCancelTarget}
+      />
+      {cancelTarget ? (
+        <CancelModal
+          entry={cancelTarget}
+          timezone={profile.organization.timezone}
+          onClose={() => setCancelTarget(null)}
+          onCancelled={(updated) => {
+            setProfile(updated);
+            setCancelTarget(null);
+          }}
+        />
+      ) : null}
     </AuthCard>
+  );
+}
+
+function ChildrenSection({
+  familyChildren,
+  onChanged,
+  onError,
+}: Readonly<{
+  familyChildren: FamilyChild[];
+  onChanged: () => Promise<VolunteerProfile | null>;
+  onError: (message: string) => void;
+}>) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+
+  async function handleRemove(child: FamilyChild) {
+    if (!window.confirm(`"${child.name}" wirklich entfernen?`)) return;
+    setBusy(true);
+    try {
+      await deleteChild(child.id);
+      await onChanged();
+    } catch (caught) {
+      onError(caught instanceof Error ? caught.message : "Das Kind konnte nicht entfernt werden.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleEditSubmit(childId: string, event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      await updateChild(childId, {
+        first_name: String(data.get("first_name") ?? "").trim(),
+        last_name: String(data.get("last_name") ?? "").trim(),
+        team_name: String(data.get("team_name") ?? "").trim() || null,
+      });
+      setEditingId(null);
+      await onChanged();
+    } catch (caught) {
+      onError(
+        caught instanceof Error ? caught.message : "Das Kind konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleAddSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    setBusy(true);
+    try {
+      await createChild({
+        first_name: String(data.get("first_name") ?? "").trim(),
+        last_name: String(data.get("last_name") ?? "").trim(),
+        team_name: String(data.get("team_name") ?? "").trim() || null,
+      });
+      form.reset();
+      setShowAddForm(false);
+      await onChanged();
+    } catch (caught) {
+      onError(
+        caught instanceof Error ? caught.message : "Das Kind konnte nicht hinzugefügt werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="mt-6 rounded border p-3" aria-label="Kinder verwalten">
+      <h2 className="font-medium">Kinder verwalten</h2>
+      {familyChildren.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">Noch keine Kinder erfasst.</p>
+      ) : (
+        <ul className="mt-2 space-y-2 text-sm">
+          {familyChildren.map((child) =>
+            editingId === child.id ? (
+              <li key={child.id} className="rounded bg-muted/40 p-2">
+                <form
+                  className="flex flex-col gap-2"
+                  onSubmit={(event) => void handleEditSubmit(child.id, event)}
+                >
+                  <input
+                    className="min-h-11 rounded border px-3"
+                    name="first_name"
+                    placeholder="Vorname"
+                    defaultValue={child.name.split(" ")[0] ?? ""}
+                    required
+                    disabled={busy}
+                  />
+                  <input
+                    className="min-h-11 rounded border px-3"
+                    name="last_name"
+                    placeholder="Nachname"
+                    defaultValue={child.name.split(" ").slice(1).join(" ")}
+                    required
+                    disabled={busy}
+                  />
+                  <input
+                    className="min-h-11 rounded border px-3"
+                    name="team_name"
+                    placeholder="Mannschaft (optional)"
+                    disabled={busy}
+                  />
+                  <div className="flex gap-2">
+                    <Button type="submit" size="sm" disabled={busy}>
+                      Speichern
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={busy}
+                      onClick={() => setEditingId(null)}
+                    >
+                      Abbrechen
+                    </Button>
+                  </div>
+                </form>
+              </li>
+            ) : (
+              <li
+                key={child.id}
+                className="flex items-center justify-between gap-2 rounded bg-muted/40 p-2"
+              >
+                <span>{child.name}</span>
+                <span className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    disabled={busy}
+                    onClick={() => setEditingId(child.id)}
+                  >
+                    Bearbeiten
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    disabled={busy}
+                    onClick={() => void handleRemove(child)}
+                  >
+                    Entfernen
+                  </Button>
+                </span>
+              </li>
+            ),
+          )}
+        </ul>
+      )}
+      {showAddForm ? (
+        <form
+          className="mt-3 flex flex-col gap-2"
+          onSubmit={(event) => void handleAddSubmit(event)}
+        >
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Vorname
+            <input
+              className="min-h-11 rounded border px-3 font-normal"
+              name="first_name"
+              required
+              disabled={busy}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Nachname
+            <input
+              className="min-h-11 rounded border px-3 font-normal"
+              name="last_name"
+              required
+              disabled={busy}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm font-medium">
+            Mannschaft (optional)
+            <input
+              className="min-h-11 rounded border px-3 font-normal"
+              name="team_name"
+              disabled={busy}
+            />
+          </label>
+          <div className="flex gap-2">
+            <Button type="submit" size="sm" disabled={busy}>
+              {busy ? "Wird gespeichert …" : "Speichern"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={busy}
+              onClick={() => setShowAddForm(false)}
+            >
+              Abbrechen
+            </Button>
+          </div>
+        </form>
+      ) : (
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="mt-3"
+          onClick={() => setShowAddForm(true)}
+        >
+          Kind hinzufügen
+        </Button>
+      )}
+    </section>
   );
 }
 
 function SignupList({
   title,
   entries,
-}: Readonly<{ title: string; entries: VolunteerProfile["upcoming_signups"] }>) {
+  familyChildren,
+  timezone,
+  onUpdate,
+  onCancelRequested,
+}: Readonly<{
+  title: string;
+  entries: VolunteerSignupSummary[];
+  familyChildren: FamilyChild[];
+  timezone: string;
+  onUpdate: (
+    signupId: string,
+    payload: {
+      compensation_type: CompensationType | null;
+      credited_family_member_id: string | null;
+    },
+  ) => Promise<void>;
+  onCancelRequested: (entry: VolunteerSignupSummary) => void;
+}>) {
   return (
-    <section className="rounded border p-3" aria-label={title}>
+    <section className="mt-6 rounded border p-3" aria-label={title}>
       <h2 className="font-medium">{title}</h2>
       {entries.length === 0 ? (
         <p className="mt-1 text-sm text-muted-foreground">Keine Einträge.</p>
       ) : (
         <ul className="mt-2 space-y-2 text-sm">
-          {entries.map((entry) => (
-            <li key={entry.id} className="rounded bg-muted/40 p-2">
-              <p className="font-medium">{entry.event_title}</p>
-              <p>
-                {entry.event_location} · {new Date(entry.shift_starts_at).toLocaleString("de-CH")}
-              </p>
-              <p className="text-muted-foreground">Status: {entry.outcome}</p>
-            </li>
-          ))}
+          {entries.map((entry) => {
+            const badge = statusBadge(entry);
+            return (
+              <li key={entry.id} className="rounded bg-muted/40 p-2">
+                <p className="font-medium">{entry.event_title}</p>
+                <p>{formatShiftRange(entry.shift_starts_at, entry.shift_ends_at, timezone)}</p>
+                <p className="mt-1">
+                  <Badge variant={badge.variant}>{badge.label}</Badge>
+                </p>
+                <label className="mt-2 flex flex-col gap-1">
+                  Einsatzvergütung
+                  <select
+                    className="min-h-11 rounded border px-3"
+                    value={entry.compensation_type}
+                    onChange={(event) =>
+                      void onUpdate(entry.id, {
+                        compensation_type: event.target.value as CompensationType,
+                        credited_family_member_id: entry.credited_family_member_id,
+                      })
+                    }
+                  >
+                    <option value="WORK_HOURS">Sollstunden</option>
+                    <option value="VOLUNTARY">Unentgeltlich</option>
+                    <option value="PAYOUT">Bezahlt</option>
+                  </select>
+                </label>
+                <label className="mt-2 flex flex-col gap-1">
+                  Zugeordnetes Kind
+                  <select
+                    className="min-h-11 rounded border px-3"
+                    value={entry.credited_family_member_id ?? ""}
+                    onChange={(event) =>
+                      void onUpdate(entry.id, {
+                        compensation_type: entry.compensation_type,
+                        credited_family_member_id: event.target.value || null,
+                      })
+                    }
+                  >
+                    <option value="">Keine Zuordnung</option>
+                    {familyChildren.map((child) => (
+                      <option key={child.id} value={child.id}>
+                        {child.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {entry.can_cancel ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="mt-3"
+                    onClick={() => onCancelRequested(entry)}
+                  >
+                    Abmelden
+                  </Button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
+  );
+}
+
+function CancelModal({
+  entry,
+  timezone,
+  onClose,
+  onCancelled,
+}: Readonly<{
+  entry: VolunteerSignupSummary;
+  timezone: string;
+  onClose: () => void;
+  onCancelled: (profile: VolunteerProfile) => void;
+}>) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function confirmCancel() {
+    setBusy(true);
+    setError(null);
+    try {
+      const updated = await cancelSignup(entry.id, { reason: reason.trim() || null });
+      onCancelled(updated);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Die Abmeldung ist fehlgeschlagen.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Einsatz abmelden"
+      onClick={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <div className="w-full max-w-md rounded-lg bg-background p-4">
+        <h2 className="text-xl font-bold">Einsatz abmelden</h2>
+        <p className="mt-2 text-sm">
+          {entry.event_title} ·{" "}
+          {formatShiftRange(entry.shift_starts_at, entry.shift_ends_at, timezone)}
+        </p>
+        <label className="mt-3 flex flex-col gap-1 text-sm font-medium">
+          Grund (optional)
+          <textarea
+            className="min-h-11 rounded border px-3 font-normal"
+            maxLength={100}
+            value={reason}
+            disabled={busy}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </label>
+        {error ? (
+          <p role="alert" className="mt-2 text-sm text-status-error">
+            {error}
+          </p>
+        ) : null}
+        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={busy}
+            className="flex-1"
+            onClick={() => void confirmCancel()}
+          >
+            {busy ? "Wird abgemeldet …" : "Abmelden bestätigen"}
+          </Button>
+          <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
+            Abbrechen
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }

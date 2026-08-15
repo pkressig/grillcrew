@@ -903,7 +903,7 @@ function findSignupShift(plan: PublicPlan, signup: VolunteerSignupSummary) {
 }
 function signupStatus(entry: VolunteerSignupSummary) {
   if (entry.signup_status.includes("CANCELLED")) return "Abgesagt";
-  if (entry.outcome && entry.outcome !== "PENDING") return entry.outcome;
+  if (entry.outcome && entry.outcome !== "OPEN") return entry.outcome;
   return "Angemeldet";
 }
 function formatTime(value: string, timeZone: string) {
