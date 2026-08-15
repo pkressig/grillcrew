@@ -56,6 +56,7 @@ from app.services.auth import (
     RefreshTokenValidation,
     build_session_response,
     dispatch_password_reset_email,
+    dispatch_volunteer_registration_email,
     issue_session,
     normalize_email,
 )
@@ -75,6 +76,7 @@ def register_volunteer(
     payload: VolunteerRegisterRequest,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> VolunteerRegisterResponse:
     settings = get_settings()
@@ -147,6 +149,14 @@ def register_volunteer(
     session = issue_session(db=db, user=user, settings=settings, now=now)
     db.commit()
     set_auth_cookies(response, session, settings)
+    background_tasks.add_task(
+        dispatch_volunteer_registration_email,
+        settings,
+        recipient=volunteer.email_display,
+        first_name=volunteer.first_name,
+        organization_name=organization.name,
+        organization_slug=organization.slug,
+    )
     return VolunteerRegisterResponse(session=build_session_response(user))
 
 

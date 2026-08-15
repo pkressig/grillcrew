@@ -16,6 +16,7 @@ import { GameDayList } from "@/components/game-day-list";
 import { apiBaseUrl } from "@/lib/api";
 import {
   fetchVolunteerProfile,
+  requestPasswordReset,
   type VolunteerProfile,
   type VolunteerSignupSummary,
 } from "@/lib/volunteer-profile";
@@ -792,6 +793,7 @@ function VolunteerLogin({
   onSwitchToRegister,
 }: Readonly<{ onSuccess: () => void; onSwitchToRegister: () => void }>) {
   const [error, setError] = useState<string | null>(null);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -807,6 +809,11 @@ function VolunteerLogin({
     }
     onSuccess();
   }
+
+  if (showForgotPassword) {
+    return <ForgotPassword onBack={() => setShowForgotPassword(false)} />;
+  }
+
   return (
     <form className="flex flex-col gap-4 p-5" onSubmit={submit}>
       <h2 className="text-xl font-bold">Helfer-Login</h2>
@@ -837,11 +844,67 @@ function VolunteerLogin({
       <button
         type="button"
         className="min-h-11 text-center text-sm underline"
+        onClick={() => setShowForgotPassword(true)}
+      >
+        Passwort vergessen?
+      </button>
+      <button
+        type="button"
+        className="min-h-11 text-center text-sm underline"
         onClick={onSwitchToRegister}
       >
         Noch kein Konto? Jetzt registrieren
       </button>
     </form>
+  );
+}
+
+function ForgotPassword({ onBack }: Readonly<{ onBack: () => void }>) {
+  const [state, setState] = useState<"idle" | "pending" | "sent">("idle");
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setState("pending");
+    try {
+      await requestPasswordReset(String(data.get("email") ?? ""));
+    } catch {
+      // Never reveal whether the account exists, so a failed request still
+      // shows the same generic success message as the backend does.
+    } finally {
+      setState("sent");
+    }
+  }
+  return (
+    <div className="flex flex-col gap-4 p-5">
+      <h2 className="text-xl font-bold">Passwort vergessen</h2>
+      {state === "sent" ? (
+        <p role="status" className="text-sm">
+          Falls ein Konto mit dieser E-Mail-Adresse besteht, wurde ein Link zum Zurücksetzen des
+          Passworts gesendet.
+        </p>
+      ) : (
+        <form className="flex flex-col gap-4" onSubmit={submit}>
+          <label>
+            E-Mail
+            <input
+              className="mt-1 min-h-11 w-full rounded border px-3"
+              name="email"
+              type="email"
+              required
+            />
+          </label>
+          <button
+            className="min-h-11 rounded bg-primary px-4 text-primary-foreground disabled:opacity-60"
+            disabled={state === "pending"}
+          >
+            {state === "pending" ? "Wird gesendet …" : "Link senden"}
+          </button>
+        </form>
+      )}
+      <button type="button" className="min-h-11 text-center text-sm underline" onClick={onBack}>
+        Zurück zur Anmeldung
+      </button>
+    </div>
   );
 }
 

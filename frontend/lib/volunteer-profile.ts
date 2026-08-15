@@ -52,6 +52,14 @@ export async function updateVolunteerProfile(payload: Partial<VolunteerProfile>)
   });
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  await request<{ ok: boolean }>("/api/auth/forgot-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+}
+
 export async function registerVolunteer(payload: {
   organization_slug: string;
   first_name: string;

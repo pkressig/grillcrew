@@ -159,7 +159,12 @@ def test_send_password_reset_email_failure_never_logs_raw_token(
     sender = FailingSender()
 
     with caplog.at_level(logging.DEBUG):
-        send_password_reset_email(sender, recipient="user@example.test", raw_token=RAW_TOKEN)
+        send_password_reset_email(
+            sender,
+            recipient="user@example.test",
+            raw_token=RAW_TOKEN,
+            frontend_public_url="http://localhost:3000",
+        )
 
     assert RAW_TOKEN not in caplog.text
     assert "password reset email failed" in caplog.text

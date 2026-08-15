@@ -4,7 +4,7 @@ import { OrganizationLanding } from "@/app/organization-landing";
 import { OrganizationProvider } from "@/components/organization-provider";
 import { platformFallbackOrganization } from "@/lib/organization";
 import { createAuthenticatedSignup, fetchPublicPlan } from "@/lib/public-plan";
-import { fetchVolunteerProfile } from "@/lib/volunteer-profile";
+import { fetchVolunteerProfile, requestPasswordReset } from "@/lib/volunteer-profile";
 
 const authState = {
   isAuthenticated: false,
@@ -29,11 +29,12 @@ vi.mock("@/lib/public-plan", async (importOriginal) => {
 });
 vi.mock("@/lib/volunteer-profile", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/volunteer-profile")>();
-  return { ...actual, fetchVolunteerProfile: vi.fn() };
+  return { ...actual, fetchVolunteerProfile: vi.fn(), requestPasswordReset: vi.fn() };
 });
 
 const mockedPlan = vi.mocked(fetchPublicPlan);
 const mockedProfile = vi.mocked(fetchVolunteerProfile);
+const mockedRequestPasswordReset = vi.mocked(requestPasswordReset);
 const mockedSignup = vi.mocked(createAuthenticatedSignup);
 const organization = {
   ...platformFallbackOrganization,
@@ -146,6 +147,7 @@ describe("mobile public plan", () => {
     mockedPlan.mockReset().mockResolvedValue(plan);
     mockedProfile.mockReset().mockResolvedValue(profile);
     mockedSignup.mockReset();
+    mockedRequestPasswordReset.mockReset();
     replaceMock.mockReset();
     localStorage.clear();
     window.history.replaceState({}, "", "/example");
@@ -213,6 +215,44 @@ describe("mobile public plan", () => {
     expect(action).toHaveClass("min-h-11", "w-full");
     fireEvent.click(action);
     expect(screen.getByRole("dialog")).toHaveAccessibleName("Helfer-Login");
+  });
+
+  it("requests a password reset link and shows a generic confirmation regardless of outcome", async () => {
+    mockedRequestPasswordReset.mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(await screen.findByRole("link", { name: "Login" }));
+    fireEvent.click(screen.getByRole("button", { name: "Passwort vergessen?" }));
+    expect(screen.getByRole("heading", { name: "Passwort vergessen" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("E-Mail"), {
+      target: { value: "mia@example.test" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Link senden" }));
+    expect(
+      await screen.findByText(/wurde ein Link zum Zurücksetzen des Passworts gesendet/),
+    ).toBeInTheDocument();
+    expect(mockedRequestPasswordReset).toHaveBeenCalledWith("mia@example.test");
+  });
+
+  it("shows the same generic confirmation even when the reset request fails", async () => {
+    mockedRequestPasswordReset.mockRejectedValue(new Error("network error"));
+    renderPage();
+    fireEvent.click(await screen.findByRole("link", { name: "Login" }));
+    fireEvent.click(screen.getByRole("button", { name: "Passwort vergessen?" }));
+    fireEvent.change(screen.getByLabelText("E-Mail"), {
+      target: { value: "unknown@example.test" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Link senden" }));
+    expect(
+      await screen.findByText(/wurde ein Link zum Zurücksetzen des Passworts gesendet/),
+    ).toBeInTheDocument();
+  });
+
+  it("returns to the login form from the forgot-password view", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("link", { name: "Login" }));
+    fireEvent.click(screen.getByRole("button", { name: "Passwort vergessen?" }));
+    fireEvent.click(screen.getByRole("button", { name: "Zurück zur Anmeldung" }));
+    expect(screen.getByRole("heading", { name: "Helfer-Login" })).toBeInTheDocument();
   });
 
   it("carries the pending shift when switching from login to registration", async () => {

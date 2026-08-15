@@ -321,24 +321,87 @@ def dispatch_password_reset_email(settings: Settings, *, recipient: str, raw_tok
     except ValueError:
         logger.error("password reset email sender unavailable to=%s", recipient)
         return
-    send_password_reset_email(sender, recipient=recipient, raw_token=raw_token)
+    send_password_reset_email(
+        sender,
+        recipient=recipient,
+        raw_token=raw_token,
+        frontend_public_url=settings.frontend_public_url,
+    )
 
 
-def send_password_reset_email(sender: EmailSender, *, recipient: str, raw_token: str) -> None:
-    subject = "Reset your password"
+def send_password_reset_email(
+    sender: EmailSender, *, recipient: str, raw_token: str, frontend_public_url: str
+) -> None:
+    subject = "Passwort zurücksetzen"
+    reset_url = f"{frontend_public_url}/reset-password/{raw_token}"
     message = EmailMessage(
         to=recipient,
         subject=subject,
         body_text=(
-            "A password reset was requested for your account.\n\n"
-            f"Open /reset-password/{raw_token} to choose a new password.\n\n"
-            "If you did not request this, ignore this email."
+            "Für dein Konto wurde ein neues Passwort angefordert.\n\n"
+            f"Neues Passwort festlegen: {reset_url}\n\n"
+            "Falls du das nicht angefordert hast, kannst du diese E-Mail ignorieren."
         ),
     )
     try:
         sender.send(message)
     except EmailSendError:
         logger.warning("password reset email failed to=%s subject=%s", recipient, subject)
+
+
+def dispatch_volunteer_registration_email(
+    settings: Settings,
+    *,
+    recipient: str,
+    first_name: str,
+    organization_name: str,
+    organization_slug: str,
+) -> None:
+    """Build the configured `EmailSender` and send, deferred until after the response.
+
+    Registration itself must never fail or be delayed by email delivery, so this is
+    always called from a background task after the account is already committed.
+    """
+    try:
+        sender = build_email_sender(settings)
+    except ValueError:
+        logger.error("volunteer registration email sender unavailable to=%s", recipient)
+        return
+    send_volunteer_registration_email(
+        sender,
+        recipient=recipient,
+        first_name=first_name,
+        organization_name=organization_name,
+        organization_slug=organization_slug,
+        frontend_public_url=settings.frontend_public_url,
+    )
+
+
+def send_volunteer_registration_email(
+    sender: EmailSender,
+    *,
+    recipient: str,
+    first_name: str,
+    organization_name: str,
+    organization_slug: str,
+    frontend_public_url: str,
+) -> None:
+    subject = f"Willkommen bei {organization_name}"
+    plan_url = f"{frontend_public_url}/{organization_slug}"
+    message = EmailMessage(
+        to=recipient,
+        subject=subject,
+        body_text=(
+            f"Hallo {first_name}\n\n"
+            f"Dein Helferkonto bei {organization_name} wurde erstellt. Melde dich mit deiner "
+            "E-Mail-Adresse und deinem Passwort an, um dich für Einsätze einzutragen.\n\n"
+            f"Zum Einsatzplan: {plan_url}"
+        ),
+    )
+    try:
+        sender.send(message)
+    except EmailSendError:
+        logger.warning("volunteer registration email failed to=%s subject=%s", recipient, subject)
 
 
 def normalize_email(email: str) -> str:
