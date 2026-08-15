@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.identity import StaffRole, UserStatus
 from app.models.planning import SignupOutcome, SignupStatus, VolunteerCompensation
@@ -51,15 +52,64 @@ class VolunteerFamilyChild(BaseModel):  # type: ignore[explicit-any]
     name: str
 
 
+class VolunteerChildCreate(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    team_name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("first_name", "last_name", mode="before")
+    @classmethod
+    def trim_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("team_name", mode="before")
+    @classmethod
+    def trim_team_name(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+
+class VolunteerChildUpdate(VolunteerChildCreate):  # type: ignore[explicit-any]
+    pass
+
+
+class VolunteerSignupCompensationUpdate(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+
+    compensation_type: VolunteerCompensation | None = None
+    credited_family_member_id: uuid.UUID | None = None
+
+
+class VolunteerSignupCancelRequest(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str | None = Field(default=None, max_length=100)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def trim_reason(cls, value: object) -> object:
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+
 class VolunteerSignupSummary(BaseModel):  # type: ignore[explicit-any]
     id: str
     event_title: str
     event_date: date
-    event_location: str
     shift_starts_at: datetime
     shift_ends_at: datetime
     signup_status: SignupStatus
     outcome: SignupOutcome
+    compensation_type: VolunteerCompensation
+    credited_family_member_id: str | None
+    credited_family_member_name: str | None
+    can_cancel: bool
 
 
 class AuthUserResponse(BaseModel):  # type: ignore[explicit-any]

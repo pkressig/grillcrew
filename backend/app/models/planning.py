@@ -380,6 +380,12 @@ class Signup(Base):
     management_token_hash: Mapped[str | None] = mapped_column(String(64))
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     cancellation_reason: Mapped[str | None] = mapped_column(String(100))
+    compensation_type: Mapped[VolunteerCompensation | None] = mapped_column(
+        Enum(VolunteerCompensation, name="volunteer_compensation", create_type=False)
+    )
+    credited_family_member_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("family_member.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

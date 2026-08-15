@@ -312,3 +312,40 @@ Aufgabe der eingebenden Person.
 
 **Entschieden von:** Product Owner, 2026-08-15 (angefordert im Rahmen des FC Thusis-Cazis
 Branding-Rollouts).
+
+## D-050 – Selbstverwaltung im Helferprofil: Einsatzvergütung pro Einsatz, Selbstabmeldung, Kinder
+
+**Entscheid:** Drei neue, authentifizierte Selbstverwaltungsfunktionen im Helferprofil:
+
+1. **Einsatzvergütung pro Einsatz statt nur global.** `Signup` erhält zwei neue, nullbare Spalten
+   (`compensation_type`, `credited_family_member_id`), unabhängig von der bereits bestehenden
+   `Volunteer.compensation_preference`. Diese Felder sind bewusst getrennt von
+   `WorkRecord.compensation_type` (D-041), das erst nach Anwesenheit durch ADMIN gesetzt wird und
+   den verbindlichen Auszahlungsdatensatz darstellt. Der Helfer kann seine Präferenz pro Einsatz
+   jederzeit ändern (vor und nach dem Termin), das ADMIN-`WorkRecord` bleibt die massgebliche
+   Klassifizierung. Dies setzt den bestehenden Grundsatz "Compensation type is chosen per work
+   record, not globally per person" (`CLAUDE.md`) erstmals in der Helfer-Selbstverwaltung um.
+2. **Selbstabmeldung mit Begründung im authentifizierten Profil.** Neuer Endpunkt
+   `POST /api/volunteer/signups/{id}/cancel`, ergänzend zum bereits bestehenden
+   token-basierten (unauthentifizierten) Abmeldelink. Verwendet dieselbe 8-Tage-Abmeldefrist
+   (`cancellation_deadline`) wie der bestehende Link-Flow. Der optionale Freitextgrund wird im
+   bereits vorhandenen `Signup.cancellation_reason`-Feld gespeichert (keine neue Spalte nötig);
+   ein `AuditEvent` wird geschrieben, da die Aktion – anders als der anonyme Link-Flow –
+   eindeutig einem eingeloggten Konto zurechenbar ist.
+3. **Kinder direkt im Profil verwalten.** Neue Endpunkte
+   `POST`/`PATCH`/`DELETE /api/volunteer/children` erlauben dem Helfer, `FamilyMember`-Datensätze
+   vom Typ `CHILD` innerhalb der eigenen Familie selbst anzulegen, umzubenennen und zu entfernen –
+   bisher gab es dafür keine Selbstverwaltung, nur die ADMIN-Familienverwaltung. Löschen ist ein
+   echtes Hard-Delete (kein Soft-Delete-Flag existiert für `FamilyMember`); alle referenzierenden
+   Fremdschlüssel (`Volunteer.compensation_family_member_id`, `Signup.credited_family_member_id`,
+   `WorkRecord.credited_family_member_id`) sind `ON DELETE SET NULL`, sodass das Löschen eines
+   Kindes historische Zuordnungen sicher auf "keine Zuordnung" zurücksetzt statt zu blockieren.
+
+**Abgrenzung:** Kein Soft-Delete/Reaktivierung für gelöschte Kinder. Die Selbstabmeldefrist ist
+identisch mit der bestehenden Regel des Link-Flows, nicht separat konfigurierbar. Die
+Helfer-eigene `Signup.compensation_type`-Präferenz hat keine Auswirkung auf bereits von ADMIN
+freigegebene oder ausbezahlte `WorkRecord`-Klassifizierungen (D-041 bleibt unverändert
+massgeblich für die Auszahlung).
+
+**Entschieden von:** Product Owner, 2026-08-16 (im Rahmen der Überarbeitung der Helferprofil-Seite
+angefordert).
