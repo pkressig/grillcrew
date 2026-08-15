@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, Clock3, Users, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { useOrganization } from "@/components/organization-provider";
+import type { PublicOrganization } from "@/lib/organization";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -326,6 +327,7 @@ export function OrganizationLanding() {
 
       <AccountModal
         mode={accountModal}
+        organization={organization}
         onClose={() => {
           setAccountModal(null);
           setPendingShiftId(null);
@@ -653,11 +655,13 @@ function SignupForm({
 
 function AccountModal({
   mode,
+  organization,
   onClose,
   onSuccess,
   onRegister,
 }: Readonly<{
   mode: "login" | null;
+  organization: PublicOrganization;
   onClose: () => void;
   onSuccess: () => void;
   onRegister: () => void;
@@ -685,16 +689,25 @@ function AccountModal({
             <X aria-hidden="true" className="h-5 w-5" />
           </button>
         </div>
-        <VolunteerLogin onSuccess={onSuccess} onSwitchToRegister={onRegister} />
+        <VolunteerLogin
+          organization={organization}
+          onSuccess={onSuccess}
+          onSwitchToRegister={onRegister}
+        />
       </div>
     </div>
   );
 }
 
 function VolunteerLogin({
+  organization,
   onSuccess,
   onSwitchToRegister,
-}: Readonly<{ onSuccess: () => void; onSwitchToRegister: () => void }>) {
+}: Readonly<{
+  organization: PublicOrganization;
+  onSuccess: () => void;
+  onSwitchToRegister: () => void;
+}>) {
   const [error, setError] = useState<string | null>(null);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -719,7 +732,10 @@ function VolunteerLogin({
 
   return (
     <form className="flex flex-col gap-4 p-5" onSubmit={submit}>
-      <h2 className="text-xl font-bold">Helfer-Login</h2>
+      <div className="flex items-center gap-3">
+        <OrganizationLogo organization={organization} className="h-10 w-10 rounded border" />
+        <h2 className="text-xl font-bold">Helfer-Login</h2>
+      </div>
       <label>
         E-Mail
         <input
