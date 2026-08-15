@@ -308,10 +308,10 @@ export function OrganizationLanding() {
       </header>
 
       {organization.theme.banner_url ? (
-        <div className="border-b bg-background">
+        <div className="border-b bg-background px-4 py-3">
           <Image
             alt={`${organization.name} Banner`}
-            className="mx-auto h-auto max-h-64 w-full object-cover"
+            className="mx-auto h-auto max-h-64 w-full max-w-4xl rounded-lg object-cover"
             height={533}
             src={organization.theme.banner_url}
             unoptimized
