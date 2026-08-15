@@ -312,7 +312,7 @@ export function OrganizationLanding() {
           <Image
             alt={`${organization.name} Banner`}
             className="mx-auto h-auto max-h-64 w-full object-cover"
-            height={256}
+            height={533}
             src={organization.theme.banner_url}
             unoptimized
             width={1600}
