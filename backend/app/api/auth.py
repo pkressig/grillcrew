@@ -38,7 +38,6 @@ from app.schemas.auth import (
     LogoutResponse,
     ResetPasswordRequest,
     ResetPasswordResponse,
-    VolunteerProfileResponse,
     VolunteerRegisterRequest,
     VolunteerRegisterResponse,
 )
@@ -158,26 +157,6 @@ def register_volunteer(
         organization_slug=organization.slug,
     )
     return VolunteerRegisterResponse(session=build_session_response(user))
-
-
-@router.get("/volunteer/profile", response_model=VolunteerProfileResponse)
-def volunteer_profile(
-    current_user: CurrentUser = Depends(get_current_user),  # noqa: B008
-    db: Session = Depends(get_db),  # noqa: B008
-) -> VolunteerProfileResponse:
-    volunteer = db.scalar(select(Volunteer).where(Volunteer.user_id == current_user.user.id))
-    if volunteer is None:
-        raise HTTPException(status_code=404, detail="volunteer profile not found")
-    return VolunteerProfileResponse(
-        first_name=volunteer.first_name,
-        last_name=volunteer.last_name,
-        phone=volunteer.phone_display,
-        email=volunteer.email_display,
-        compensation_preference=volunteer.compensation_preference,
-        compensation_family_member_id=str(volunteer.compensation_family_member_id)
-        if volunteer.compensation_family_member_id
-        else None,
-    )
 
 
 @router.post("/login", response_model=AuthSessionResponse)

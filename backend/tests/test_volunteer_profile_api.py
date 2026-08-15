@@ -30,7 +30,7 @@ from app.db.session import get_db
 from app.main import app
 from app.models.family import Family, FamilyMember, FamilyMemberType
 from app.models.identity import AuditEvent, User, UserStatus
-from app.models.organization import Organization, Theme
+from app.models.organization import Organization, OrganizationSettings, Theme
 from app.models.planning import (
     ClubYear,
     Event,
@@ -52,6 +52,7 @@ _TABLES = cast(
     [
         Theme.__table__,
         Organization.__table__,
+        OrganizationSettings.__table__,
         ClubYear.__table__,
         Season.__table__,
         Event.__table__,
@@ -160,6 +161,8 @@ def _seed(db_session: Session) -> Scenario:
     db_session.flush()
     organization = Organization(theme_id=theme.id, name="Org", slug="org", timezone="Europe/Zurich")
     db_session.add(organization)
+    db_session.flush()
+    db_session.add(OrganizationSettings(organization_id=organization.id))
     db_session.flush()
     club_year = ClubYear(
         organization_id=organization.id,
@@ -360,6 +363,8 @@ def test_get_profile_lists_signups_with_resolved_defaults_and_cancel_eligibility
     response = client.get("/api/volunteer/profile", headers=_headers())
     assert response.status_code == 200
     body = response.json()
+    assert body["organization"]["slug"] == "org"
+    assert body["organization"]["theme"]["primary_color"] == "#262626"
     assert len(body["upcoming_signups"]) == 2
     summary = next(
         s for s in body["upcoming_signups"] if s["id"] == str(scenario.upcoming_signup.id)

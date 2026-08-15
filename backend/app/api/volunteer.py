@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import _ensure_origin_and_host
 from app.api.dependencies import CurrentUser, get_current_user, validate_csrf
+from app.api.public import to_public_response
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.family import FamilyMember, FamilyMemberType
@@ -106,7 +107,9 @@ def _profile_response(volunteer: Volunteer, db: Session) -> VolunteerProfileResp
     member_name = _resolve_child_name(volunteer.compensation_family_member_id, family_id, db)
 
     organization = db.get(Organization, volunteer.organization_id)
-    timezone = organization.timezone if organization is not None else "UTC"
+    if organization is None:
+        raise HTTPException(status_code=500, detail="organization missing")
+    timezone = organization.timezone
 
     rows = db.execute(
         select(Signup, Shift)
@@ -161,6 +164,7 @@ def _profile_response(volunteer: Volunteer, db: Session) -> VolunteerProfileResp
         last_name=volunteer.last_name,
         phone=volunteer.phone_display,
         email=volunteer.email_display,
+        organization=to_public_response(organization),
         compensation_preference=volunteer.compensation_preference,
         compensation_family_member_id=(
             str(volunteer.compensation_family_member_id)
@@ -243,9 +247,10 @@ def cancel_own_signup(
     if signup.status != SignupStatus.ACTIVE or signup.outcome != SignupOutcome.OPEN:
         raise HTTPException(status_code=409, detail="signup cannot be cancelled")
     organization = db.get(Organization, volunteer.organization_id)
-    timezone = organization.timezone if organization is not None else "UTC"
+    if organization is None:
+        raise HTTPException(status_code=500, detail="organization missing")
     now = datetime.now(UTC)
-    if not can_self_cancel(shift.starts_at, timezone, now):
+    if not can_self_cancel(shift.starts_at, organization.timezone, now):
         raise HTTPException(status_code=409, detail="cancellation deadline passed")
     signup.status = SignupStatus.CANCELLED_BY_VOLUNTEER
     signup.cancelled_at = now

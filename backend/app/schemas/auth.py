@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.identity import StaffRole, UserStatus
 from app.models.planning import SignupOutcome, SignupStatus, VolunteerCompensation
+from app.schemas.organization import PublicOrganizationResponse
 
 
 class LoginRequest(BaseModel):  # type: ignore[explicit-any]
@@ -39,6 +40,7 @@ class VolunteerProfileResponse(BaseModel):  # type: ignore[explicit-any]
     last_name: str
     phone: str
     email: str
+    organization: PublicOrganizationResponse
     compensation_preference: VolunteerCompensation
     compensation_family_member_id: str | None
     compensation_family_member_name: str | None = None
