@@ -213,7 +213,7 @@ describe("OrganizationLanding", () => {
 
     it("has an icon-only close button with an accessible name that closes the modal", async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole("link", { name: "Registrieren" }));
+      fireEvent.click(await screen.findByRole("link", { name: "Login" }));
       const dialog = screen.getByRole("dialog");
       expect(dialog).toHaveAttribute("aria-hidden", "false");
       const closeButton = screen.getByRole("button", { name: "Schliessen" });
@@ -233,13 +233,12 @@ describe("OrganizationLanding", () => {
       expect(screen.getByRole("dialog", { hidden: true })).toHaveAttribute("aria-hidden", "true");
     });
 
-    it("keeps a typed registration draft across a close and reopen of the modal", async () => {
+    it("links Registrieren directly to the dedicated registration page", async () => {
       renderPage();
-      fireEvent.click(await screen.findByRole("link", { name: "Registrieren" }));
-      fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Mia" } });
-      fireEvent.click(screen.getByRole("button", { name: "Schliessen" }));
-      fireEvent.click(screen.getByRole("link", { name: "Registrieren" }));
-      await waitFor(() => expect(screen.getByLabelText("Vorname")).toHaveValue("Mia"));
+      expect(await screen.findByRole("link", { name: "Registrieren" })).toHaveAttribute(
+        "href",
+        "/register?org=example",
+      );
     });
   });
 });

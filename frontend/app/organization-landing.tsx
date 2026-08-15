@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronDown, Clock3, Users, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { useOrganization } from "@/components/organization-provider";
@@ -13,7 +14,6 @@ import { useAuth } from "@/components/auth-provider";
 import { LogoutButton } from "@/components/logout-button";
 import { GameDayList } from "@/components/game-day-list";
 import { apiBaseUrl } from "@/lib/api";
-import { RegisterForm } from "./register/register-form";
 import {
   fetchVolunteerProfile,
   type VolunteerProfile,
@@ -51,6 +51,7 @@ const dayFormatter = new Intl.DateTimeFormat("de-CH", { day: "2-digit", timeZone
 export function OrganizationLanding() {
   const organization = useOrganization();
   const auth = useAuth();
+  const router = useRouter();
   const [plan, setPlan] = useState<PublicPlan | null>(null);
   const [error, setError] = useState(false);
   const [view, setView] = useState<PlanView>("cards");
@@ -63,9 +64,8 @@ export function OrganizationLanding() {
   );
   const [volunteerProfile, setVolunteerProfile] = useState<VolunteerProfile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
-  const [accountModal, setAccountModal] = useState<"login" | "register" | null>(null);
+  const [accountModal, setAccountModal] = useState<"login" | null>(null);
   const [pendingShiftId, setPendingShiftId] = useState<string | null>(null);
-  const [registerOpened, setRegisterOpened] = useState(false);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   const storageKey = `grillcrew:public-plan-view:${organization.slug}`;
@@ -88,9 +88,10 @@ export function OrganizationLanding() {
     }
   }
 
-  function openRegister() {
-    setRegisterOpened(true);
-    setAccountModal("register");
+  function goToRegister() {
+    const params = new URLSearchParams({ org: organization.slug });
+    if (pendingShiftId) params.set("shift", pendingShiftId);
+    router.replace(`/register?${params.toString()}`);
   }
 
   function openSignup(shiftId: string) {
@@ -101,13 +102,34 @@ export function OrganizationLanding() {
 
   function handleAccountSuccess() {
     setAccountModal(null);
-    void auth.refresh().then(() => {
-      if (pendingShiftId) {
-        openSignup(pendingShiftId);
-        setPendingShiftId(null);
-      }
-    });
+    void auth.refresh();
   }
+
+  // A visitor sent to /register (or asked to log in) while trying to sign up for a
+  // shift returns here with ?shift=<id> in the URL, since a full page navigation
+  // loses in-memory state. Restore it into pendingShiftId and strip the query param
+  // so a refresh doesn't reopen it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const shiftId = params.get("shift");
+    if (!shiftId) return;
+    setPendingShiftId(shiftId);
+    params.delete("shift");
+    const nextSearch = params.toString();
+    router.replace(
+      `/${encodeURIComponent(organization.slug)}${nextSearch ? `?${nextSearch}` : ""}`,
+    );
+    // Runs once on mount to consume the redirect-carried query param.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Once authenticated (from either the login modal or a register-page return) with
+  // a shift still pending, open it — the single place that consumes pendingShiftId.
+  useEffect(() => {
+    if (!auth.isAuthenticated || !pendingShiftId) return;
+    openSignup(pendingShiftId);
+    setPendingShiftId(null);
+  }, [auth.isAuthenticated, pendingShiftId]);
 
   async function submitSignup(event: FormEvent<HTMLFormElement>, shiftId: string) {
     event.preventDefault();
@@ -293,16 +315,12 @@ export function OrganizationLanding() {
                 >
                   Login
                 </a>
-                <a
-                  href="#register"
+                <Link
+                  href={`/register?org=${encodeURIComponent(organization.slug)}`}
                   className={cn(buttonVariants(), "min-h-11")}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    openRegister();
-                  }}
                 >
                   Registrieren
-                </a>
+                </Link>
               </>
             )}
           </nav>
@@ -311,15 +329,12 @@ export function OrganizationLanding() {
 
       <AccountModal
         mode={accountModal}
-        registerOpened={registerOpened}
-        organization={organization}
         onClose={() => {
           setAccountModal(null);
           setPendingShiftId(null);
         }}
         onSuccess={handleAccountSuccess}
-        onRegister={openRegister}
-        onLogin={() => setAccountModal("login")}
+        onRegister={goToRegister}
       />
 
       <div className="mx-auto max-w-4xl space-y-4 px-3 py-4 sm:px-6 sm:py-8">
@@ -734,20 +749,14 @@ function SignupForm({
 
 function AccountModal({
   mode,
-  registerOpened,
-  organization,
   onClose,
   onSuccess,
   onRegister,
-  onLogin,
 }: Readonly<{
-  mode: "login" | "register" | null;
-  registerOpened: boolean;
-  organization: ReturnType<typeof useOrganization>;
+  mode: "login" | null;
   onClose: () => void;
   onSuccess: () => void;
   onRegister: () => void;
-  onLogin: () => void;
 }>) {
   return (
     <div
@@ -758,7 +767,7 @@ function AccountModal({
       role="dialog"
       aria-modal="true"
       aria-hidden={!mode}
-      aria-label={mode === "register" ? "Helfer-Registrierung" : "Helfer-Login"}
+      aria-label="Helfer-Login"
       onClick={(event) => event.target === event.currentTarget && onClose()}
     >
       <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-lg bg-background p-4">
@@ -772,19 +781,7 @@ function AccountModal({
             <X aria-hidden="true" className="h-5 w-5" />
           </button>
         </div>
-        <div className={mode === "register" ? undefined : "hidden"}>
-          {registerOpened ? (
-            <RegisterForm
-              organization={organization}
-              onSuccess={onSuccess}
-              onSwitchToLogin={onLogin}
-              variant="modal"
-            />
-          ) : null}
-        </div>
-        <div className={mode === "register" ? "hidden" : undefined}>
-          <VolunteerLogin onSuccess={onSuccess} onSwitchToRegister={onRegister} />
-        </div>
+        <VolunteerLogin onSuccess={onSuccess} onSwitchToRegister={onRegister} />
       </div>
     </div>
   );

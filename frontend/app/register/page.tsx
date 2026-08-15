@@ -6,8 +6,13 @@ export const dynamic = "force-dynamic";
 export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ org?: string }>;
+  searchParams?: Promise<{ org?: string; shift?: string }>;
 }) {
   const params = await searchParams;
-  return <RegisterForm organization={await fetchPublicOrganization(params?.org)} />;
+  return (
+    <RegisterForm
+      organization={await fetchPublicOrganization(params?.org)}
+      pendingShiftId={params?.shift ?? null}
+    />
+  );
 }

@@ -21,9 +21,8 @@ vi.mock("@/components/auth-provider", () => ({
   }),
 }));
 vi.mock("@/components/logout-button", () => ({ LogoutButton: () => <button>Logout</button> }));
-vi.mock("@/app/register/register-form", () => ({
-  RegisterForm: () => <div>Registrierungsformular</div>,
-}));
+const { replaceMock } = vi.hoisted(() => ({ replaceMock: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: replaceMock }) }));
 vi.mock("@/lib/public-plan", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/public-plan")>();
   return { ...actual, fetchPublicPlan: vi.fn(), createAuthenticatedSignup: vi.fn() };
@@ -147,7 +146,9 @@ describe("mobile public plan", () => {
     mockedPlan.mockReset().mockResolvedValue(plan);
     mockedProfile.mockReset().mockResolvedValue(profile);
     mockedSignup.mockReset();
+    replaceMock.mockReset();
     localStorage.clear();
+    window.history.replaceState({}, "", "/example");
   });
   afterEach(cleanup);
 
@@ -212,6 +213,25 @@ describe("mobile public plan", () => {
     expect(action).toHaveClass("min-h-11", "w-full");
     fireEvent.click(action);
     expect(screen.getByRole("dialog")).toHaveAccessibleName("Helfer-Login");
+  });
+
+  it("carries the pending shift when switching from login to registration", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Kompakte Liste" }));
+    fireEvent.click(screen.getByRole("button", { name: /Einsatz anmelden: Junioren/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Noch kein Konto? Jetzt registrieren" }));
+    expect(replaceMock).toHaveBeenCalledWith("/register?org=example&shift=s1");
+  });
+
+  it("restores a pending shift signup after returning from registration and opens it once authenticated", async () => {
+    window.history.pushState({}, "", "/example?shift=s1");
+    authState.isAuthenticated = true;
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: "Kompakte Liste" }));
+    await waitFor(() =>
+      expect(screen.getByRole("form", { name: /Eintragung für Junioren/ })).toBeInTheDocument(),
+    );
+    expect(replaceMock).toHaveBeenCalledWith("/example");
   });
 
   it("shows own upcoming signups only when authenticated and prevents duplicate signup", async () => {

@@ -74,14 +74,21 @@ export function RegisterForm({
   onSuccess,
   onSwitchToLogin,
   variant = "page",
+  pendingShiftId = null,
 }: Readonly<{
   organization: PublicOrganization;
   onSuccess?: () => void;
   onSwitchToLogin?: () => void;
   /** "modal" renders compactly for use inside the account dialog. */
   variant?: "page" | "modal";
+  /** A shift the visitor was trying to sign up for before being sent here to register. */
+  pendingShiftId?: string | null;
 }>) {
   const router = useRouter();
+  const backUrl = `/${encodeURIComponent(organization.slug)}`;
+  const successUrl = pendingShiftId
+    ? `${backUrl}?shift=${encodeURIComponent(pendingShiftId)}`
+    : backUrl;
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [fields, setFields] = useState<DraftFields>(() => readDraft(organization.slug));
@@ -129,7 +136,7 @@ export function RegisterForm({
       if (onSuccess) {
         onSuccess();
       } else {
-        router.replace(`/${encodeURIComponent(organization.slug)}`);
+        router.replace(successUrl);
       }
     } catch (caughtError) {
       const detail = caughtError instanceof Error ? caughtError.message : "";
@@ -152,6 +159,11 @@ export function RegisterForm({
       organization={organization}
       title="Helferkonto erstellen"
       embedded={variant === "modal"}
+      back={
+        variant === "page"
+          ? { label: "Zurück zur Übersicht", onClick: () => router.replace(backUrl) }
+          : undefined
+      }
     >
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <p className="text-sm text-muted-foreground">
@@ -259,11 +271,8 @@ export function RegisterForm({
             Bereits registriert? Anmelden
           </button>
         ) : (
-          <a
-            className="text-center text-sm underline"
-            href={`/login?org=${encodeURIComponent(organization.slug)}`}
-          >
-            Bereits registriert? Anmelden
+          <a className="text-center text-sm underline" href={successUrl}>
+            Bereits registriert? Zur Anmeldung
           </a>
         )}
       </form>
