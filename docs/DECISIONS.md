@@ -294,3 +294,21 @@ unberührt. Ein `PROPOSAL_CONFIRMATION_DELETED`-Audit-Ereignis mit Fenster-Schl�
 Anzahl stornierter Schichten und betroffener Anmeldungen (ohne PII) wird geschrieben.
 
 **Entschieden von:** Product Owner, 2026-08-12 (im Rahmen von Live-Tests der Kiosk-/Grill-Bestätigung angefordert).
+
+## D-048 – Organisationsspezifisches Erscheinungsbild (Theme)
+
+**Entscheid:** Jede Organisation erhält ein `Theme`-Datensatz mit `logo_url`, `banner_url`,
+`primary_color` und `secondary_color`, verwaltbar über `GET`/`PATCH
+/api/admin/{organization_slug}/settings/theme` (nur ADMIN). Diese Werte werden zur Laufzeit als
+CSS-Custom-Properties (`--primary`, `--secondary`) in die öffentlichen Helfer-Seiten (Einsatzplan,
+Login/Registrierung/Profil) injiziert – dasselbe Muster, das im Admin-Bereich bereits existiert.
+Logo und Banner werden per URL referenziert statt hochgeladen; ein Datei-Upload ist nicht Teil
+dieser Version. Es gibt weiterhin keinen organisationsspezifischen Code – Name, Logo, Banner und
+Farben kommen ausschliesslich aus der Datenbank pro Organisation.
+
+**Abgrenzung:** Kein Datei-Upload für Logo/Banner in dieser Version (nur URL-Eingabe). Kein
+automatisches Kontrastprüfen der gewählten Farben gegen Barrierefreiheitsvorgaben – das bleibt
+Aufgabe der eingebenden Person.
+
+**Entschieden von:** Product Owner, 2026-08-15 (angefordert im Rahmen des FC Thusis-Cazis
+Branding-Rollouts).

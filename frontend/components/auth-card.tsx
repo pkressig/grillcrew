@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 import type { PublicOrganization } from "@/lib/organization";
 import { OrganizationLogo } from "@/components/organization-logo";
@@ -29,6 +29,14 @@ export function AuthCard({
         "flex w-full flex-col gap-5",
         embedded ? undefined : "mx-auto min-h-dvh max-w-md justify-center px-4 py-8",
       )}
+      style={
+        organization
+          ? ({
+              "--primary": organization.theme.primary_color,
+              "--secondary": organization.theme.secondary_color,
+            } as CSSProperties)
+          : undefined
+      }
     >
       {back ? (
         <button

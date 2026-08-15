@@ -49,6 +49,15 @@ const catchallRule = {
   required_griller_count: 2,
 };
 
+const theme = {
+  id: "theme-1",
+  name: "Example Org",
+  logo_url: null,
+  banner_url: null,
+  primary_color: "#262626",
+  secondary_color: "#525252",
+};
+
 function session(role: StaffRole): AuthSession {
   return {
     user: {
@@ -95,6 +104,9 @@ function settingsFetch(role: StaffRole) {
       return Response.json(organizationSettings);
     if (url.endsWith("/settings/organization-settings") && method === "PATCH")
       return Response.json({ ...organizationSettings, ...JSON.parse(String(init?.body)) });
+    if (url.endsWith("/settings/theme") && method === "GET") return Response.json(theme);
+    if (url.endsWith("/settings/theme") && method === "PATCH")
+      return Response.json({ ...theme, ...JSON.parse(String(init?.body)) });
     if (url.endsWith("/settings/home-venues") && method === "GET")
       return Response.json([homeVenue]);
     if (url.endsWith("/settings/home-venues") && method === "POST")
@@ -186,6 +198,28 @@ describe("organization settings form", () => {
     expect(
       await screen.findByText("Organisationseinstellungen wurden gespeichert."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("theme (branding)", () => {
+  it("loads and saves the theme form", async () => {
+    const fetchMock = renderAdmin("ADMIN");
+    const logoInput = await screen.findByLabelText("Logo-URL");
+    expect(logoInput).toHaveValue("");
+    fireEvent.change(logoInput, { target: { value: "https://example.test/logo.png" } });
+    const form = logoInput.closest("form");
+    if (!form) throw new Error("theme form not found");
+    fireEvent.click(within(form).getByRole("button", { name: "Speichern" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith("/settings/theme") &&
+            (init as RequestInit | undefined)?.method === "PATCH",
+        ),
+      ).toBe(true),
+    );
+    expect(await screen.findByText("Erscheinungsbild wurde gespeichert.")).toBeInTheDocument();
   });
 });
 

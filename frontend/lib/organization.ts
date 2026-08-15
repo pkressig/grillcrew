@@ -5,6 +5,7 @@ export type PublicOrganization = {
   theme: {
     name: string;
     logo_url: string | null;
+    banner_url: string | null;
     primary_color: string;
     secondary_color: string;
   };
@@ -32,6 +33,7 @@ export const platformFallbackOrganization: PublicOrganization = {
   theme: {
     name: "Platform fallback",
     logo_url: null,
+    banner_url: null,
     primary_color: "#262626",
     secondary_color: "#525252",
   },

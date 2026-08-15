@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Clock3, Users, X } from "lucide-react";
@@ -252,7 +253,15 @@ export function OrganizationLanding() {
   };
 
   return (
-    <main className="min-h-dvh bg-muted/60 pb-10">
+    <main
+      className="min-h-dvh bg-muted/60 pb-10"
+      style={
+        {
+          "--primary": organization.theme.primary_color,
+          "--secondary": organization.theme.secondary_color,
+        } as CSSProperties
+      }
+    >
       <header
         className="border-b bg-background px-4 py-4"
         style={{ borderColor: organization.theme.secondary_color }}
@@ -297,6 +306,19 @@ export function OrganizationLanding() {
           </nav>
         </div>
       </header>
+
+      {organization.theme.banner_url ? (
+        <div className="border-b bg-background">
+          <Image
+            alt={`${organization.name} Banner`}
+            className="mx-auto h-auto max-h-64 w-full object-cover"
+            height={256}
+            src={organization.theme.banner_url}
+            unoptimized
+            width={1600}
+          />
+        </div>
+      ) : null}
 
       <AccountModal
         mode={accountModal}

@@ -11,14 +11,17 @@ import {
   loadCrewSizeRules,
   loadHomeVenues,
   loadOrganizationSettings,
+  loadTheme,
   reorderCrewSizeRules,
   updateCrewSizeRule,
   updateHomeVenue,
   updateOrganizationSettings,
+  updateTheme,
   type CrewSizeRule,
   type HomeVenue,
   type MenuType,
   type OrganizationSettings,
+  type Theme,
 } from "@/lib/settings";
 import { cn } from "@/lib/utils";
 import {
@@ -52,6 +55,12 @@ export function SettingsPanel({ org }: Readonly<{ org: string }>) {
         </a>
         <a
           className="min-h-11 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+          href="#theme-heading"
+        >
+          Erscheinungsbild
+        </a>
+        <a
+          className="min-h-11 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
           href="#coordination-time-heading"
         >
           Koordinationszeit
@@ -70,6 +79,7 @@ export function SettingsPanel({ org }: Readonly<{ org: string }>) {
         </a>
       </nav>
       <OrganizationSettingsSection org={org} />
+      <ThemeSection org={org} />
       <CoordinationTimeSection org={org} />
       <HomeVenuesSection org={org} />
       <CrewSizeRulesSection org={org} />
@@ -496,6 +506,132 @@ function OrganizationSettingsSection({ org }: Readonly<{ org: string }>) {
                 min={1}
                 required
                 defaultValue={settings.default_game_duration_minutes ?? 90}
+                disabled={busy}
+              />
+            </label>
+            <div className="sm:col-span-2">
+              <Button type="submit" disabled={busy}>
+                {busy ? "Wird gespeichert …" : "Speichern"}
+              </Button>
+            </div>
+          </form>
+        ) : null}
+        <FeedbackMessages error={error} success={success} />
+      </CardBody>
+    </Card>
+  );
+}
+
+function ThemeSection({ org }: Readonly<{ org: string }>) {
+  const [theme, setTheme] = useState<Theme | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      setTheme(await loadTheme(org));
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Das Erscheinungsbild konnte nicht geladen werden.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [org]);
+  useEffect(() => void refresh(), [refresh]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      setTheme(
+        await updateTheme(org, {
+          logo_url: String(data.get("logo_url") ?? "").trim() || null,
+          banner_url: String(data.get("banner_url") ?? "").trim() || null,
+          primary_color: String(data.get("primary_color")),
+          secondary_color: String(data.get("secondary_color")),
+        }),
+      );
+      setSuccess("Erscheinungsbild wurde gespeichert.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Das Erscheinungsbild konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="border-border/80" aria-labelledby="theme-heading">
+      <CardBody className="grid gap-4">
+        <div>
+          <h2 id="theme-heading" className="text-xl font-semibold">
+            Erscheinungsbild
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Logo, Banner und Vereinsfarben für die öffentlichen Helfer-Seiten.
+          </p>
+        </div>
+        {loading ? (
+          <p role="status">Erscheinungsbild wird geladen …</p>
+        ) : theme ? (
+          <form className="grid gap-3 sm:grid-cols-2" onSubmit={submit}>
+            <label className="grid gap-1 sm:col-span-2" htmlFor="theme-logo-url">
+              Logo-URL
+              <input
+                className={control}
+                id="theme-logo-url"
+                name="logo_url"
+                type="url"
+                maxLength={500}
+                placeholder="https://…"
+                defaultValue={theme.logo_url ?? ""}
+                disabled={busy}
+              />
+            </label>
+            <label className="grid gap-1 sm:col-span-2" htmlFor="theme-banner-url">
+              Banner-URL
+              <input
+                className={control}
+                id="theme-banner-url"
+                name="banner_url"
+                type="url"
+                maxLength={500}
+                placeholder="https://…"
+                defaultValue={theme.banner_url ?? ""}
+                disabled={busy}
+              />
+            </label>
+            <label className="grid gap-1" htmlFor="theme-primary-color">
+              Primärfarbe
+              <input
+                className="min-h-11 w-full rounded-md border bg-background p-1"
+                id="theme-primary-color"
+                name="primary_color"
+                type="color"
+                defaultValue={theme.primary_color}
+                disabled={busy}
+              />
+            </label>
+            <label className="grid gap-1" htmlFor="theme-secondary-color">
+              Sekundärfarbe
+              <input
+                className="min-h-11 w-full rounded-md border bg-background p-1"
+                id="theme-secondary-color"
+                name="secondary_color"
+                type="color"
+                defaultValue={theme.secondary_color}
                 disabled={busy}
               />
             </label>

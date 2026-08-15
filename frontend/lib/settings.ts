@@ -58,6 +58,17 @@ export type CrewSizeRuleUpdateInput = Partial<
   Omit<CrewSizeRule, "id" | "organization_id" | "sort_order" | "created_at" | "updated_at">
 >;
 
+export type Theme = {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  banner_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+};
+
+export type ThemeInput = Partial<Omit<Theme, "id" | "name">>;
+
 async function request<T>(path: string, init?: RequestInit, errorMessage?: string): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, { credentials: "include", ...init });
   if (!response.ok)
@@ -136,4 +147,18 @@ export const reorderCrewSizeRules = (org: string, orderedIds: string[]) =>
     `${base(org)}/crew-size-rules/reorder`,
     writeInit("POST", { ordered_ids: orderedIds }),
     "Die Reihenfolge konnte nicht gespeichert werden.",
+  );
+
+export const loadTheme = (org: string) =>
+  request<Theme>(
+    `${base(org)}/theme`,
+    undefined,
+    "Das Erscheinungsbild konnte nicht geladen werden.",
+  );
+
+export const updateTheme = (org: string, payload: ThemeInput) =>
+  request<Theme>(
+    `${base(org)}/theme`,
+    writeInit("PATCH", payload),
+    "Das Erscheinungsbild konnte nicht gespeichert werden.",
   );
