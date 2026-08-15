@@ -160,7 +160,8 @@ describe("mobile public plan", () => {
     expect(dayButton).toHaveAttribute("aria-expanded", "false");
     fireEvent.click(dayButton);
     expect(dayButton).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Junioren – FC Beispiel – FC Beta")).toBeInTheDocument();
+    expect(screen.getByText("Junioren")).toBeInTheDocument();
+    expect(screen.getByText("FC Beispiel – FC Beta")).toBeInTheDocument();
   });
 
   it("shows all games and their times in a single-open-day accordion", async () => {
@@ -168,24 +169,26 @@ describe("mobile public plan", () => {
     const firstDay = await screen.findByRole("button", { name: /Samstag, 05. September 2026/ });
     const secondDay = screen.getByRole("button", { name: /Sonntag, 06. September 2026/ });
     fireEvent.click(firstDay);
-    expect(screen.getByText("Junioren – FC Beispiel – FC Beta")).toBeInTheDocument();
-    expect(screen.getByText("Aktive – FC Beispiel – FC Gamma")).toBeInTheDocument();
+    expect(screen.getByText("Junioren")).toBeInTheDocument();
+    expect(screen.getByText("FC Beispiel – FC Beta")).toBeInTheDocument();
+    expect(screen.getByText("Aktive")).toBeInTheDocument();
+    expect(screen.getByText("FC Beispiel – FC Gamma")).toBeInTheDocument();
     const games = within(screen.getByRole("region", { name: "Spiele an diesem Tag" }));
     expect(games.getAllByRole("listitem")).toHaveLength(3);
     expect(games.getByText("07:00")).toBeInTheDocument();
     expect(games.getByText("08:00")).toBeInTheDocument();
     expect(games.getByText("11:00")).toBeInTheDocument();
     expect(games.getAllByRole("listitem").map((item) => item.textContent)).toEqual([
-      "07:00CupFrauen – FC Beispiel – FC Alpha",
-      "08:00MeisterschaftJunioren – FC Beispiel – FC Beta",
-      "11:00CupAktive – FC Beispiel – FC Gamma",
+      "07:00FrauenFC Beispiel – FC Alpha",
+      "08:00JuniorenFC Beispiel – FC Beta",
+      "11:00AktiveFC Beispiel – FC Gamma",
     ]);
     expect(screen.getAllByRole("button", { name: /Einsatz anmelden:/ })).toHaveLength(1);
     expect(screen.queryByText("Platz A")).not.toBeInTheDocument();
     fireEvent.click(secondDay);
     expect(firstDay).toHaveAttribute("aria-expanded", "false");
     expect(secondDay).toHaveAttribute("aria-expanded", "true");
-    expect(screen.queryByText("Junioren – FC Beispiel – FC Beta")).not.toBeInTheDocument();
+    expect(screen.queryByText("Junioren")).not.toBeInTheDocument();
   });
 
   it("shows shift capacity, status and 44px signup actions once its day is expanded", async () => {

@@ -80,9 +80,9 @@ describe("Kiosk planning", () => {
         .getAllByRole("listitem")
         .map((item) => item.textContent),
     ).toEqual([
-      "11:00Junioren A – FC Heim – FC Beispiel",
-      "12:30Frauen – FC Heim – FC Test",
-      "14:00Aktive – FC Heim – FC Muster",
+      "11:00Junioren AFC Heim – FC Beispiel",
+      "12:30FrauenFC Heim – FC Test",
+      "14:00AktiveFC Heim – FC Muster",
     ]);
     expect(within(section).queryByText("Sportplatz")).not.toBeInTheDocument();
     expect(within(section).queryByText("Nebenplatz")).not.toBeInTheDocument();

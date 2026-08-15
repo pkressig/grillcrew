@@ -1,11 +1,8 @@
-import { Badge } from "@/components/ui/badge";
-
 export type GameDayListItem = {
   id: string;
   title: string;
   matchDescription?: string | null;
   startsAt: string | null;
-  type?: string | null;
 };
 
 export function GameDayList({
@@ -26,7 +23,7 @@ export function GameDayList({
       <ul className="mt-2 grid gap-2">
         {sortedGames.map((game) => (
           <li key={game.id} className="rounded-md bg-muted p-3 text-sm">
-            <div className="flex items-center gap-3">
+            <div className="flex items-baseline gap-2">
               <span className="shrink-0 font-semibold tabular-nums">
                 {game.startsAt ? (
                   <time dateTime={game.startsAt}>{formatTime(game.startsAt, timezone)}</time>
@@ -34,12 +31,11 @@ export function GameDayList({
                   <span className="text-muted-foreground">Zeit nicht angegeben</span>
                 )}
               </span>
-              {game.type ? <Badge variant="neutral">{game.type}</Badge> : null}
+              <span className="font-semibold">{game.title}</span>
             </div>
-            <p className="mt-1 font-medium">
-              {game.title}
-              {game.matchDescription ? ` – ${game.matchDescription}` : null}
-            </p>
+            {game.matchDescription ? (
+              <p className="mt-1 text-muted-foreground">{game.matchDescription}</p>
+            ) : null}
           </li>
         ))}
       </ul>

@@ -446,7 +446,6 @@ function Day({
                 id: event.id,
                 title: event.title,
                 matchDescription: event.public_description,
-                type: event.event_type,
                 startsAt: event.kickoff_time ?? earliestShiftStart(event),
               }))}
             />
