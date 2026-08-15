@@ -14,6 +14,7 @@ from app.services.auth import (
     send_volunteer_registration_email,
 )
 from app.services.email.base import EmailMessage, EmailSender, EmailSendError
+from app.services.email.branding import OrganizationBranding
 
 RAW_TOKEN = "raw-reset-token-that-must-not-be-stored-or-logged"
 
@@ -132,6 +133,39 @@ def test_dispatch_volunteer_registration_email_sends_via_configured_sender(
 
     assert len(sender.sent) == 1
     assert "https://grillcrew.vercel.app/fc-beispiel" in sender.sent[0].body_text
+
+
+def test_send_volunteer_registration_email_applies_organization_branding() -> None:
+    sender = RecordingSender()
+    branding = OrganizationBranding(
+        organization_name="FC Beispiel",
+        organization_short_name="FCB",
+        logo_url="https://grillcrew.vercel.app/branding/fc-beispiel-logo.png",
+        banner_url=None,
+        primary_color="#112233",
+        secondary_color="#445566",
+    )
+
+    send_volunteer_registration_email(
+        sender,
+        recipient="mia@example.test",
+        first_name="Mia",
+        organization_name="FC Beispiel",
+        organization_slug="fc-beispiel",
+        frontend_public_url="https://grillcrew.vercel.app",
+        branding=branding,
+    )
+
+    message = sender.sent[0]
+    assert message.from_display_name == "FCB Grill Helfer"
+    assert message.body_html is not None
+    assert "FC Beispiel" in message.body_html
+    assert (
+        '<img src="https://grillcrew.vercel.app/branding/fc-beispiel-logo.png"' in message.body_html
+    )
+    assert message.body_text is not None
+    assert "GrillCrew-Plattform im Auftrag von FC Beispiel" in message.body_html
+    assert "GrillCrew-Plattform im Auftrag von FC Beispiel" in message.body_text
 
 
 def test_dispatch_volunteer_registration_email_never_raises_when_sender_unavailable(

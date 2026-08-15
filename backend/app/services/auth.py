@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import logging
 import secrets
 import uuid
@@ -35,6 +36,12 @@ from app.models.organization import Organization, OrganizationSettings
 from app.models.planning import Volunteer
 from app.schemas.auth import AuthMembershipResponse, AuthSessionResponse, AuthUserResponse
 from app.services.email.base import EmailMessage, EmailSender, EmailSendError
+from app.services.email.branding import (
+    OrganizationBranding,
+    render_branded_email,
+    resolve_organization_branding,
+    sender_display_name,
+)
 from app.services.email.factory import build_email_sender
 
 logger = logging.getLogger(__name__)
@@ -77,6 +84,7 @@ class PasswordResetIssue:
     recipient: str
     raw_token: str
     organization_slug: str | None
+    branding: OrganizationBranding | None
 
 
 class LoginService:
@@ -215,11 +223,35 @@ class PasswordResetService:
             )
         )
         self._db.commit()
-        organization_slug = self._resolve_organization_slug(user.id)
+        organization = self._resolve_organization(user.id)
         return PasswordResetIssue(
             recipient=user.email_normalized,
             raw_token=raw_token,
-            organization_slug=organization_slug,
+            organization_slug=organization.slug if organization is not None else None,
+            branding=(
+                resolve_organization_branding(
+                    self._db, organization, frontend_public_url=self._settings.frontend_public_url
+                )
+                if organization is not None
+                else None
+            ),
+        )
+
+    def _resolve_organization(self, user_id: uuid.UUID) -> Organization | None:
+        """Resolve the organization behind a password-reset request, read-only.
+
+        `PasswordResetToken` intentionally carries no organization reference (that column
+        stays untouched here). A user's `Volunteer` record already links to exactly one
+        `Organization` (unique `Volunteer.user_id`), so that join is used instead of adding
+        any new stored reference. Staff-only users (no `Volunteer` row, e.g. an admin
+        resetting their own password) resolve to `None` rather than guessing among their
+        organizations, so the reset link/email fall back to generic, unbranded behavior.
+        """
+        volunteer = self._db.scalar(select(Volunteer).where(Volunteer.user_id == user_id))
+        if volunteer is None:
+            return None
+        return self._db.scalar(
+            select(Organization).where(Organization.id == volunteer.organization_id)
         )
 
     def reset_password(
@@ -262,15 +294,6 @@ class PasswordResetService:
         session = issue_session(db=self._db, user=token.user, settings=self._settings, now=now)
         self._db.commit()
         return session, build_session_response(token.user)
-
-    def _resolve_organization_slug(self, user_id: uuid.UUID) -> str | None:
-        volunteer = self._db.scalar(select(Volunteer).where(Volunteer.user_id == user_id))
-        if volunteer is None:
-            return None
-        organization = self._db.scalar(
-            select(Organization).where(Organization.id == volunteer.organization_id)
-        )
-        return organization.slug if organization is not None else None
 
     def _resolve_password_minimum_length(self, user_id: uuid.UUID) -> int:
         volunteer = self._db.scalar(select(Volunteer).where(Volunteer.user_id == user_id))
@@ -343,7 +366,12 @@ def hash_password_reset_token(raw_token: str) -> str:
 
 
 def dispatch_password_reset_email(
-    settings: Settings, *, recipient: str, raw_token: str, organization_slug: str | None
+    settings: Settings,
+    *,
+    recipient: str,
+    raw_token: str,
+    organization_slug: str | None,
+    branding: OrganizationBranding | None = None,
 ) -> None:
     """Build the configured `EmailSender` and send, deferred until after the response.
 
@@ -364,6 +392,7 @@ def dispatch_password_reset_email(
         raw_token=raw_token,
         organization_slug=organization_slug,
         frontend_public_url=settings.frontend_public_url,
+        branding=branding,
     )
 
 
@@ -374,19 +403,35 @@ def send_password_reset_email(
     raw_token: str,
     organization_slug: str | None,
     frontend_public_url: str,
+    branding: OrganizationBranding | None = None,
 ) -> None:
     subject = "Passwort zurücksetzen"
     reset_url = f"{frontend_public_url}/reset-password/{raw_token}"
     if organization_slug:
         reset_url = f"{reset_url}?org={organization_slug}"
+    body_text = (
+        "Für dein Konto wurde ein neues Passwort angefordert.\n\n"
+        f"Neues Passwort festlegen: {reset_url}\n\n"
+        "Falls du das nicht angefordert hast, kannst du diese E-Mail ignorieren."
+    )
+    body_html = (
+        "<p>Für dein Konto wurde ein neues Passwort angefordert.</p>"
+        "<p>Falls du das nicht angefordert hast, kannst du diese E-Mail ignorieren.</p>"
+    )
+    content = render_branded_email(
+        branding=branding,
+        heading=subject,
+        body_html=body_html,
+        body_text=body_text,
+        cta_label="Neues Passwort festlegen",
+        cta_url=reset_url,
+    )
     message = EmailMessage(
         to=recipient,
         subject=subject,
-        body_text=(
-            "Für dein Konto wurde ein neues Passwort angefordert.\n\n"
-            f"Neues Passwort festlegen: {reset_url}\n\n"
-            "Falls du das nicht angefordert hast, kannst du diese E-Mail ignorieren."
-        ),
+        body_text=content.text,
+        body_html=content.html,
+        from_display_name=sender_display_name(branding),
     )
     try:
         sender.send(message)
@@ -401,6 +446,7 @@ def dispatch_volunteer_registration_email(
     first_name: str,
     organization_name: str,
     organization_slug: str,
+    branding: OrganizationBranding | None = None,
 ) -> None:
     """Build the configured `EmailSender` and send, deferred until after the response.
 
@@ -419,6 +465,7 @@ def dispatch_volunteer_registration_email(
         organization_name=organization_name,
         organization_slug=organization_slug,
         frontend_public_url=settings.frontend_public_url,
+        branding=branding,
     )
 
 
@@ -430,18 +477,36 @@ def send_volunteer_registration_email(
     organization_name: str,
     organization_slug: str,
     frontend_public_url: str,
+    branding: OrganizationBranding | None = None,
 ) -> None:
     subject = f"Willkommen bei {organization_name}"
     plan_url = f"{frontend_public_url}/{organization_slug}"
+    body_text = (
+        f"Hallo {first_name}\n\n"
+        f"Dein Helferkonto bei {organization_name} wurde erstellt. Melde dich mit deiner "
+        "E-Mail-Adresse und deinem Passwort an, um dich für Einsätze einzutragen.\n\n"
+        f"Zum Einsatzplan: {plan_url}"
+    )
+    body_html = (
+        f"<p>Hallo {html.escape(first_name)}</p>"
+        f"<p>Dein Helferkonto bei {html.escape(organization_name)} wurde erstellt. Melde dich "
+        "mit deiner E-Mail-Adresse und deinem Passwort an, um dich für Einsätze "
+        "einzutragen.</p>"
+    )
+    content = render_branded_email(
+        branding=branding,
+        heading=subject,
+        body_html=body_html,
+        body_text=body_text,
+        cta_label="Zum Einsatzplan",
+        cta_url=plan_url,
+    )
     message = EmailMessage(
         to=recipient,
         subject=subject,
-        body_text=(
-            f"Hallo {first_name}\n\n"
-            f"Dein Helferkonto bei {organization_name} wurde erstellt. Melde dich mit deiner "
-            "E-Mail-Adresse und deinem Passwort an, um dich für Einsätze einzutragen.\n\n"
-            f"Zum Einsatzplan: {plan_url}"
-        ),
+        body_text=content.text,
+        body_html=content.html,
+        from_display_name=sender_display_name(branding),
     )
     try:
         sender.send(message)

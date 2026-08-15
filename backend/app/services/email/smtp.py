@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import smtplib
 from dataclasses import dataclass
+from email.headerregistry import Address
 from email.message import EmailMessage as MimeEmailMessage
 
 from app.services.email.base import EmailMessage, EmailSender, EmailSendError
@@ -28,10 +29,12 @@ class SmtpEmailSender(EmailSender):
 
     def send(self, message: EmailMessage) -> None:
         mime_message = MimeEmailMessage()
-        mime_message["From"] = self._config.from_address
+        mime_message["From"] = self._build_from_header(message.from_display_name)
         mime_message["To"] = message.to
         mime_message["Subject"] = message.subject
         mime_message.set_content(message.body_text)
+        if message.body_html:
+            mime_message.add_alternative(message.body_html, subtype="html")
 
         try:
             with smtplib.SMTP(self._config.host, self._config.port, timeout=10) as client:
@@ -51,3 +54,12 @@ class SmtpEmailSender(EmailSender):
             raise EmailSendError(f"failed to send email to {message.to}") from exc
 
         logger.info("email sent to=%s subject=%s", message.to, message.subject)
+
+    def _build_from_header(self, from_display_name: str | None) -> str | Address:
+        """Build the From header: the address stays platform-wide (D-040); only an optional
+        per-organization display name is layered on top, via `Address` for RFC 2047/5322-safe
+        encoding of non-ASCII names (never hand-rolled string concatenation).
+        """
+        if not from_display_name:
+            return self._config.from_address
+        return Address(display_name=from_display_name, addr_spec=self._config.from_address)

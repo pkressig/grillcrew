@@ -465,11 +465,19 @@ def test_forgot_password_returns_generic_success_and_sends_for_eligible_user(
         def request_reset(self, *, email: str) -> object:
             assert email == "user@example.test"
             return SimpleNamespace(
-                recipient=email, raw_token="raw-reset-token", organization_slug=None
+                recipient=email,
+                raw_token="raw-reset-token",
+                organization_slug=None,
+                branding=None,
             )
 
     def fake_dispatch(
-        _settings: object, *, recipient: str, raw_token: str, organization_slug: str | None
+        _settings: object,
+        *,
+        recipient: str,
+        raw_token: str,
+        organization_slug: str | None,
+        branding: object = None,
     ) -> None:
         sent.append((recipient, raw_token))
 
@@ -526,7 +534,9 @@ def test_forgot_password_email_failure_still_returns_generic_success(
             pass
 
         def request_reset(self, *, email: str) -> object:
-            return SimpleNamespace(recipient=email, raw_token=raw_token, organization_slug=None)
+            return SimpleNamespace(
+                recipient=email, raw_token=raw_token, organization_slug=None, branding=None
+            )
 
     class FailingSender:
         def send(self, _message: object) -> None:
@@ -570,7 +580,9 @@ def test_forgot_password_returns_generic_success_even_when_email_sender_unavaila
             pass
 
         def request_reset(self, *, email: str) -> object:
-            return SimpleNamespace(recipient=email, raw_token=raw_token, organization_slug=None)
+            return SimpleNamespace(
+                recipient=email, raw_token=raw_token, organization_slug=None, branding=None
+            )
 
     def _raise_sender_unavailable(_settings: object) -> None:
         raise ValueError("SMTP_HOST must be configured outside development/test")

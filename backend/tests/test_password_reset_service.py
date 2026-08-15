@@ -18,7 +18,7 @@ from app.core.security.password import (
     verify_password,
 )
 from app.models.identity import AuditEvent, PasswordResetToken, User, UserStatus
-from app.models.organization import Organization, OrganizationSettings
+from app.models.organization import Organization, OrganizationSettings, Theme
 from app.models.planning import Volunteer
 from app.services.auth import (
     InvalidPasswordResetTokenError,
@@ -28,6 +28,7 @@ from app.services.auth import (
     send_password_reset_email,
 )
 from app.services.email.base import EmailMessage, EmailSender, EmailSendError
+from app.services.email.branding import OrganizationBranding
 
 RAW_TOKEN = "raw-reset-token-that-must-not-be-stored-or-logged"
 AddedT = TypeVar("AddedT")
@@ -59,6 +60,9 @@ def test_forgot_password_creates_hashed_token_only_for_active_user(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    # Second scalar() call is the Volunteer lookup used to resolve both the org slug (for the
+    # reset-link/page branding) and the org branding (for the email); None here means this
+    # user has no Volunteer record (e.g. staff-only), so both fall back to generic behavior.
     db = FakeSession(scalar_values=[user, None])
     monkeypatch.setattr("app.services.auth.secrets.token_urlsafe", lambda _bytes: RAW_TOKEN)
 
@@ -70,6 +74,7 @@ def test_forgot_password_creates_hashed_token_only_for_active_user(
     assert issue.recipient == "user@example.test"
     assert issue.raw_token == RAW_TOKEN
     assert issue.organization_slug is None
+    assert issue.branding is None
     added_token = _only_added(db, PasswordResetToken)
     assert added_token.user_id == user.id
     assert added_token.token_hash == hash_password_reset_token(RAW_TOKEN)
@@ -84,8 +89,11 @@ def test_forgot_password_resolves_organization_slug_for_a_linked_volunteer(
 ) -> None:
     user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
     volunteer = Volunteer(id=uuid.uuid4(), organization_id=uuid.uuid4(), user_id=user.id)
-    organization = Organization(id=volunteer.organization_id, slug="example-club")
-    db = FakeSession(scalar_values=[user, volunteer, organization])
+    organization = Organization(
+        id=volunteer.organization_id, theme_id=uuid.uuid4(), slug="example-club"
+    )
+    theme = Theme(id=organization.theme_id, name="Theme")
+    db = FakeSession(scalar_values=[user, volunteer, organization, theme])
     monkeypatch.setattr("app.services.auth.secrets.token_urlsafe", lambda _bytes: RAW_TOKEN)
 
     issue = PasswordResetService(cast(Session, db), Settings()).request_reset(
@@ -94,6 +102,43 @@ def test_forgot_password_resolves_organization_slug_for_a_linked_volunteer(
 
     assert issue is not None
     assert issue.organization_slug == "example-club"
+
+
+def test_forgot_password_resolves_organization_branding_via_volunteer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A volunteer's password-reset email should carry their organization's branding, resolved
+    read-only via the existing Volunteer -> Organization link (no PasswordResetToken column
+    added or changed for this).
+    """
+    user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    volunteer = Volunteer(id=uuid.uuid4(), organization_id=uuid.uuid4(), user_id=user.id)
+    organization = Organization(
+        id=volunteer.organization_id,
+        theme_id=uuid.uuid4(),
+        name="FC Thusis-Cazis",
+        short_name="FCTC",
+        slug="fctc",
+    )
+    theme = Theme(
+        id=organization.theme_id,
+        name="FCTC Theme",
+        logo_url="/branding/fctc-logo.png",
+        primary_color="#123456",
+        secondary_color="#abcdef",
+    )
+    db = FakeSession(scalar_values=[user, volunteer, organization, theme])
+    monkeypatch.setattr("app.services.auth.secrets.token_urlsafe", lambda _bytes: RAW_TOKEN)
+
+    issue = PasswordResetService(cast(Session, db), Settings()).request_reset(
+        email="user@example.test"
+    )
+
+    assert issue is not None
+    assert issue.branding is not None
+    assert issue.branding.organization_name == "FC Thusis-Cazis"
+    assert issue.branding.organization_short_name == "FCTC"
+    assert issue.branding.primary_color == "#123456"
 
 
 @pytest.mark.parametrize("status", [UserStatus.DISABLED, UserStatus.INVITED])
@@ -285,6 +330,62 @@ def test_dispatch_password_reset_email_never_raises_or_logs_token_when_sender_un
 
     assert RAW_TOKEN not in caplog.text
     assert "password reset email sender unavailable" in caplog.text
+
+
+def test_send_password_reset_email_applies_organization_branding() -> None:
+    sender = RecordingSender()
+    branding = OrganizationBranding(
+        organization_name="FC Thusis-Cazis",
+        organization_short_name="FCTC",
+        logo_url="https://crew.example.test/branding/fctc-logo.png",
+        banner_url=None,
+        primary_color="#123456",
+        secondary_color="#abcdef",
+    )
+
+    send_password_reset_email(
+        sender,
+        recipient="user@example.test",
+        raw_token=RAW_TOKEN,
+        organization_slug="fctc",
+        frontend_public_url="https://crew.example.test",
+        branding=branding,
+    )
+
+    assert len(sender.sent) == 1
+    message = sender.sent[0]
+    assert message.from_display_name == "FCTC Grill Helfer"
+    assert message.body_html is not None
+    assert "FC Thusis-Cazis" in message.body_html
+    assert '<img src="https://crew.example.test/branding/fctc-logo.png"' in message.body_html
+    assert RAW_TOKEN in message.body_text
+    assert "GrillCrew-Plattform im Auftrag von FC Thusis-Cazis" in message.body_html
+    assert "GrillCrew-Plattform im Auftrag von FC Thusis-Cazis" in message.body_text
+
+
+def test_send_password_reset_email_uses_generic_branding_when_none_resolved() -> None:
+    sender = RecordingSender()
+
+    send_password_reset_email(
+        sender,
+        recipient="user@example.test",
+        raw_token=RAW_TOKEN,
+        organization_slug=None,
+        frontend_public_url="https://crew.example.test",
+        branding=None,
+    )
+
+    assert sender.sent[0].from_display_name == "GrillCrew"
+    assert sender.sent[0].body_html is not None
+    assert "<img" not in sender.sent[0].body_html
+
+
+class RecordingSender(EmailSender):
+    def __init__(self) -> None:
+        self.sent: list[EmailMessage] = []
+
+    def send(self, message: EmailMessage) -> None:
+        self.sent.append(message)
 
 
 def _user(*, status: UserStatus, password_hash: str | None) -> User:

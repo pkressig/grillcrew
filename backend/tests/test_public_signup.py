@@ -75,6 +75,7 @@ def test_public_signup_returns_safe_summary(
     monkeypatch.setattr(public, "resolve_organization", lambda *_args: organization)
     monkeypatch.setattr(public, "PublicSignupService", FakeService)
     monkeypatch.setattr(public, "signup_rate_limiter", InMemoryRateLimiter())
+    monkeypatch.setattr(public, "resolve_organization_branding", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         public,
         "dispatch_signup_confirmation_email",

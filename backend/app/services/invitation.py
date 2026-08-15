@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import logging
 import secrets
 from dataclasses import dataclass
@@ -19,6 +20,12 @@ from app.models.identity import AuditEvent, Invitation, StaffMembership, StaffRo
 from app.models.organization import Organization
 from app.services.auth import normalize_email
 from app.services.email.base import EmailMessage, EmailSender, EmailSendError
+from app.services.email.branding import (
+    OrganizationBranding,
+    render_branded_email,
+    resolve_organization_branding,
+    sender_display_name,
+)
 from app.services.email.factory import build_email_sender
 
 logger = logging.getLogger(__name__)
@@ -38,6 +45,7 @@ class InvitationIssue:
     recipient: str
     organization_name: str
     raw_token: str
+    branding: OrganizationBranding | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +108,9 @@ class InvitationService:
             recipient=user.email_normalized,
             organization_name=organization.name,
             raw_token=raw_token,
+            branding=resolve_organization_branding(
+                self._db, organization, frontend_public_url=self._settings.frontend_public_url
+            ),
         )
 
     def preview(self, *, raw_token: str) -> InvitationPreview:
@@ -209,6 +220,7 @@ def dispatch_invitation_email(
     recipient: str,
     organization_name: str,
     raw_token: str,
+    branding: OrganizationBranding | None = None,
 ) -> None:
     try:
         sender = build_email_sender(settings)
@@ -220,6 +232,7 @@ def dispatch_invitation_email(
         recipient=recipient,
         organization_name=organization_name,
         raw_token=raw_token,
+        branding=branding,
     )
 
 
@@ -229,15 +242,29 @@ def send_invitation_email(
     recipient: str,
     organization_name: str,
     raw_token: str,
+    branding: OrganizationBranding | None = None,
 ) -> None:
     subject = f"Invitation to {organization_name}"
+    body_text = (
+        f"You have been invited to {organization_name}.\n\n"
+        f"Open /invite/{raw_token} to accept the invitation."
+    )
+    body_html = (
+        f"<p>You have been invited to {html.escape(organization_name)}.</p>"
+        f"<p>Open <code>/invite/{html.escape(raw_token)}</code> to accept the invitation.</p>"
+    )
+    content = render_branded_email(
+        branding=branding,
+        heading=subject,
+        body_html=body_html,
+        body_text=body_text,
+    )
     message = EmailMessage(
         to=recipient,
         subject=subject,
-        body_text=(
-            f"You have been invited to {organization_name}.\n\n"
-            f"Open /invite/{raw_token} to accept the invitation."
-        ),
+        body_text=content.text,
+        body_html=content.html,
+        from_display_name=sender_display_name(branding),
     )
     try:
         sender.send(message)

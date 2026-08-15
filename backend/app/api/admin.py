@@ -54,5 +54,6 @@ def create_invitation(
         recipient=issue.recipient,
         organization_name=issue.organization_name,
         raw_token=issue.raw_token,
+        branding=issue.branding,
     )
     return CreateInvitationResponse()

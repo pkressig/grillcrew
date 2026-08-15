@@ -8,6 +8,7 @@ import pytest
 
 from app.core.config import AppEnv, Settings
 from app.services.email.base import EmailMessage, EmailSendError
+from app.services.email.branding import OrganizationBranding
 from app.services.signup_confirmation import (
     dispatch_signup_confirmation_email,
     send_signup_confirmation_email,
@@ -66,6 +67,33 @@ def test_confirmation_message_contains_local_details_and_absolute_links() -> Non
     assert "https://crew.example.test/example" in message.body_text
     assert f"https://crew.example.test/example/manage-signup/{TOKEN}" in message.body_text
     assert "nur für berechtigte Verantwortliche sichtbar" in message.body_text
+
+
+def test_confirmation_email_applies_organization_branding() -> None:
+    sender = RecordingSender()
+    branding = OrganizationBranding(
+        organization_name="Example Organization",
+        organization_short_name="EXO",
+        logo_url="https://crew.example.test/branding/example-logo.png",
+        banner_url=None,
+        primary_color="#0a0a0a",
+        secondary_color="#f0f0f0",
+    )
+
+    send_signup_confirmation_email(
+        sender,
+        settings=Settings(frontend_public_url="https://crew.example.test/"),
+        branding=branding,
+        **email_kwargs(),  # type: ignore[arg-type]
+    )
+
+    message = sender.messages[0]
+    assert message.from_display_name == "EXO Grill Helfer"
+    assert message.body_html is not None
+    assert "Example Organization" in message.body_html
+    assert '<img src="https://crew.example.test/branding/example-logo.png"' in message.body_html
+    assert "GrillCrew-Plattform im Auftrag von Example Organization" in message.body_html
+    assert "GrillCrew-Plattform im Auftrag von Example Organization" in message.body_text
 
 
 def test_sender_failure_is_contained_without_logging_management_token(

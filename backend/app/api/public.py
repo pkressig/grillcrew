@@ -31,6 +31,7 @@ from app.schemas.planning import (
     PublicSignupResponse,
     PublicSignupSummary,
 )
+from app.services.email.branding import resolve_organization_branding
 from app.services.organization_context import (
     OrganizationLookup,
     build_organization_lookup,
@@ -221,6 +222,9 @@ def public_signup(
         organization_timezone=organization.timezone,
         volunteer_public_name=signup.public_name_snapshot,
         management_token=created.management_token,
+        branding=resolve_organization_branding(
+            db, organization, frontend_public_url=get_settings().frontend_public_url
+        ),
     )
     return PublicSignupResponse(
         message="Du bist eingetragen.",
@@ -279,6 +283,9 @@ def authenticated_signup(
         organization_timezone=organization.timezone,
         volunteer_public_name=signup.public_name_snapshot,
         management_token=created.management_token,
+        branding=resolve_organization_branding(
+            db, organization, frontend_public_url=get_settings().frontend_public_url
+        ),
     )
     return PublicSignupResponse(
         message="Du bist eingetragen.",

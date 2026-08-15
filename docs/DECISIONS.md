@@ -349,3 +349,33 @@ massgeblich für die Auszahlung).
 
 **Entschieden von:** Product Owner, 2026-08-16 (im Rahmen der Überarbeitung der Helferprofil-Seite
 angefordert).
+
+## D-051 – Organisationsspezifisches Branding transaktionaler E-Mails
+
+**Entscheid:** Alle vier transaktionalen E-Mails (Passwort-Reset, Helfer-Registrierung,
+Staff-Einladung, Anmeldebestätigung) werden neu als HTML mit reinem Text-Fallback versendet
+(`EmailMessage.body_html`, zusätzlich zum weiterhin gepflegten `body_text`); `SmtpEmailSender`
+baut daraus eine korrekte `multipart/alternative`-Nachricht über `email.message.EmailMessage`
+(`set_content` + `add_alternative`), sodass reine Text-Clients weiterhin lesbar bleiben. Ein
+gemeinsamer Layout-Baustein (`app/services/email/branding.py`, `render_branded_email`) umschliesst
+den inhaltlichen Teil jeder E-Mail mit demselben tabellenbasierten, client-kompatiblen HTML-Rahmen
+(Logo, Farbakzente aus `Theme.primary_color`/`secondary_color`, optionaler CTA-Button) und einer
+Fusszeile, die App und Verein ausdrücklich trennt ("... im Auftrag von {Organisation} versendet").
+Die Absenderadresse bleibt gemäss D-040 plattformweit unverändert; nur der Anzeigename im
+From-Header wird pro Organisation berechnet als `"{short_name oder name} Grill Helfer"`
+(z. B. "FCTC Grill Helfer" für FC Thusis-Cazis) und über `email.headerregistry.Address`
+RFC 2047/5322-sicher kodiert – niemals als hartkodierter Vereinsname im Code. Logo-/Banner-URLs aus
+`Theme`, die relative Pfade des Next.js-`public/`-Ordners sind, werden für E-Mail-Clients auf
+Basis von `Settings.frontend_public_url` zu absoluten URLs aufgelöst. Für den Passwort-Reset, bei
+dem `PasswordResetToken` bewusst keinen Organisationsbezug speichert (siehe D-040), wird die
+Organisation rein lesend über die bestehende `Volunteer.user_id`-Verknüpfung ermittelt; ist keine
+Organisation auflösbar (z. B. reine Staff-Konten), wird generisches Plattform-Branding ("GrillCrew")
+verwendet statt zu raten.
+
+**Abgrenzung:** Kein Datei-Anhang, keine Tracking-Pixel, keine zusätzliche Branding-Konfiguration
+über die bereits in D-048 eingeführten `Theme`-Felder hinaus. Bestehende Betreffzeilen und der
+fachliche Wortlaut jeder E-Mail bleiben unverändert; es handelt sich um Gestaltung und Absender,
+nicht um neue Inhalte.
+
+**Entschieden von:** Product Owner, 2026-08-16 (Rückmeldung: E-Mails sollen klar zwischen Verein
+und der GrillCrew-App unterscheiden, statt den Namen eines privaten Absenderkontos zu zeigen).

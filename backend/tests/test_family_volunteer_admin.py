@@ -629,11 +629,19 @@ def test_send_password_reset_route_dispatches_email_in_background(
         ) -> object:
             captured["volunteer_id"] = volunteer_id
             return SimpleNamespace(
-                recipient="anna@example.invalid", raw_token="tok", organization_slug=None
+                recipient="anna@example.invalid",
+                raw_token="tok",
+                organization_slug=None,
+                branding=None,
             )
 
     def fake_dispatch(
-        _settings: object, *, recipient: str, raw_token: str, organization_slug: str | None
+        _settings: object,
+        *,
+        recipient: str,
+        raw_token: str,
+        organization_slug: str | None,
+        branding: object = None,
     ) -> None:
         captured["dispatched"] = (recipient, raw_token)
 

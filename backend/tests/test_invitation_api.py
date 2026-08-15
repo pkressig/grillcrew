@@ -43,6 +43,7 @@ def test_admin_can_create_invitation_without_token_in_response(
                 recipient="person@example.test",
                 organization_name="Example Org",
                 raw_token="raw-secret-token",
+                branding=None,
             )
 
     monkeypatch.setattr(admin, "InvitationService", FakeService)

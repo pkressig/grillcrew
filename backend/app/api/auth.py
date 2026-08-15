@@ -59,6 +59,7 @@ from app.services.auth import (
     issue_session,
     normalize_email,
 )
+from app.services.email.branding import resolve_organization_branding
 from app.services.invitation import (
     InvalidInvitationTokenError,
     InvitationService,
@@ -148,6 +149,9 @@ def register_volunteer(
     session = issue_session(db=db, user=user, settings=settings, now=now)
     db.commit()
     set_auth_cookies(response, session, settings)
+    branding = resolve_organization_branding(
+        db, organization, frontend_public_url=settings.frontend_public_url
+    )
     background_tasks.add_task(
         dispatch_volunteer_registration_email,
         settings,
@@ -155,6 +159,7 @@ def register_volunteer(
         first_name=volunteer.first_name,
         organization_name=organization.name,
         organization_slug=organization.slug,
+        branding=branding,
     )
     return VolunteerRegisterResponse(session=build_session_response(user))
 
@@ -220,6 +225,7 @@ def forgot_password(
             recipient=issue.recipient,
             raw_token=issue.raw_token,
             organization_slug=issue.organization_slug,
+            branding=issue.branding,
         )
     return ForgotPasswordResponse()
 

@@ -13,8 +13,9 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings
 from app.core.security.password import PasswordPolicyError, hash_password, verify_password
 from app.models.identity import AuditEvent, Invitation, StaffMembership, StaffRole, User, UserStatus
-from app.models.organization import Organization
+from app.models.organization import Organization, Theme
 from app.services.email.base import EmailMessage, EmailSender, EmailSendError
+from app.services.email.branding import OrganizationBranding
 from app.services.invitation import (
     DuplicateInvitationError,
     InvalidInvitationTokenError,
@@ -70,7 +71,8 @@ def test_create_invitation_reuses_existing_user_and_stores_only_hash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     user = _user(UserStatus.ACTIVE)
-    db = FakeSession([user, None])
+    # Third scalar() call resolves the invited organization's Theme for email branding.
+    db = FakeSession([user, None, None])
     monkeypatch.setattr("app.services.invitation.secrets.token_urlsafe", lambda _size: RAW_TOKEN)
 
     issue = InvitationService(cast(Session, db), Settings()).create(
@@ -90,10 +92,33 @@ def test_create_invitation_reuses_existing_user_and_stores_only_hash(
     assert db.committed
 
 
+def test_create_invitation_resolves_organization_branding() -> None:
+    theme = Theme(
+        id=uuid.uuid4(),
+        name="Theme",
+        logo_url="/branding/logo.png",
+        primary_color="#111111",
+        secondary_color="#222222",
+    )
+    organization = _organization()
+    db = FakeSession([_user(UserStatus.ACTIVE), None, theme])
+
+    issue = InvitationService(cast(Session, db), Settings()).create(
+        email="user@example.test",
+        role=StaffRole.KIOSK,
+        organization=organization,
+        created_by=_user(UserStatus.ACTIVE),
+    )
+
+    assert issue.branding is not None
+    assert issue.branding.organization_name == organization.name
+    assert issue.branding.primary_color == "#111111"
+
+
 def test_create_invitation_creates_invited_user_when_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    db = FakeSession([None, None])
+    db = FakeSession([None, None, None])
     monkeypatch.setattr("app.services.invitation.secrets.token_urlsafe", lambda _size: RAW_TOKEN)
 
     InvitationService(cast(Session, db), Settings()).create(
@@ -284,6 +309,40 @@ def test_accept_invitation_enforces_password_policy_for_invited_user() -> None:
             display_name="Person",
             password="short",
         )
+
+
+def test_send_invitation_email_applies_organization_branding() -> None:
+    sent: list[EmailMessage] = []
+
+    class RecordingSender(EmailSender):
+        def send(self, message: EmailMessage) -> None:
+            sent.append(message)
+
+    branding = OrganizationBranding(
+        organization_name="Example Org",
+        organization_short_name="EXO",
+        logo_url="https://crew.example.test/branding/example-logo.png",
+        banner_url=None,
+        primary_color="#654321",
+        secondary_color="#fedcba",
+    )
+
+    send_invitation_email(
+        RecordingSender(),
+        recipient="user@example.test",
+        organization_name="Example Org",
+        raw_token=RAW_TOKEN,
+        branding=branding,
+    )
+
+    assert len(sent) == 1
+    message = sent[0]
+    assert message.from_display_name == "EXO Grill Helfer"
+    assert message.body_html is not None
+    assert "Example Org" in message.body_html
+    assert '<img src="https://crew.example.test/branding/example-logo.png"' in message.body_html
+    assert "GrillCrew-Plattform im Auftrag von Example Org" in message.body_html
+    assert "GrillCrew-Plattform im Auftrag von Example Org" in message.body_text
 
 
 def test_invitation_email_failures_never_log_raw_token(

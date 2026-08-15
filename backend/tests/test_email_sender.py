@@ -1,6 +1,7 @@
 """Tests for the EmailSender abstraction (D-040, plan §15-16)."""
 
 import logging
+from email.message import EmailMessage as MimeEmailMessage
 
 import pytest
 
@@ -108,3 +109,145 @@ def test_factory_returns_smtp_sender_when_host_configured() -> None:
     sender = build_email_sender(settings)
 
     assert isinstance(sender, SmtpEmailSender)
+
+
+def test_smtp_sender_uses_bare_platform_address_without_display_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The sending address stays platform-wide (D-040); with no organization display name,
+    the From header is exactly the configured address, unchanged from prior behavior."""
+    sent_messages: list[MimeEmailMessage] = []
+
+    class _FakeSmtp:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> "_FakeSmtp":
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def starttls(self) -> None:
+            pass
+
+        def send_message(self, message: MimeEmailMessage) -> None:
+            sent_messages.append(message)
+
+    monkeypatch.setattr("app.services.email.smtp.smtplib.SMTP", _FakeSmtp)
+    sender = SmtpEmailSender(
+        SmtpConfig(
+            host="smtp.example.test",
+            port=587,
+            username=None,
+            password=None,
+            use_tls=True,
+            from_address="no-reply@grillcrew.example",
+        )
+    )
+
+    sender.send(EmailMessage(to="user@example.test", subject="Hallo", body_text="Hallo Welt"))
+
+    assert len(sent_messages) == 1
+    assert sent_messages[0]["From"] == "no-reply@grillcrew.example"
+
+
+def test_smtp_sender_formats_from_header_with_organization_display_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the display name is per-organization; built via `Address` for RFC 2047/5322-safe
+    encoding (handles non-ASCII names correctly, unlike hand-rolled string concatenation)."""
+    sent_messages: list[MimeEmailMessage] = []
+
+    class _FakeSmtp:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> "_FakeSmtp":
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def starttls(self) -> None:
+            pass
+
+        def send_message(self, message: MimeEmailMessage) -> None:
+            sent_messages.append(message)
+
+    monkeypatch.setattr("app.services.email.smtp.smtplib.SMTP", _FakeSmtp)
+    sender = SmtpEmailSender(
+        SmtpConfig(
+            host="smtp.example.test",
+            port=587,
+            username=None,
+            password=None,
+            use_tls=True,
+            from_address="no-reply@grillcrew.example",
+        )
+    )
+
+    sender.send(
+        EmailMessage(
+            to="user@example.test",
+            subject="Hallo",
+            body_text="Hallo Welt",
+            from_display_name="FCTC Grill Helfer",
+        )
+    )
+
+    assert len(sent_messages) == 1
+    from_header = str(sent_messages[0]["From"])
+    assert from_header == "FCTC Grill Helfer <no-reply@grillcrew.example>"
+
+
+def test_smtp_sender_builds_multipart_alternative_when_html_body_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent_messages: list[MimeEmailMessage] = []
+
+    class _FakeSmtp:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> "_FakeSmtp":
+            return self
+
+        def __exit__(self, *_exc: object) -> None:
+            return None
+
+        def starttls(self) -> None:
+            pass
+
+        def send_message(self, message: MimeEmailMessage) -> None:
+            sent_messages.append(message)
+
+    monkeypatch.setattr("app.services.email.smtp.smtplib.SMTP", _FakeSmtp)
+    sender = SmtpEmailSender(
+        SmtpConfig(
+            host="smtp.example.test",
+            port=587,
+            username=None,
+            password=None,
+            use_tls=True,
+            from_address="no-reply@grillcrew.example",
+        )
+    )
+
+    sender.send(
+        EmailMessage(
+            to="user@example.test",
+            subject="Hallo",
+            body_text="Plain fallback",
+            body_html="<p>Rich body</p>",
+        )
+    )
+
+    message = sent_messages[0]
+    assert message.is_multipart()
+    plain_part = message.get_body(preferencelist=("plain",))
+    html_part = message.get_body(preferencelist=("html",))
+    assert plain_part is not None
+    assert "Plain fallback" in plain_part.get_content()
+    assert html_part is not None
+    assert "<p>Rich body</p>" in html_part.get_content()

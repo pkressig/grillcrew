@@ -16,6 +16,8 @@ class EmailMessage:
     to: str
     subject: str
     body_text: str
+    body_html: str | None = None
+    from_display_name: str | None = None
 
 
 class EmailSendError(Exception):
