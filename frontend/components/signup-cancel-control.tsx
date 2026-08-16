@@ -4,7 +4,11 @@ import { useState, type FormEvent } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { telHref, whatsAppHref } from "@/lib/phone";
 import type { PublicOrganization } from "@/lib/organization";
-import { cancelSignup, type VolunteerProfile, type VolunteerSignupSummary } from "@/lib/volunteer-profile";
+import {
+  cancelSignup,
+  type VolunteerProfile,
+  type VolunteerSignupSummary,
+} from "@/lib/volunteer-profile";
 
 type CancelableSignup = Pick<VolunteerSignupSummary, "id" | "event_title" | "can_cancel">;
 

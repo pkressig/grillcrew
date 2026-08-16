@@ -366,9 +366,7 @@ describe("ProfilePage cancel signup", () => {
       within(deadlineItem).getByRole("button", { name: 'Einsatz "Damen 1" absagen' }),
     ).toBeInTheDocument();
     const noShowItem = screen.getByText("Herren 1").closest("li")!;
-    expect(
-      within(noShowItem).queryByRole("button", { name: /absagen/i }),
-    ).not.toBeInTheDocument();
+    expect(within(noShowItem).queryByRole("button", { name: /absagen/i })).not.toBeInTheDocument();
     const cancelledItem = screen.getByText("Junioren C").closest("li")!;
     expect(
       within(cancelledItem).queryByRole("button", { name: /absagen/i }),
@@ -384,7 +382,9 @@ describe("ProfilePage cancel signup", () => {
       </AuthProvider>,
     );
     const openItem = (await screen.findByText("Senioren 30+")).closest("li")!;
-    fireEvent.click(within(openItem).getByRole("button", { name: 'Einsatz "Senioren 30+" absagen' }));
+    fireEvent.click(
+      within(openItem).getByRole("button", { name: 'Einsatz "Senioren 30+" absagen' }),
+    );
     const dialog = await screen.findByRole("dialog", { name: "Einsatz abmelden" });
     fireEvent.change(within(dialog).getByLabelText("Grund (optional)"), {
       target: { value: "Bin krank" },
@@ -414,7 +414,9 @@ describe("ProfilePage cancel signup", () => {
       </AuthProvider>,
     );
     const openItem = (await screen.findByText("Senioren 30+")).closest("li")!;
-    fireEvent.click(within(openItem).getByRole("button", { name: 'Einsatz "Senioren 30+" absagen' }));
+    fireEvent.click(
+      within(openItem).getByRole("button", { name: 'Einsatz "Senioren 30+" absagen' }),
+    );
     const dialog = await screen.findByRole("dialog", { name: "Einsatz abmelden" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Abmelden bestätigen" }));
     expect(
@@ -442,7 +444,9 @@ describe("ProfilePage cancel signup", () => {
       </AuthProvider>,
     );
     const deadlineItem = (await screen.findByText("Damen 1")).closest("li")!;
-    fireEvent.click(within(deadlineItem).getByRole("button", { name: 'Einsatz "Damen 1" absagen' }));
+    fireEvent.click(
+      within(deadlineItem).getByRole("button", { name: 'Einsatz "Damen 1" absagen' }),
+    );
     const dialog = await screen.findByRole("dialog", { name: "Kurzfristige Abmeldung" });
     expect(within(dialog).getByText(/bei Pascal Kressig/)).toBeInTheDocument();
     const whatsapp = within(dialog).getByRole("link", { name: "WhatsApp senden" });

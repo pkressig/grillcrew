@@ -482,7 +482,11 @@ function SignupList({
         <ul className="mt-2 space-y-2 text-sm">
           {entries.map((entry) => {
             const badge = statusBadge(entry);
-            const shiftLabel = formatShiftRange(entry.shift_starts_at, entry.shift_ends_at, timezone);
+            const shiftLabel = formatShiftRange(
+              entry.shift_starts_at,
+              entry.shift_ends_at,
+              timezone,
+            );
             const stillOpen = entry.signup_status === "ACTIVE" && entry.outcome === "OPEN";
             return (
               <li key={entry.id} className="rounded bg-muted/40 p-2">
