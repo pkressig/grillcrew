@@ -58,6 +58,13 @@ const noShowSignup: VolunteerSignupSummary = {
   can_cancel: false,
 };
 
+const deadlinePassedSignup: VolunteerSignupSummary = {
+  ...openSignup,
+  id: "signup-deadline-passed",
+  event_title: "Damen 1",
+  can_cancel: false,
+};
+
 const profile: VolunteerProfile = {
   first_name: "Mia",
   last_name: "Muster",
@@ -67,7 +74,7 @@ const profile: VolunteerProfile = {
   compensation_preference: "VOLUNTARY",
   compensation_family_member_id: null,
   compensation_family_member_name: null,
-  upcoming_signups: [openSignup, noShowSignup],
+  upcoming_signups: [openSignup, noShowSignup, deadlinePassedSignup],
   completed_signups: [cancelledSignup],
   family_children: [{ id: "child-1", name: "Leo Muster" }],
 };
@@ -343,7 +350,7 @@ describe("ProfilePage per-signup compensation", () => {
 });
 
 describe("ProfilePage cancel signup", () => {
-  it("only shows the Abmelden button when can_cancel is true", async () => {
+  it("shows the Absagen button only for still-open signups, regardless of can_cancel", async () => {
     vi.stubGlobal("fetch", profileFetch(profile));
     render(
       <AuthProvider>
@@ -351,9 +358,21 @@ describe("ProfilePage cancel signup", () => {
       </AuthProvider>,
     );
     const openItem = (await screen.findByText("Senioren 30+")).closest("li")!;
-    expect(within(openItem).getByRole("button", { name: "Abmelden" })).toBeInTheDocument();
+    expect(
+      within(openItem).getByRole("button", { name: 'Einsatz "Senioren 30+" absagen' }),
+    ).toBeInTheDocument();
+    const deadlineItem = screen.getByText("Damen 1").closest("li")!;
+    expect(
+      within(deadlineItem).getByRole("button", { name: 'Einsatz "Damen 1" absagen' }),
+    ).toBeInTheDocument();
     const noShowItem = screen.getByText("Herren 1").closest("li")!;
-    expect(within(noShowItem).queryByRole("button", { name: "Abmelden" })).not.toBeInTheDocument();
+    expect(
+      within(noShowItem).queryByRole("button", { name: /absagen/i }),
+    ).not.toBeInTheDocument();
+    const cancelledItem = screen.getByText("Junioren C").closest("li")!;
+    expect(
+      within(cancelledItem).queryByRole("button", { name: /absagen/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("cancels a signup with the entered reason after confirming in the modal", async () => {
@@ -365,7 +384,7 @@ describe("ProfilePage cancel signup", () => {
       </AuthProvider>,
     );
     const openItem = (await screen.findByText("Senioren 30+")).closest("li")!;
-    fireEvent.click(within(openItem).getByRole("button", { name: "Abmelden" }));
+    fireEvent.click(within(openItem).getByRole("button", { name: 'Einsatz "Senioren 30+" absagen' }));
     const dialog = await screen.findByRole("dialog", { name: "Einsatz abmelden" });
     fireEvent.change(within(dialog).getByLabelText("Grund (optional)"), {
       target: { value: "Bin krank" },
@@ -395,13 +414,41 @@ describe("ProfilePage cancel signup", () => {
       </AuthProvider>,
     );
     const openItem = (await screen.findByText("Senioren 30+")).closest("li")!;
-    fireEvent.click(within(openItem).getByRole("button", { name: "Abmelden" }));
+    fireEvent.click(within(openItem).getByRole("button", { name: 'Einsatz "Senioren 30+" absagen' }));
     const dialog = await screen.findByRole("dialog", { name: "Einsatz abmelden" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Abmelden bestätigen" }));
     expect(
       await within(dialog).findByText("Die Frist für die Abmeldung ist abgelaufen."),
     ).toBeInTheDocument();
     expect(screen.getByRole("dialog", { name: "Einsatz abmelden" })).toBeInTheDocument();
+  });
+
+  it("offers WhatsApp and call links to the coordination contact once the deadline has passed", async () => {
+    const brandedProfile: VolunteerProfile = {
+      ...profile,
+      organization: {
+        ...organization,
+        settings: {
+          ...organization.settings,
+          coordination_contact_label: "Pascal Kressig",
+          coordination_contact_phone: "079 513 44 33",
+        },
+      },
+    };
+    vi.stubGlobal("fetch", profileFetch(brandedProfile));
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    const deadlineItem = (await screen.findByText("Damen 1")).closest("li")!;
+    fireEvent.click(within(deadlineItem).getByRole("button", { name: 'Einsatz "Damen 1" absagen' }));
+    const dialog = await screen.findByRole("dialog", { name: "Kurzfristige Abmeldung" });
+    expect(within(dialog).getByText(/bei Pascal Kressig/)).toBeInTheDocument();
+    const whatsapp = within(dialog).getByRole("link", { name: "WhatsApp senden" });
+    expect(whatsapp).toHaveAttribute("href", expect.stringContaining("https://wa.me/41795134433"));
+    const call = within(dialog).getByRole("link", { name: "Pascal Kressig anrufen" });
+    expect(call).toHaveAttribute("href", "tel:+41795134433");
   });
 });
 

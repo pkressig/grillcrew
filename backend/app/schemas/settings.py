@@ -18,6 +18,7 @@ class OrganizationSettingsUpdate(BaseModel):  # type: ignore[explicit-any]
     signup_rate_limit_per_contact: int | None = Field(default=None, ge=1)
     signup_rate_limit_window_minutes: int | None = Field(default=None, ge=1)
     coordination_contact_label: str | None = None
+    coordination_contact_phone: str | None = Field(default=None, max_length=30)
     kiosk_lead_minutes: int | None = Field(default=None, ge=0, le=720)
     kiosk_trail_minutes: int | None = Field(default=None, ge=0, le=720)
     default_game_duration_minutes: int | None = Field(default=None, ge=1, le=1440)
@@ -44,6 +45,7 @@ class OrganizationSettingsResponse(BaseModel):  # type: ignore[explicit-any]
     signup_rate_limit_per_contact: int
     signup_rate_limit_window_minutes: int
     coordination_contact_label: str | None
+    coordination_contact_phone: str | None
     kiosk_lead_minutes: int
     kiosk_trail_minutes: int
     default_game_duration_minutes: int

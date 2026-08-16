@@ -421,6 +421,7 @@ def to_public_response(organization: Organization) -> PublicOrganizationResponse
             signup_rate_limit_per_contact=settings.signup_rate_limit_per_contact,
             signup_rate_limit_window_minutes=settings.signup_rate_limit_window_minutes,
             coordination_contact_label=settings.coordination_contact_label,
+            coordination_contact_phone=settings.coordination_contact_phone,
             volunteer_password_min_length=settings.volunteer_password_min_length,
         ),
     )

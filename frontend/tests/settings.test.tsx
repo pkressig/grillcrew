@@ -15,6 +15,7 @@ const organizationSettings = {
   signup_rate_limit_per_contact: 5,
   signup_rate_limit_window_minutes: 60,
   coordination_contact_label: "Grillkoordination",
+  coordination_contact_phone: "079 513 44 33",
   created_at: "2026-07-30T10:00:00Z",
   updated_at: "2026-07-30T10:00:00Z",
 };
@@ -182,6 +183,8 @@ describe("organization settings form", () => {
     const fetchMock = renderAdmin("ADMIN");
     const rateInput = await screen.findByLabelText("Auszahlungssatz (Rappen/Stunde)");
     expect(rateInput).toHaveValue(900);
+    const phoneInput = screen.getByLabelText(/Koordinationskontakt \(Telefon\)/);
+    expect(phoneInput).toHaveValue("079 513 44 33");
     fireEvent.change(rateInput, { target: { value: "950" } });
     const form = rateInput.closest("form");
     if (!form) throw new Error("organization settings form not found");
@@ -191,7 +194,9 @@ describe("organization settings form", () => {
         fetchMock.mock.calls.some(
           ([url, init]) =>
             String(url).endsWith("/settings/organization-settings") &&
-            (init as RequestInit | undefined)?.method === "PATCH",
+            (init as RequestInit | undefined)?.method === "PATCH" &&
+            JSON.parse(String((init as RequestInit).body)).coordination_contact_phone ===
+              "079 513 44 33",
         ),
       ).toBe(true),
     );

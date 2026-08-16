@@ -283,12 +283,20 @@ describe("mobile public plan", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Samstag, 05. September 2026/ }));
     const ownAction = await screen.findByRole("button", { name: /Bereits angemeldet: Junioren/ });
     expect(ownAction).toBeDisabled();
-    fireEvent.click(within(section).getByRole("button", { name: /Junioren/ }));
+    fireEvent.click(within(section).getByRole("button", { name: /^Junioren/ }));
     expect(screen.getByRole("button", { name: /Samstag, 05. September 2026/ })).toHaveAttribute(
       "aria-expanded",
       "true",
     );
     await waitFor(() => expect(document.getElementById("shift-s1")).toHaveClass("ring-2"));
+  });
+
+  it("offers an Absagen control next to the status that opens the cancel-reason modal", async () => {
+    authState.isAuthenticated = true;
+    renderPage();
+    const section = await screen.findByRole("region", { name: "Meine kommenden Einsätze" });
+    fireEvent.click(within(section).getByRole("button", { name: 'Einsatz "Junioren" absagen' }));
+    expect(await screen.findByRole("dialog", { name: "Einsatz abmelden" })).toBeInTheDocument();
   });
 
   it("shows an honest authenticated empty state", async () => {

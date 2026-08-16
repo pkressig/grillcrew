@@ -8,8 +8,8 @@ import { AuthCard } from "@/components/auth-card";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getLastOrganizationSlug, rememberLastOrganizationSlug } from "@/lib/organization";
+import { SignupCancelControl } from "@/components/signup-cancel-control";
 import {
-  cancelSignup,
   createChild,
   deleteChild,
   fetchVolunteerProfile,
@@ -68,7 +68,6 @@ export default function ProfilePage() {
   const router = useRouter();
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [cancelTarget, setCancelTarget] = useState<VolunteerSignupSummary | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -222,29 +221,18 @@ export default function ProfilePage() {
         title="Kommende Einsätze"
         entries={profile.upcoming_signups}
         familyChildren={profile.family_children}
-        timezone={profile.organization.timezone}
+        organization={profile.organization}
         onUpdate={handleSignupUpdate}
-        onCancelRequested={setCancelTarget}
+        onCancelled={setProfile}
       />
       <SignupList
         title="Geleistete Einsätze"
         entries={profile.completed_signups}
         familyChildren={profile.family_children}
-        timezone={profile.organization.timezone}
+        organization={profile.organization}
         onUpdate={handleSignupUpdate}
-        onCancelRequested={setCancelTarget}
+        onCancelled={setProfile}
       />
-      {cancelTarget ? (
-        <CancelModal
-          entry={cancelTarget}
-          timezone={profile.organization.timezone}
-          onClose={() => setCancelTarget(null)}
-          onCancelled={(updated) => {
-            setProfile(updated);
-            setCancelTarget(null);
-          }}
-        />
-      ) : null}
     </AuthCard>
   );
 }
@@ -467,14 +455,14 @@ function SignupList({
   title,
   entries,
   familyChildren,
-  timezone,
+  organization,
   onUpdate,
-  onCancelRequested,
+  onCancelled,
 }: Readonly<{
   title: string;
   entries: VolunteerSignupSummary[];
   familyChildren: FamilyChild[];
-  timezone: string;
+  organization: VolunteerProfile["organization"];
   onUpdate: (
     signupId: string,
     payload: {
@@ -482,8 +470,9 @@ function SignupList({
       credited_family_member_id: string | null;
     },
   ) => Promise<void>;
-  onCancelRequested: (entry: VolunteerSignupSummary) => void;
+  onCancelled: (profile: VolunteerProfile) => void;
 }>) {
+  const timezone = organization.timezone;
   return (
     <section className="mt-6 rounded border p-3" aria-label={title}>
       <h2 className="font-medium">{title}</h2>
@@ -493,13 +482,23 @@ function SignupList({
         <ul className="mt-2 space-y-2 text-sm">
           {entries.map((entry) => {
             const badge = statusBadge(entry);
+            const shiftLabel = formatShiftRange(entry.shift_starts_at, entry.shift_ends_at, timezone);
+            const stillOpen = entry.signup_status === "ACTIVE" && entry.outcome === "OPEN";
             return (
               <li key={entry.id} className="rounded bg-muted/40 p-2">
                 <p className="font-medium">{entry.event_title}</p>
-                <p>{formatShiftRange(entry.shift_starts_at, entry.shift_ends_at, timezone)}</p>
-                <p className="mt-1">
+                <p>{shiftLabel}</p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
                   <Badge variant={badge.variant}>{badge.label}</Badge>
-                </p>
+                  {stillOpen ? (
+                    <SignupCancelControl
+                      entry={entry}
+                      shiftLabel={shiftLabel}
+                      organization={organization}
+                      onCancelled={onCancelled}
+                    />
+                  ) : null}
+                </div>
                 <label className="mt-2 flex flex-col gap-1">
                   Einsatzvergütung
                   <select
@@ -537,98 +536,11 @@ function SignupList({
                     ))}
                   </select>
                 </label>
-                {entry.can_cancel ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    className="mt-3"
-                    onClick={() => onCancelRequested(entry)}
-                  >
-                    Abmelden
-                  </Button>
-                ) : null}
               </li>
             );
           })}
         </ul>
       )}
     </section>
-  );
-}
-
-function CancelModal({
-  entry,
-  timezone,
-  onClose,
-  onCancelled,
-}: Readonly<{
-  entry: VolunteerSignupSummary;
-  timezone: string;
-  onClose: () => void;
-  onCancelled: (profile: VolunteerProfile) => void;
-}>) {
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function confirmCancel() {
-    setBusy(true);
-    setError(null);
-    try {
-      const updated = await cancelSignup(entry.id, { reason: reason.trim() || null });
-      onCancelled(updated);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Die Abmeldung ist fehlgeschlagen.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Einsatz abmelden"
-      onClick={(event) => event.target === event.currentTarget && onClose()}
-    >
-      <div className="w-full max-w-md rounded-lg bg-background p-4">
-        <h2 className="text-xl font-bold">Einsatz abmelden</h2>
-        <p className="mt-2 text-sm">
-          {entry.event_title} ·{" "}
-          {formatShiftRange(entry.shift_starts_at, entry.shift_ends_at, timezone)}
-        </p>
-        <label className="mt-3 flex flex-col gap-1 text-sm font-medium">
-          Grund (optional)
-          <textarea
-            className="min-h-11 rounded border px-3 font-normal"
-            maxLength={100}
-            value={reason}
-            disabled={busy}
-            onChange={(event) => setReason(event.target.value)}
-          />
-        </label>
-        {error ? (
-          <p role="alert" className="mt-2 text-sm text-status-error">
-            {error}
-          </p>
-        ) : null}
-        <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <Button
-            type="button"
-            variant="destructive"
-            disabled={busy}
-            className="flex-1"
-            onClick={() => void confirmCancel()}
-          >
-            {busy ? "Wird abgemeldet …" : "Abmelden bestätigen"}
-          </Button>
-          <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>
-            Abbrechen
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }

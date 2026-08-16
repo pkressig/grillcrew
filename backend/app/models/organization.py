@@ -122,6 +122,7 @@ class OrganizationSettings(Base):
         nullable=False, server_default="60"
     )
     coordination_contact_label: Mapped[str | None] = mapped_column(String(100))
+    coordination_contact_phone: Mapped[str | None] = mapped_column(String(30))
     kiosk_lead_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="30")
     kiosk_trail_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="30")
     default_game_duration_minutes: Mapped[int] = mapped_column(

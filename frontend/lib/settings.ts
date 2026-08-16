@@ -11,6 +11,7 @@ export type OrganizationSettings = {
   default_game_duration_minutes: number;
   volunteer_password_min_length: number;
   coordination_contact_label: string | null;
+  coordination_contact_phone: string | null;
   created_at: string;
   updated_at: string;
 };

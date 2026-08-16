@@ -375,6 +375,7 @@ function OrganizationSettingsSection({ org }: Readonly<{ org: string }>) {
           kiosk_trail_minutes: Number(data.get("kiosk_trail_minutes")),
           default_game_duration_minutes: Number(data.get("default_game_duration_minutes")),
           coordination_contact_label: String(data.get("coordination_contact_label") ?? "") || null,
+          coordination_contact_phone: String(data.get("coordination_contact_phone") ?? "") || null,
         }),
       );
       setSuccess("Organisationseinstellungen wurden gespeichert.");
@@ -422,6 +423,23 @@ function OrganizationSettingsSection({ org }: Readonly<{ org: string }>) {
                 defaultValue={settings.coordination_contact_label ?? ""}
                 disabled={busy}
               />
+            </label>
+            <label className="grid gap-1" htmlFor="coordination-contact-phone">
+              Koordinationskontakt (Telefon)
+              <input
+                className={control}
+                id="coordination-contact-phone"
+                name="coordination_contact_phone"
+                type="tel"
+                maxLength={30}
+                placeholder="079 513 44 33"
+                defaultValue={settings.coordination_contact_phone ?? ""}
+                disabled={busy}
+              />
+              <span className="text-sm font-normal text-muted-foreground">
+                Wird Helfern für kurzfristige Abmeldungen nach Ablauf der Abmeldefrist als
+                Anruf-/WhatsApp-Kontakt angezeigt.
+              </span>
             </label>
             <label className="grid gap-1" htmlFor="rate-limit-per-contact">
               Anmeldelimit pro Kontakt

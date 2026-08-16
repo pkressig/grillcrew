@@ -23,6 +23,7 @@ export type PublicOrganization = {
     signup_rate_limit_per_contact: number;
     signup_rate_limit_window_minutes: number;
     coordination_contact_label: string | null;
+    coordination_contact_phone: string | null;
     volunteer_password_min_length: number;
   };
 };
@@ -52,6 +53,7 @@ export const platformFallbackOrganization: PublicOrganization = {
     signup_rate_limit_per_contact: 5,
     signup_rate_limit_window_minutes: 60,
     coordination_contact_label: null,
+    coordination_contact_phone: null,
     volunteer_password_min_length: 6,
   },
 };

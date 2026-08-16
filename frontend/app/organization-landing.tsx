@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth-provider";
 import { LogoutButton } from "@/components/logout-button";
 import { GameDayList } from "@/components/game-day-list";
+import { SignupCancelControl } from "@/components/signup-cancel-control";
 import { OrganizationLogo } from "@/components/organization-logo";
 import { apiBaseUrl } from "@/lib/api";
 import {
@@ -342,7 +343,13 @@ export function OrganizationLanding() {
 
       <div className="mx-auto max-w-4xl space-y-4 px-3 py-4 sm:px-6 sm:py-8">
         {auth.isAuthenticated ? (
-          <OwnSignups profile={volunteerProfile} loaded={profileLoaded} onSelect={focusOwnSignup} />
+          <OwnSignups
+            profile={volunteerProfile}
+            loaded={profileLoaded}
+            organization={organization}
+            onSelect={focusOwnSignup}
+            onCancelled={setVolunteerProfile}
+          />
         ) : null}
         <PageHeader
           title="Kommende Einsätze"
@@ -392,11 +399,15 @@ export function OrganizationLanding() {
 function OwnSignups({
   profile,
   loaded,
+  organization,
   onSelect,
+  onCancelled,
 }: Readonly<{
   profile: VolunteerProfile | null;
   loaded: boolean;
+  organization: PublicOrganization;
   onSelect: (entry: VolunteerSignupSummary) => void;
+  onCancelled: (profile: VolunteerProfile) => void;
 }>) {
   return (
     <section aria-labelledby="own-signups-title" className="rounded-xl border bg-background p-3">
@@ -411,25 +422,33 @@ function OwnSignups({
         <p className="mt-2 text-sm text-muted-foreground">Du hast noch keine kommenden Einsätze.</p>
       ) : (
         <ul className="mt-2 grid gap-2 sm:grid-cols-2">
-          {profile.upcoming_signups.map((entry) => (
-            <li key={entry.id}>
-              <button
-                type="button"
-                onClick={() => onSelect(entry)}
-                className="min-h-11 w-full rounded-lg border p-3 text-left hover:bg-muted/60"
-              >
-                <span className="block font-semibold">{entry.event_title}</span>
-                <span className="block text-sm">
-                  {shortDateFormatter.format(new Date(`${entry.event_date}T00:00:00Z`))} ·{" "}
-                  {formatTime(entry.shift_starts_at, "Europe/Zurich")}–
-                  {formatTime(entry.shift_ends_at, "Europe/Zurich")} Uhr
-                </span>
-                <span className="block text-sm text-muted-foreground">
-                  Status: {signupStatus(entry)}
-                </span>
-              </button>
-            </li>
-          ))}
+          {profile.upcoming_signups.map((entry) => {
+            const shiftLabel = `${shortDateFormatter.format(new Date(`${entry.event_date}T00:00:00Z`))}, ${formatTime(entry.shift_starts_at, organization.timezone)}–${formatTime(entry.shift_ends_at, organization.timezone)}`;
+            const stillOpen = entry.signup_status === "ACTIVE" && entry.outcome === "OPEN";
+            return (
+              <li key={entry.id} className="rounded-lg border p-3 hover:bg-muted/60">
+                <button
+                  type="button"
+                  onClick={() => onSelect(entry)}
+                  className="block min-h-11 w-full text-left"
+                >
+                  <span className="block font-semibold">{entry.event_title}</span>
+                  <span className="block text-sm">{shiftLabel} Uhr</span>
+                </button>
+                <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                  <span>Status: {signupStatus(entry)}</span>
+                  {stillOpen ? (
+                    <SignupCancelControl
+                      entry={entry}
+                      shiftLabel={shiftLabel}
+                      organization={organization}
+                      onCancelled={onCancelled}
+                    />
+                  ) : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
