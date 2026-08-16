@@ -379,3 +379,33 @@ nicht um neue Inhalte.
 
 **Entschieden von:** Product Owner, 2026-08-16 (Rückmeldung: E-Mails sollen klar zwischen Verein
 und der GrillCrew-App unterscheiden, statt den Namen eines privaten Absenderkontos zu zeigen).
+
+## D-052 – Zeitbasierte Kiosk-/Grill-Deckung statt Event-Zuordnung, neue Spieltage-Übersicht
+
+**Entscheid:** Die Kiosk-/Grill-Statusanzeigen pro Anlass im Spielplan (`serviceBadge` in
+`planning-panel.tsx`) sowie die neue Spieltage-Übersicht ermitteln die relevanten Schichten eines
+Spiels nicht mehr allein über `Shift.event_id` (das bei materialisierten Fenster-Schichten immer
+nur das erste abgedeckte Spiel referenziert, siehe `ProposalService.confirm`), sondern zusätzlich
+über eine Zeitüberschneidung von mindestens einer Minute zwischen Schichtzeitraum und
+Spielzeitraum (Anpfiff + `Event.duration_minutes` bzw. organisationsweitem
+`Settings.default_game_duration_minutes`). Ein neuer gemeinsamer Helfer
+`frontend/lib/shift-coverage.ts` kapselt Belegungsberechnung, Zeitüberschneidung und lokale
+Zeit-/Datumsumrechnung.
+
+Die Statusanzeigen im Grillplan wurden neu definiert: "Kiosk offen"/"Grill offen" zeigen grün bei
+voller Besetzung, orange (nur Grill) bei Teilbesetzung, rot bei fehlender Besetzung; eine separate
+"Kioskdeckung fehlt"/"Grilldeckung fehlt"-Kachel erscheint nur bei Unterbesetzung. Die bisherige, aus
+dem externen Plan-Abgleich abgeleitete "Kioskdeckung verifiziert/übersteuert/fehlt"-Kachel auf dieser
+Karte entfällt zugunsten dieser Belegungsanzeige; der externe Plan-Abgleich selbst bleibt unverändert
+auf der Kiosk-Seite (`ExternalPlanComparisonWorkspace`) bestehen.
+
+Neu: eine eigenständige "Spieltage"-Übersicht unter Planung (`/planning/matchdays`), die pro
+Spieltag Kiosk-/Grill-Deckung, zugewiesene Helfer (Name, Telefon) sowie die Spiele des Tages
+(Kategorie, Team-gegen-Team-Beschreibung aus `Event.public_description`) in einer aufklappbaren
+Liste zeigt.
+
+**Abgrenzung:** Keine Backend-Änderungen; alle Daten stammen aus bereits vorhandenen Endpunkten
+(`events-with-shifts`, `organization-settings`). Keine neue Berechtigungsrolle.
+
+**Entschieden von:** Product Owner, 2026-08-16 (Rückmeldung zu falschen Kiosk-/Grill-Status-Tags im
+Spielplan bei überlappenden Schichten und Wunsch nach einer tagesbasierten Spieltag-Übersicht).

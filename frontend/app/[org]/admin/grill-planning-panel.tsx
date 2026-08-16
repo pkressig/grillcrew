@@ -7,10 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { GameDayList } from "@/components/game-day-list";
-import {
-  loadExternalPlanComparison,
-  type ExternalPlanComparisonRow,
-} from "@/lib/external-kiosk-plan";
+import { occupancyStatus, shiftOccupancy } from "@/lib/shift-coverage";
 import {
   confirmPlanningProposal,
   deleteConfirmedWindow,
@@ -44,7 +41,6 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
   const [savingId, setSavingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
-  const [comparisonRows, setComparisonRows] = useState<ExternalPlanComparisonRow[]>([]);
   const [shiftsByWindow, setShiftsByWindow] = useState<Record<string, Shift[]>>({});
 
   const load = useCallback(async () => {
@@ -65,12 +61,6 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
         }),
       );
       setShiftsByWindow(Object.fromEntries(loadedShifts));
-      try {
-        setComparisonRows((await loadExternalPlanComparison(org))?.rows ?? []);
-      } catch {
-        // Proposal editing remains available when the optional comparison cannot be loaded.
-        setComparisonRows([]);
-      }
     } catch (loadError) {
       setError(
         loadError instanceof Error
@@ -338,7 +328,6 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
               onConfirm={confirm}
               onReconcile={reconcile}
               onDelete={deleteConfirmed}
-              comparison={comparisonRows.find((row) => row.proposal_window?.id === window.id)}
               shifts={shiftsByWindow[window.id] ?? []}
               onShiftsChanged={(updated) =>
                 setShiftsByWindow((current) => ({ ...current, [window.id]: updated }))
@@ -497,7 +486,6 @@ function GrillWindowCard({
   onConfirm,
   onReconcile,
   onDelete,
-  comparison,
   shifts,
   onShiftsChanged,
   onWindowUpdated,
@@ -510,7 +498,6 @@ function GrillWindowCard({
   onConfirm: (window: EditableWindow) => Promise<void>;
   onReconcile: (window: PlanningProposalWindow) => Promise<void>;
   onDelete: (window: PlanningProposalWindow) => Promise<void>;
-  comparison?: ExternalPlanComparisonRow;
   shifts: Shift[];
   onShiftsChanged: (shifts: Shift[]) => void;
   onWindowUpdated: (window: PlanningProposalWindow) => void;
@@ -531,6 +518,10 @@ function GrillWindowCard({
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const confirming = saving;
   const headingId = `grill-window-${window.id}`;
+  const kioskCoverage = shiftOccupancy(shifts, "KIOSK");
+  const kioskStatus = occupancyStatus(kioskCoverage.required, kioskCoverage.occupied);
+  const grillCoverage = shiftOccupancy(shifts, "GRILL");
+  const grillStatus = occupancyStatus(grillCoverage.required, grillCoverage.occupied);
   const uncovered =
     splits.length > 0
       ? uncoveredRanges(
@@ -596,28 +587,28 @@ function GrillWindowCard({
             </h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="success">
+            <Badge variant={kioskStatus === "FULL" ? "success" : "error"}>
               <Store aria-hidden="true" className="mr-1" size={15} />
               Kiosk offen
             </Badge>
-            <Badge variant={window.override_state === "MANUAL" ? "warning" : "neutral"}>
-              {window.override_state === "MANUAL" ? "Manuell angepasst" : "Vorschlag"}
-            </Badge>
-            <Badge
-              variant={
-                comparison?.review_state === "OVERRIDDEN"
-                  ? "warning"
-                  : comparison?.statuses.includes("MATCH")
-                    ? "success"
-                    : "neutral"
-              }
-            >
-              {comparison?.review_state === "OVERRIDDEN"
-                ? "Kioskdeckung manuell übersteuert"
-                : comparison?.statuses.includes("MATCH")
-                  ? "Kioskdeckung verifiziert"
-                  : "Kioskdeckung fehlt"}
-            </Badge>
+            {kioskStatus !== "FULL" ? <Badge variant="error">Kioskdeckung fehlt</Badge> : null}
+            {confirmed ? (
+              <>
+                <Badge
+                  variant={
+                    grillStatus === "FULL"
+                      ? "success"
+                      : grillStatus === "PARTIAL"
+                        ? "warning"
+                        : "error"
+                  }
+                >
+                  <Flame aria-hidden="true" className="mr-1" size={15} />
+                  Grill offen
+                </Badge>
+                {grillStatus !== "FULL" ? <Badge variant="error">Grilldeckung fehlt</Badge> : null}
+              </>
+            ) : null}
           </div>
         </div>
 

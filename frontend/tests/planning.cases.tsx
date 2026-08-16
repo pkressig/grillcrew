@@ -263,7 +263,7 @@ afterEach(() => {
 });
 
 describe("planning admin", () => {
-  it("shows the five accessible planning destinations including archive", async () => {
+  it("shows the six accessible planning destinations including archive", async () => {
     renderAdmin("ADMIN");
     await screen.findByRole("heading", { level: 1, name: "Planung" });
     const navigation = screen.getByRole("navigation", { name: "Planung" });
@@ -271,7 +271,14 @@ describe("planning admin", () => {
       within(navigation)
         .getAllByRole("link")
         .map((link) => link.textContent),
-    ).toEqual(["Spielplan", "Kiosk", "Grill", "Archiv", "Vereinsjahr/Saisonverwaltung"]);
+    ).toEqual([
+      "Spielplan",
+      "Spieltage",
+      "Kiosk",
+      "Grill",
+      "Archiv",
+      "Vereinsjahr/Saisonverwaltung",
+    ]);
     expect(within(navigation).getByRole("link", { name: "Spielplan" })).toHaveAttribute(
       "aria-current",
       "page",
@@ -445,6 +452,50 @@ describe("planning admin", () => {
     expect(screen.queryByRole("button", { name: "Weiter" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Zurück" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Kalender" })).not.toBeInTheDocument();
+  });
+
+  it("shows Kiosk coverage for every match a shared window's shift overlaps, not just the first", async () => {
+    // A confirmed Kiosk/Grill shift only ever carries the FIRST covered
+    // event's id (backend materialisation), even though its time window can
+    // span several matches on the same day. The badge must therefore be
+    // derived from time overlap, not from a direct event_id match, or every
+    // match after the first would wrongly show "nicht vorgesehen".
+    const kioskShift = {
+      id: "kiosk-shift-1",
+      event_id: "event-1",
+      starts_at: "2026-09-12T16:00:00Z",
+      ends_at: "2026-09-12T18:00:00Z",
+      required_volunteers: 2,
+      occupied_volunteers: 2,
+      open_places: 0,
+      signups: [],
+      public_note: null,
+      internal_note: null,
+      status: "OPEN",
+      sort_order: 0,
+      shift_type: "KIOSK",
+      assignment_mode: "OPEN_SIGNUP",
+      menu_type: null,
+      crew_suggestion_overridden: false,
+    };
+    const firstEvent = { ...planningEvent, kickoff_time: "16:15:00" };
+    // 18:30 Europe/Zurich (CEST, UTC+2) is 16:30 UTC — inside the shift's
+    // 16:00–18:00 UTC window, even though this event is not the first.
+    const secondEvent = { ...secondPlanningEvent, kickoff_time: "18:30:00" };
+    const base = planningFetch("ADMIN", false, [season], true, false, [firstEvent, secondEvent]);
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("/seasons/season-1/events-with-shifts"))
+        return Response.json([
+          { ...firstEvent, shifts: [kioskShift] },
+          { ...secondEvent, shifts: [] },
+        ]);
+      return base(input, init);
+    });
+    renderAdmin("ADMIN", fetchMock);
+
+    await screen.findByText("Sommerfest");
+    await screen.findByText("Heimspieltag");
+    expect(screen.getAllByText("Kiosk besetzt")).toHaveLength(2);
   });
 
   it("keeps event details native and opening them does not request data", async () => {

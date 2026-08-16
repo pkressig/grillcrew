@@ -19,7 +19,9 @@ const content = {
 
 export function PlanningPlaceholderPanel({
   section,
-}: Readonly<{ section: Exclude<PlanningSection, "schedule" | "periods" | "archive"> }>) {
+}: Readonly<{
+  section: Exclude<PlanningSection, "schedule" | "periods" | "archive" | "matchdays">;
+}>) {
   const panel = content[section];
   return (
     <section className="grid gap-6" aria-labelledby={`${section}-title`}>

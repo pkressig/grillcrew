@@ -94,12 +94,105 @@ describe("GrillPlanningPanel", () => {
     expect(screen.queryByText("Sportplatz")).not.toBeInTheDocument();
     expect(screen.queryByText("Sportplatz 2")).not.toBeInTheDocument();
     expect(screen.getByText("Kiosk offen")).toBeInTheDocument();
-    expect(screen.getByText("Vorschlag")).toBeInTheDocument();
     expect(screen.getByText("Crew-Regel: Junioren (3 Personen)")).toBeInTheDocument();
     expect(
       screen.getByText(/weder bestätigte Schichten noch öffentliche Anmeldungen/),
     ).toBeInTheDocument();
     expect(screen.queryByText("closed")).not.toBeInTheDocument();
+  });
+
+  it("shows a Kioskdeckung-fehlt tag only while the kiosk shift is understaffed", async () => {
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, covered_event_ids: ["event-1"] }],
+    });
+    loadShifts.mockResolvedValue([
+      {
+        id: "kiosk-shift",
+        event_id: "event-1",
+        starts_at: "2026-08-08T08:30:00Z",
+        ends_at: "2026-08-08T09:00:00Z",
+        required_volunteers: 2,
+        occupied_volunteers: 1,
+        open_places: 1,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "OPEN",
+        sort_order: 0,
+        shift_type: "KIOSK",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A");
+    expect(screen.getByText("Kioskdeckung fehlt")).toBeInTheDocument();
+  });
+
+  it("hides the Kioskdeckung-fehlt tag once the kiosk shift is fully staffed", async () => {
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, covered_event_ids: ["event-1"] }],
+    });
+    loadShifts.mockResolvedValue([
+      {
+        id: "kiosk-shift",
+        event_id: "event-1",
+        starts_at: "2026-08-08T08:30:00Z",
+        ends_at: "2026-08-08T09:00:00Z",
+        required_volunteers: 1,
+        occupied_volunteers: 1,
+        open_places: 0,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "OPEN",
+        sort_order: 0,
+        shift_type: "KIOSK",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A");
+    expect(screen.queryByText("Kioskdeckung fehlt")).not.toBeInTheDocument();
+  });
+
+  it("only shows the Grill-offen badge once a grill window is confirmed", async () => {
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A");
+    expect(screen.queryByText("Grill offen")).not.toBeInTheDocument();
+  });
+
+  it("shows Grill offen and Grilldeckung fehlt for an understaffed confirmed grill shift", async () => {
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, grill_confirmed: true, covered_event_ids: ["event-1"] }],
+    });
+    loadShifts.mockResolvedValue([
+      {
+        id: "grill-shift",
+        event_id: "event-1",
+        starts_at: "2026-08-08T18:00:00Z",
+        ends_at: "2026-08-08T19:00:00Z",
+        required_volunteers: 2,
+        occupied_volunteers: 1,
+        open_places: 1,
+        signups: [],
+        public_note: null,
+        internal_note: null,
+        status: "OPEN",
+        sort_order: 0,
+        shift_type: "GRILL",
+        assignment_mode: "OPEN_SIGNUP",
+        menu_type: null,
+        crew_suggestion_overridden: false,
+      },
+    ]);
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+    await screen.findByText("Junioren A");
+    expect(screen.getByText("Grill offen")).toBeInTheDocument();
+    expect(screen.getByText("Grilldeckung fehlt")).toBeInTheDocument();
   });
 
   it("saves a manual grill override", async () => {

@@ -135,10 +135,12 @@ Medium.
 - Season list and forms.
 - Season selector.
 - Visible event and shift admin cards and creation/status controls for `ADMIN` and `KOORDINATION`.
-- Planung has four explicit subsections: Spielplan, Kiosk, Grill, and
+- Planung has six explicit subsections: Spielplan, Spieltage, Kiosk, Grill, Archiv, and
   Vereinsjahr/Saisonverwaltung. The existing `/admin/planning` deep link remains the Spielplan;
-  period creation and lifecycle controls live in the dedicated management subsection. Kiosk and
-  Grill are labelled planned states until their own workflows are implemented.
+  period creation and lifecycle controls live in the dedicated management subsection. Spieltage
+  (`/admin/planning/matchdays`, see D-052) is a day-grouped read overview of Kiosk/Grill coverage,
+  assigned helpers, and that day's matches — it reads existing planning data and materializes no
+  new state itself.
 
 ## F004 Events
 

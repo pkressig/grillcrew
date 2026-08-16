@@ -28,7 +28,9 @@ import {
 } from "@/lib/planning";
 import { loadAdminPlanningData } from "@/lib/admin-planning-data";
 import { loadFamilyVolunteers, type FamilyVolunteer } from "@/lib/families";
+import { loadOrganizationSettings } from "@/lib/settings";
 import { ShiftVolunteerAssignment } from "@/components/shift-volunteer-assignment";
+import { occupancyStatus, shiftOccupancy, shiftsCoveringEvent } from "@/lib/shift-coverage";
 
 const eventStatusLabels: Record<EventStatus, string> = {
   DRAFT: "Entwurf",
@@ -124,22 +126,19 @@ function formatDate(value: string) {
 }
 
 function serviceBadge(shifts: Shift[], type: Shift["shift_type"]) {
-  const active = shifts.filter(
-    (shift) => shift.shift_type === type && shift.status !== "CANCELLED",
-  );
-  if (active.length === 0)
+  const { required, occupied } = shiftOccupancy(shifts, type);
+  const status = occupancyStatus(required, occupied);
+  if (status === "NOT_PLANNED")
     return {
       label: type === "KIOSK" ? "Kiosk nicht vorgesehen" : "Grill nicht vorgesehen",
       variant: "neutral" as const,
     };
-  const required = active.reduce((sum, shift) => sum + shift.required_volunteers, 0);
-  const occupied = active.reduce((sum, shift) => sum + shift.occupied_volunteers, 0);
-  if (occupied >= required && required > 0)
+  if (status === "FULL")
     return {
       label: type === "KIOSK" ? "Kiosk besetzt" : "Grill besetzt",
       variant: "success" as const,
     };
-  if (occupied > 0)
+  if (status === "PARTIAL")
     return {
       label: type === "KIOSK" ? "Kiosk unterbesetzt" : "Grill unterbesetzt",
       variant: "error" as const,
@@ -209,6 +208,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [events, setEvents] = useState<PlanningEvent[]>([]);
   const [shifts, setShifts] = useState<Shift[]>([]);
+  const [defaultGameDurationMinutes, setDefaultGameDurationMinutes] = useState(90);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -295,6 +295,16 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
           })
           .catch(() => {
             if (currentRequest === requestId.current) setVolunteers([]);
+          }),
+        // Only used as the fallback match duration for the Kiosk/Grill overlap
+        // check below; a failure here must not block the rest of the page.
+        loadOrganizationSettings(org)
+          .then((settings) => {
+            if (currentRequest === requestId.current)
+              setDefaultGameDurationMinutes(settings.default_game_duration_minutes);
+          })
+          .catch(() => {
+            // Keep the built-in 90-minute fallback.
           }),
       ]);
       if (currentRequest !== requestId.current) return;
@@ -1323,8 +1333,11 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                   ) : (
                     <ul className="grid gap-4" aria-label={`Agenda ${season.name}`}>
                       {seasonEvents.map((planningEvent, eventIndex) => {
-                        const eventShifts = shifts.filter(
-                          (shift) => shift.event_id === planningEvent.id,
+                        const eventShifts = shiftsCoveringEvent(
+                          shifts,
+                          planningEvent,
+                          timezone,
+                          defaultGameDurationMinutes,
                         );
                         const dateTile = eventDateTile(planningEvent.date);
                         const previousDate =

@@ -21,6 +21,7 @@ import { AttendancePanel } from "./attendance-panel";
 import { ImportPanel } from "./import-panel";
 import { GrillPlanningPanel } from "./grill-planning-panel";
 import { KioskPlanningPanel } from "./kiosk-planning-panel";
+import { MatchdayOverviewPanel } from "./matchday-overview-panel";
 import { PlanningPanel } from "./planning-panel";
 import { PlanningArchivePanel } from "./planning-archive-panel";
 import { PlanningPlaceholderPanel } from "./planning-placeholder-panel";
@@ -29,7 +30,7 @@ import { OverviewPanel } from "./overview-panel";
 import { SettingsPanel } from "./settings-panel";
 
 export type AdminView = "overview" | "planning" | "families" | "attendance" | "settings" | "import";
-export type PlanningSection = "schedule" | "kiosk" | "grill" | "periods" | "archive";
+export type PlanningSection = "schedule" | "matchdays" | "kiosk" | "grill" | "periods" | "archive";
 
 const roleLabels = {
   ADMIN: "Administration",
@@ -172,6 +173,8 @@ export function AdminShell({
               <PlanningNavigation activeSection={planningSection} org={org} />
               {planningSection === "schedule" ? (
                 <PlanningPanel org={org} timezone={organization.timezone} />
+              ) : planningSection === "matchdays" ? (
+                <MatchdayOverviewPanel org={org} timezone={organization.timezone} />
               ) : planningSection === "kiosk" ? (
                 <KioskPlanningPanel org={org} timezone={organization.timezone} />
               ) : planningSection === "grill" ? (
@@ -206,6 +209,7 @@ export function AdminShell({
 
 const PLANNING_ITEMS: ReadonlyArray<{ section: PlanningSection; label: string; path: string }> = [
   { section: "schedule", label: "Spielplan", path: "/planning" },
+  { section: "matchdays", label: "Spieltage", path: "/planning/matchdays" },
   { section: "kiosk", label: "Kiosk", path: "/planning/kiosk" },
   { section: "grill", label: "Grill", path: "/planning/grill" },
   { section: "archive", label: "Archiv", path: "/planning/archive" },
