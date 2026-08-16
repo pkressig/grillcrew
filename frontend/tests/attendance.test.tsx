@@ -58,6 +58,7 @@ const pastShift = {
   internal_note: null,
   status: "CLOSED",
   sort_order: 0,
+  shift_type: "GRILL",
 };
 
 const futureShift = {
@@ -226,6 +227,54 @@ describe("attendance admin", () => {
         "Leo Beispiel",
       ),
     ).toHaveLength(2);
+  });
+
+  it("differentiates Grill and Kiosk shifts via a top area selector", async () => {
+    const kioskShift = {
+      id: "shift-kiosk",
+      event_id: pastEvent.id,
+      starts_at: "2026-07-01T10:00:00Z",
+      ends_at: "2026-07-01T12:00:00Z",
+      required_volunteers: 1,
+      occupied_volunteers: 1,
+      open_places: 0,
+      signups: [signup("kiosk-1", "Karl Kiosk", "ATTENDED")],
+      public_note: null,
+      internal_note: null,
+      status: "CLOSED",
+      sort_order: 1,
+      shift_type: "KIOSK",
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/club-years")) return Response.json([]);
+      if (url.endsWith("/seasons")) return Response.json([season]);
+      if (url.endsWith("/seasons/current")) return new Response(null, { status: 404 });
+      if (url.endsWith("/seasons/season-1/events")) return Response.json([pastEvent, futureEvent]);
+      if (url.endsWith("/seasons/season-1/events-with-shifts"))
+        return Response.json([
+          { ...pastEvent, shifts: [pastShift, kioskShift] },
+          { ...futureEvent, shifts: [futureShift] },
+        ]);
+      if (url.endsWith("/events/event-past/shifts")) return Response.json([pastShift, kioskShift]);
+      if (url.endsWith("/events/event-future/shifts")) return Response.json([futureShift]);
+      if (url.endsWith("/families/children")) return Response.json([]);
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<AttendancePanel org="example" timezone="Europe/Zurich" role="KOORDINATION" />);
+
+    await screen.findByText("Offener Handlungsbedarf");
+    const grillTab = screen.getByRole("tab", { name: "Grill" });
+    const kioskTab = screen.getByRole("tab", { name: "Kiosk" });
+    expect(grillTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByText("Mia Muster").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Karl Kiosk")).not.toBeInTheDocument();
+
+    fireEvent.click(kioskTab);
+    expect(kioskTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getAllByText("Karl Kiosk").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Mia Muster")).not.toBeInTheDocument();
   });
 
   it("provides accessible filters and desktop/mobile responsive list semantics", async () => {

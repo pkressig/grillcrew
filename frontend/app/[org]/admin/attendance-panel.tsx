@@ -76,6 +76,10 @@ type AttendanceRecord = {
 
 type Filter = "ALL" | SignupOutcome;
 
+type Area = "GRILL" | "KIOSK";
+
+const areaLabels: Record<Area, string> = { GRILL: "Grill", KIOSK: "Kiosk" };
+
 const control =
   "min-h-11 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -100,6 +104,7 @@ export function AttendancePanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("ALL");
+  const [area, setArea] = useState<Area>("GRILL");
   const [pendingNoShow, setPendingNoShow] = useState<AttendanceRecord | null>(null);
   const [children, setChildren] = useState<FamilyChild[]>([]);
   const requestId = useRef(0);
@@ -192,8 +197,12 @@ export function AttendancePanel({
   }
 
   const now = Date.now();
+  const areaRecords = useMemo(
+    () => records.filter((record) => record.shift.shift_type === area),
+    [records, area],
+  );
   const groups = useMemo(() => {
-    const sorted = [...records].sort(
+    const sorted = [...areaRecords].sort(
       (left, right) =>
         new Date(left.shift.starts_at).getTime() - new Date(right.shift.starts_at).getTime(),
     );
@@ -210,7 +219,7 @@ export function AttendancePanel({
         )
         .reverse(),
     };
-  }, [records, now]);
+  }, [areaRecords, now]);
 
   const matches = (record: AttendanceRecord) => {
     const needle = search.trim().toLocaleLowerCase("de-CH");
@@ -262,6 +271,21 @@ export function AttendancePanel({
           </a>
         }
       />
+
+      <div className="flex gap-2 border-b" role="tablist" aria-label="Bereich">
+        {(Object.keys(areaLabels) as Area[]).map((value) => (
+          <Button
+            key={value}
+            type="button"
+            role="tab"
+            aria-selected={area === value}
+            variant={area === value ? "primary" : "ghost"}
+            onClick={() => setArea(value)}
+          >
+            {areaLabels[value]}
+          </Button>
+        ))}
+      </div>
 
       {error ? (
         <p
