@@ -249,6 +249,8 @@ export const updateShift = (
     writeInit("PATCH", payload),
     "Der Einsatz konnte nicht aktualisiert werden.",
   );
+export const deleteShift = (org: string, shiftId: string) =>
+  remove(`/api/admin/${encodeURIComponent(org)}/shifts/${encodeURIComponent(shiftId)}`);
 export const cancelSignup = (org: string, signupId: string) =>
   request<Shift>(
     `/api/admin/${encodeURIComponent(org)}/signups/${encodeURIComponent(signupId)}/cancel`,

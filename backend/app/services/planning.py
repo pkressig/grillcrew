@@ -775,6 +775,45 @@ class PlanningService:
         self.db.refresh(item)
         return item
 
+    def delete_shift(self, shift_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
+        """Hard-delete a shift created (and possibly cancelled) by mistake.
+
+        Blocked whenever any signup exists, active or not, so a shift that ever had a
+        real volunteer on it keeps its history — cancel it instead. This covers the
+        common case this exists for: cleaning up a shift with zero signups, regardless
+        of its current status.
+        """
+        item = self.db.scalar(
+            select(Shift)
+            .join(Event)
+            .join(Season)
+            .join(ClubYear)
+            .where(Shift.id == shift_id, ClubYear.organization_id == self.organization_id)
+            .with_for_update(of=Shift)
+        )
+        if item is None:
+            raise PlanningNotFoundError
+        signup_count = (
+            self.db.scalar(
+                select(func.count()).select_from(Signup).where(Signup.shift_id == item.id)
+            )
+            or 0
+        )
+        if signup_count:
+            raise PlanningConflictError(
+                "Dieser Einsatz kann nicht gelöscht werden: es bestehen "
+                f"{signup_count} Anmeldung(en). Bitte zuerst absagen."
+            )
+        self._audit(
+            actor_user_id,
+            "SHIFT_DELETED",
+            "shift",
+            item.id,
+            {"event_id": item.event_id, "starts_at": item.starts_at},
+        )
+        self.db.delete(item)
+        self.db.commit()
+
     def suggest_shift_crew(self, event_id: uuid.UUID) -> CrewSizeRule | None:
         """Return the matched crew-size rule for the event's team text, or `None`."""
         event = self._get_event(event_id)

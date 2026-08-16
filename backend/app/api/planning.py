@@ -485,6 +485,23 @@ def update_shift(
         raise _translate(error) from None
 
 
+@router.delete("/shifts/{shift_id}", status_code=204)
+def delete_shift(
+    organization_slug: str,
+    shift_id: uuid.UUID,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> None:
+    try:
+        _write_service(organization_slug, current, db, request).delete_shift(
+            shift_id, current.user.id
+        )
+    except (PlanningNotFoundError, PlanningConflictError) as error:
+        raise _translate(error) from None
+
+
 @router.post("/shifts/{shift_id}/assign", response_model=AdminShiftResponse)
 def assign_volunteer(
     organization_slug: str,

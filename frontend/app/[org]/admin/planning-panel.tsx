@@ -11,6 +11,7 @@ import {
   createEvent,
   createShift,
   deleteEvent,
+  deleteShift,
   loadShiftCrewSuggestion,
   updateEventStatus,
   updateShiftStatus,
@@ -155,38 +156,6 @@ function eventDateTile(value: string) {
   };
 }
 
-function calendarWeek(value: string) {
-  const date = new Date(`${value}T00:00:00Z`);
-  const weekday = date.getUTCDay() || 7;
-  date.setUTCDate(date.getUTCDate() - weekday + 1);
-  const start = date.toISOString().slice(0, 10);
-  date.setUTCDate(date.getUTCDate() + 6);
-  return {
-    key: start,
-    label: `${formatDate(start)} – ${formatDate(date.toISOString().slice(0, 10))}`,
-  };
-}
-
-function closestLoadedWeek(weeks: ReadonlyArray<{ key: string }>, timezone: string) {
-  const todayParts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone: timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    })
-      .formatToParts(new Date())
-      .filter((part) => part.type !== "literal")
-      .map((part) => [part.type, Number(part.value)]),
-  );
-  const todayUtc = Date.UTC(todayParts.year!, todayParts.month! - 1, todayParts.day!);
-  return weeks.reduce((closest, week) => {
-    const distance = Math.abs(Date.parse(`${week.key}T00:00:00Z`) - todayUtc);
-    const closestDistance = Math.abs(Date.parse(`${closest.key}T00:00:00Z`) - todayUtc);
-    return distance < closestDistance ? week : closest;
-  }).key;
-}
-
 function formatDateTime(value: string, timezone: string) {
   return new Intl.DateTimeFormat("de-CH", {
     dateStyle: "medium",
@@ -244,9 +213,7 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [eventView, setEventView] = useState<"agenda" | "calendar">("agenda");
   const [eventTab, setEventTab] = useState<"upcoming" | "past">("upcoming");
-  const [selectedWeek, setSelectedWeek] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [seasonFilter, setSeasonFilter] = useState("");
@@ -261,7 +228,6 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
   const [bulkBusy, setBulkBusy] = useState(false);
   const [volunteers, setVolunteers] = useState<FamilyVolunteer[]>([]);
   const requestId = useRef(0);
-  const selectedCalendarWeek = useRef<HTMLHeadingElement | null>(null);
 
   const activeSeasons = useMemo(
     () => seasons.filter((season) => season.status !== "CLOSED" && season.status !== "ARCHIVED"),
@@ -310,34 +276,6 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     );
     return [...groups.entries()].sort(([left], [right]) => left.localeCompare(right));
   }, [filteredEvents]);
-
-  const loadedWeeks = useMemo(() => {
-    const weeks = new Map<string, ReturnType<typeof calendarWeek>>();
-    filteredEvents.forEach((event) => {
-      const week = calendarWeek(event.date);
-      weeks.set(week.key, week);
-    });
-    return [...weeks.values()].sort((left, right) => left.key.localeCompare(right.key));
-  }, [filteredEvents]);
-
-  useEffect(() => {
-    if (loadedWeeks.length === 0) {
-      setSelectedWeek(null);
-      return;
-    }
-    setSelectedWeek((current) =>
-      current && loadedWeeks.some((week) => week.key === current)
-        ? current
-        : closestLoadedWeek(loadedWeeks, timezone),
-    );
-  }, [loadedWeeks, timezone]);
-
-  const selectedWeekIndex = loadedWeeks.findIndex((week) => week.key === selectedWeek);
-  const selectedWeekLabel = loadedWeeks[selectedWeekIndex]?.label;
-
-  useEffect(() => {
-    if (eventView === "calendar") selectedCalendarWeek.current?.focus();
-  }, [eventView, selectedWeek]);
 
   const refresh = useCallback(async () => {
     const currentRequest = ++requestId.current;
@@ -571,6 +509,16 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     if (next === "CANCELLED" && !window.confirm(`Einsatz für "${eventTitle}" wirklich absagen?`))
       return;
     void run(() => updateShiftStatus(org, shift.id, next), "Einsatzstatus wurde aktualisiert.");
+  }
+
+  function removeShift(shift: Shift, eventTitle: string) {
+    if (
+      !window.confirm(
+        `Einsatz ${formatDateTime(shift.starts_at, timezone)} für "${eventTitle}" endgültig löschen?`,
+      )
+    )
+      return;
+    void run(() => deleteShift(org, shift.id), "Der Einsatz wurde endgültig gelöscht.");
   }
 
   function assignShiftVolunteer(shift: Shift, volunteerId: string): Promise<boolean> {
@@ -988,39 +936,13 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
       </section>
       <div className="grid min-w-0 gap-7 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start xl:gap-9">
         <section className="grid min-w-0 gap-5" aria-labelledby="events-title">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 id="events-title" className="text-xl font-semibold">
-                {eventView === "agenda" ? "Agenda" : "Kalender"}
-              </h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Anlässe nach Saison planen und die benötigten Einsätze erfassen.
-              </p>
-            </div>
-            <div
-              className="inline-flex rounded-md border border-border bg-background p-1"
-              role="group"
-              aria-label="Planungsansicht"
-            >
-              <Button
-                className="min-h-11"
-                type="button"
-                variant={eventView === "agenda" ? "primary" : "ghost"}
-                aria-pressed={eventView === "agenda"}
-                onClick={() => setEventView("agenda")}
-              >
-                Agenda
-              </Button>
-              <Button
-                className="min-h-11"
-                type="button"
-                variant={eventView === "calendar" ? "primary" : "ghost"}
-                aria-pressed={eventView === "calendar"}
-                onClick={() => setEventView("calendar")}
-              >
-                Kalender
-              </Button>
-            </div>
+          <div>
+            <h2 id="events-title" className="text-xl font-semibold">
+              Agenda
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Anlässe nach Saison planen und die benötigten Einsätze erfassen.
+            </p>
           </div>
           <div className="flex gap-2 border-b" role="tablist" aria-label="Zeitraum">
             <Button
@@ -1265,50 +1187,6 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
               Keine Spiele entsprechen den gewählten Filtern.
             </p>
           )}
-          {loadedWeeks.length > 0 ? (
-            <nav
-              className="flex w-full flex-col gap-2 rounded-lg border border-border/80 bg-background p-2 sm:flex-row sm:items-center sm:justify-between"
-              aria-label="Datumsnavigation"
-            >
-              <p className="px-1 text-sm font-medium" aria-live="polite">
-                <span className="sr-only">Ausgewähltes Zeitfenster: </span>
-                {selectedWeekLabel}
-              </p>
-              <div
-                className="grid w-full grid-cols-3 gap-1 sm:w-auto"
-                role="group"
-                aria-label="Zeitfenster"
-              >
-                <Button
-                  className="min-h-11 px-3"
-                  type="button"
-                  variant="ghost"
-                  disabled={selectedWeekIndex <= 0}
-                  onClick={() => setSelectedWeek(loadedWeeks[selectedWeekIndex - 1]!.key)}
-                >
-                  Zurück
-                </Button>
-                <Button
-                  className="min-h-11 px-3"
-                  type="button"
-                  variant="ghost"
-                  disabled={selectedWeek === closestLoadedWeek(loadedWeeks, timezone)}
-                  onClick={() => setSelectedWeek(closestLoadedWeek(loadedWeeks, timezone))}
-                >
-                  Aktuell
-                </Button>
-                <Button
-                  className="min-h-11 px-3"
-                  type="button"
-                  variant="ghost"
-                  disabled={selectedWeekIndex < 0 || selectedWeekIndex >= loadedWeeks.length - 1}
-                  onClick={() => setSelectedWeek(loadedWeeks[selectedWeekIndex + 1]!.key)}
-                >
-                  Weiter
-                </Button>
-              </div>
-            </nav>
-          ) : null}
           <details className="rounded-lg border border-border/80 bg-background p-4 shadow-card">
             <summary className="min-h-11 cursor-pointer font-medium">Anlass erstellen</summary>
             <form className="mt-3 grid gap-3 sm:grid-cols-2" onSubmit={submitEvent}>
@@ -1427,10 +1305,6 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                     left.item.date.localeCompare(right.item.date) || left.index - right.index,
                 )
                 .map(({ item }) => item);
-              const visibleSeasonEvents =
-                eventView === "agenda"
-                  ? seasonEvents.filter((item) => calendarWeek(item.date).key === selectedWeek)
-                  : seasonEvents;
               return (
                 <section
                   className="grid gap-3"
@@ -1446,45 +1320,20 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                         ? "In dieser Saison gibt es keine vergangenen Anlässe."
                         : "In dieser Saison sind noch keine bevorstehenden Anlässe vorhanden."}
                     </p>
-                  ) : visibleSeasonEvents.length === 0 ? (
-                    <p className="rounded-md border border-border/80 p-4 text-muted-foreground">
-                      In dieser Saison gibt es in der ausgewählten Woche keine Anlässe.
-                    </p>
                   ) : (
-                    <ul
-                      className={
-                        eventView === "calendar" ? "grid gap-4 md:grid-cols-2" : "grid gap-4"
-                      }
-                      aria-label={
-                        eventView === "calendar"
-                          ? `Kalenderwochen ${season.name}`
-                          : `Agenda ${season.name}`
-                      }
-                    >
-                      {visibleSeasonEvents.map((planningEvent, eventIndex) => {
+                    <ul className="grid gap-4" aria-label={`Agenda ${season.name}`}>
+                      {seasonEvents.map((planningEvent, eventIndex) => {
                         const eventShifts = shifts.filter(
                           (shift) => shift.event_id === planningEvent.id,
                         );
                         const dateTile = eventDateTile(planningEvent.date);
-                        const week = calendarWeek(planningEvent.date);
-                        const previousWeek =
-                          eventIndex > 0
-                            ? calendarWeek(visibleSeasonEvents[eventIndex - 1]!.date).key
-                            : null;
+                        const previousDate =
+                          eventIndex > 0 ? seasonEvents[eventIndex - 1]!.date : null;
                         return [
-                          eventView === "calendar" && week.key !== previousWeek ? (
-                            <li className="md:col-span-2" key={`week-${week.key}`}>
-                              <h5
-                                className={
-                                  week.key === selectedWeek
-                                    ? "rounded-md border border-primary/30 bg-primary/10 p-3 font-semibold text-primary outline-none ring-2 ring-primary/30"
-                                    : "border-b border-border/80 pb-2 font-semibold"
-                                }
-                                aria-current={week.key === selectedWeek ? "date" : undefined}
-                                ref={week.key === selectedWeek ? selectedCalendarWeek : undefined}
-                                tabIndex={week.key === selectedWeek ? -1 : undefined}
-                              >
-                                Woche {week.label}
+                          planningEvent.date !== previousDate ? (
+                            <li key={`day-${planningEvent.date}`}>
+                              <h5 className="border-b border-border/80 pb-2 font-semibold">
+                                {formatDate(planningEvent.date)}
                               </h5>
                             </li>
                           ) : null,
@@ -1770,31 +1619,39 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                       }
                                                     />
                                                   </div>
-                                                  {shiftActions[shift.status].length ? (
-                                                    <div className="mt-3 flex flex-wrap gap-2">
-                                                      {shiftActions[shift.status].map((next) => (
-                                                        <Button
-                                                          variant={
-                                                            next === "CANCELLED"
-                                                              ? "destructive"
-                                                              : "secondary"
-                                                          }
-                                                          disabled={busy}
-                                                          key={next}
-                                                          aria-label={`Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title} ${shiftActionLabels[next].toLocaleLowerCase("de-CH")}`}
-                                                          onClick={() =>
-                                                            changeShiftStatus(
-                                                              shift,
-                                                              planningEvent.title,
-                                                              next,
-                                                            )
-                                                          }
-                                                        >
-                                                          {shiftActionLabels[next]}
-                                                        </Button>
-                                                      ))}
-                                                    </div>
-                                                  ) : null}
+                                                  <div className="mt-3 flex flex-wrap gap-2">
+                                                    {shiftActions[shift.status].map((next) => (
+                                                      <Button
+                                                        variant={
+                                                          next === "CANCELLED"
+                                                            ? "destructive"
+                                                            : "secondary"
+                                                        }
+                                                        disabled={busy}
+                                                        key={next}
+                                                        aria-label={`Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title} ${shiftActionLabels[next].toLocaleLowerCase("de-CH")}`}
+                                                        onClick={() =>
+                                                          changeShiftStatus(
+                                                            shift,
+                                                            planningEvent.title,
+                                                            next,
+                                                          )
+                                                        }
+                                                      >
+                                                        {shiftActionLabels[next]}
+                                                      </Button>
+                                                    ))}
+                                                    <Button
+                                                      variant="destructive"
+                                                      disabled={busy}
+                                                      aria-label={`Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${planningEvent.title} löschen`}
+                                                      onClick={() =>
+                                                        removeShift(shift, planningEvent.title)
+                                                      }
+                                                    >
+                                                      Löschen
+                                                    </Button>
+                                                  </div>
                                                 </CardBody>
                                               </Card>
                                             </li>

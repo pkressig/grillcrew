@@ -614,6 +614,43 @@ def test_update_shift_persists_new_time_window_and_required_volunteers() -> None
     assert db.refreshes == 1
 
 
+def test_delete_shift_removes_row_when_no_signups() -> None:
+    target = SimpleNamespace(
+        id=uuid4(), event_id=uuid4(), starts_at=datetime(2026, 9, 1, 10, tzinfo=UTC)
+    )
+    db = _EventDeleteDb(target, [], [0])
+
+    PlanningService(cast(object, db), uuid4()).delete_shift(target.id, uuid4())  # type: ignore[arg-type]
+
+    assert db.deleted == [target]
+    assert db.commits == 1
+    audit = cast(AuditEvent, db.added[-1])
+    assert audit.action == "SHIFT_DELETED"
+    assert audit.entity_id == target.id
+
+
+def test_delete_shift_blocks_when_signups_exist() -> None:
+    target = SimpleNamespace(
+        id=uuid4(), event_id=uuid4(), starts_at=datetime(2026, 9, 1, 10, tzinfo=UTC)
+    )
+    db = _EventDeleteDb(target, [], [2])
+
+    with pytest.raises(PlanningConflictError, match="2 Anmeldung"):
+        PlanningService(cast(object, db), uuid4()).delete_shift(target.id, uuid4())  # type: ignore[arg-type]
+
+    assert db.deleted == []
+    assert db.commits == 0
+
+
+def test_delete_shift_is_tenant_isolated_and_raises_when_missing() -> None:
+    db = _EventDeleteDb(None, [], [])
+
+    with pytest.raises(PlanningNotFoundError):
+        PlanningService(cast(object, db), uuid4()).delete_shift(uuid4(), uuid4())  # type: ignore[arg-type]
+
+    assert db.commits == 0
+
+
 @pytest.mark.parametrize(
     ("schema", "values"),
     [(EventUpdate, {"date": None}), (ShiftUpdate, {"required_volunteers": None})],
@@ -857,6 +894,45 @@ def test_delete_event_endpoint_returns_success_or_concrete_conflict(
     assert response.status_code == expected_status
     if blocked:
         assert "2 Anmeldung" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(("blocked", "expected_status"), [(False, 204), (True, 409)])
+def test_delete_shift_endpoint_returns_success_or_concrete_conflict(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    blocked: bool,
+    expected_status: int,
+) -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
+    current = cast(
+        CurrentStaffMembership,
+        SimpleNamespace(organization=organization, user=SimpleNamespace(id=uuid4())),
+    )
+
+    class FakePlanningService:
+        def __init__(self, _db: object, _organization_id: object) -> None:
+            pass
+
+        def delete_shift(self, _shift_id: object, _actor_id: object) -> None:
+            if blocked:
+                raise PlanningConflictError(
+                    "Dieser Einsatz kann nicht gelöscht werden: es bestehen 1 Anmeldung(en). "
+                    "Bitte zuerst absagen."
+                )
+
+    app.dependency_overrides[planning.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: _ListDb()
+    monkeypatch.setattr(planning, "PlanningService", FakePlanningService)
+    monkeypatch.setattr(planning, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.request("DELETE", f"/api/admin/tenant-a/shifts/{uuid4()}")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == expected_status
+    if blocked:
+        assert "1 Anmeldung" in response.json()["detail"]
 
 
 @pytest.mark.parametrize(
