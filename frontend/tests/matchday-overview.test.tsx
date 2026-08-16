@@ -65,7 +65,7 @@ describe("MatchdayOverviewPanel", () => {
     const summary = await screen.findByLabelText(/Spieltag .* anzeigen/);
     expect(summary.closest("details")).not.toHaveAttribute("open");
     expect(screen.getByText("Kiosk offen")).toBeInTheDocument();
-    expect(screen.getByText("Grill offen")).toBeInTheDocument();
+    expect(screen.getByText("Grill nicht vorgesehen")).toBeInTheDocument();
   });
 
   it("reveals assigned helpers and the matches for that day when expanded", async () => {
@@ -75,9 +75,8 @@ describe("MatchdayOverviewPanel", () => {
     expect(summary.closest("details")).toHaveAttribute("open");
     expect(screen.getByText("Mia Muster")).toBeInTheDocument();
     expect(screen.getByText(/\+41 79 123 45 67/)).toBeInTheDocument();
-    expect(screen.getByText("Aktive")).toBeInTheDocument();
-    expect(screen.getByText("FC Heim 1 – Gastteam")).toBeInTheDocument();
     expect(screen.getByText("FC Heim – FC Gast")).toBeInTheDocument();
+    expect(screen.getByText("FC Heim 1 – Gastteam")).toBeInTheDocument();
   });
 
   it("shows an honest empty state when there are no matchdays", async () => {

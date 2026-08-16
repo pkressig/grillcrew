@@ -42,6 +42,7 @@ const statusVariant: Record<OccupancyStatus, BadgeProps["variant"]> = {
 
 function CoverageBadge({ type, status }: Readonly<{ type: ShiftType; status: OccupancyStatus }>) {
   const label = type === "KIOSK" ? "Kiosk" : "Grill";
+  if (status === "NOT_PLANNED") return <Badge variant="neutral">{label} nicht vorgesehen</Badge>;
   return <Badge variant={statusVariant[status]}>{label} offen</Badge>;
 }
 
@@ -214,21 +215,25 @@ export function MatchdayOverviewPanel({
                       <h4 className="text-sm font-semibold text-muted-foreground">
                         Spiele an diesem Tag
                       </h4>
-                      <ul className="mt-2 grid gap-2">
+                      <ul className="mt-2 text-sm">
                         {sortedEvents.map((event) => (
-                          <li key={event.id} className="rounded-md bg-muted p-3 text-sm">
-                            <div className="flex items-baseline gap-2">
-                              <span className="shrink-0 font-semibold tabular-nums">
-                                {event.kickoff_time ? event.kickoff_time.slice(0, 5) : "Zeit offen"}
-                              </span>
-                              <span className="font-semibold">{event.event_type}</span>
-                            </div>
+                          <li
+                            key={event.id}
+                            className="border-b border-border/60 py-1 last:border-b-0"
+                          >
+                            <span className="font-semibold tabular-nums">
+                              {event.kickoff_time ? event.kickoff_time.slice(0, 5) : "Zeit offen"}
+                            </span>
+                            {" – "}
+                            <span className="font-semibold">{event.title}</span>
                             {event.public_description ? (
-                              <p className="mt-1 text-muted-foreground">
-                                {event.public_description}
-                              </p>
+                              <>
+                                {" – "}
+                                <span className="text-muted-foreground">
+                                  {event.public_description}
+                                </span>
+                              </>
                             ) : null}
-                            <p className="mt-1 text-muted-foreground">{event.title}</p>
                           </li>
                         ))}
                       </ul>
