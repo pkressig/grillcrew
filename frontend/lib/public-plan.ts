@@ -24,10 +24,15 @@ export type PublicPlanEvent = {
 
 export type PublicPlan = { events: PublicPlanEvent[] };
 
-export async function fetchPublicPlan(org: string, signal?: AbortSignal): Promise<PublicPlan> {
-  const response = await fetch(`${apiBaseUrl}/api/public/${encodeURIComponent(org)}/plan`, {
-    signal,
-  });
+export async function fetchPublicPlan(
+  org: string,
+  shiftType: "GRILL" | "KIOSK",
+  signal?: AbortSignal,
+): Promise<PublicPlan> {
+  const response = await fetch(
+    `${apiBaseUrl}/api/public/${encodeURIComponent(org)}/plan?shift_type=${shiftType}`,
+    { signal },
+  );
   if (!response.ok) throw new Error("Der Einsatzplan konnte nicht geladen werden.");
   return (await response.json()) as PublicPlan;
 }

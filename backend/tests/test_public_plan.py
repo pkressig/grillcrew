@@ -56,7 +56,9 @@ def test_public_plan_is_unauthenticated_sorted_and_public_safe(
         def __init__(self, _db: object, organization_id: UUID) -> None:
             captured.append(organization_id)
 
-        def list_public_events(self, _from_date: date) -> list[object]:
+        def list_public_events(
+            self, _from_date: date, shift_type: ShiftType = ShiftType.GRILL
+        ) -> list[object]:
             event.shifts.sort(key=lambda item: (item.sort_order, item.starts_at, item.id))
             return [event]
 
@@ -91,6 +93,111 @@ def test_public_plan_is_unauthenticated_sorted_and_public_safe(
     assert body["events"][0]["shifts"][0]["occupied_volunteers"] == 1
     assert body["events"][0]["shifts"][0]["volunteer_names"] == ["Mia Muster"]
     assert "cancelled person" not in serialized
+
+
+def test_public_plan_selects_kiosk_shifts_and_excludes_grill_when_requested(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    organization = _organization("tenant-a")
+    kiosk_id = UUID("00000000-0000-0000-0000-000000000003")
+    grill_id = UUID("00000000-0000-0000-0000-000000000004")
+    event = SimpleNamespace(
+        id=uuid4(),
+        title="Grill",
+        date=date(2099, 8, 1),
+        location="Sportplatz",
+        event_type="Match",
+        public_description="Beim Eingang",
+        kickoff_time=None,
+        internal_note="staff secret",
+        shifts=[
+            _shift(kiosk_id, 0, "10:00", internal_note="kiosk note", shift_type=ShiftType.KIOSK),
+            _shift(grill_id, 1, "12:00", internal_note="grill note", shift_type=ShiftType.GRILL),
+        ],
+    )
+    captured_shift_types: list[ShiftType] = []
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def list_public_events(
+            self, _from_date: date, shift_type: ShiftType = ShiftType.GRILL
+        ) -> list[object]:
+            captured_shift_types.append(shift_type)
+            return [event]
+
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(public, "resolve_organization", lambda *_args: organization)
+    monkeypatch.setattr(public, "PlanningService", FakeService)
+    try:
+        response = client.get("/api/public/tenant-a/plan?shift_type=KIOSK")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert captured_shift_types == [ShiftType.KIOSK]
+    body = response.json()
+    assert [shift["id"] for shift in body["events"][0]["shifts"]] == [str(kiosk_id)]
+
+
+def test_public_plan_omitting_shift_type_stays_grill_only(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    organization = _organization("tenant-a")
+    kiosk_id = UUID("00000000-0000-0000-0000-000000000005")
+    grill_id = UUID("00000000-0000-0000-0000-000000000006")
+    event = SimpleNamespace(
+        id=uuid4(),
+        title="Grill",
+        date=date(2099, 8, 1),
+        location="Sportplatz",
+        event_type="Match",
+        public_description="Beim Eingang",
+        kickoff_time=None,
+        internal_note="staff secret",
+        shifts=[
+            _shift(kiosk_id, 0, "10:00", internal_note="kiosk note", shift_type=ShiftType.KIOSK),
+            _shift(grill_id, 1, "12:00", internal_note="grill note", shift_type=ShiftType.GRILL),
+        ],
+    )
+    captured_shift_types: list[ShiftType] = []
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def list_public_events(
+            self, _from_date: date, shift_type: ShiftType = ShiftType.GRILL
+        ) -> list[object]:
+            captured_shift_types.append(shift_type)
+            return [event]
+
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(public, "resolve_organization", lambda *_args: organization)
+    monkeypatch.setattr(public, "PlanningService", FakeService)
+    try:
+        response = client.get("/api/public/tenant-a/plan")
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    assert captured_shift_types == [ShiftType.GRILL]
+    body = response.json()
+    assert [shift["id"] for shift in body["events"][0]["shifts"]] == [str(grill_id)]
+
+
+def test_public_plan_invalid_shift_type_returns_422(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    organization = _organization("tenant-a")
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(public, "resolve_organization", lambda *_args: organization)
+    try:
+        response = client.get("/api/public/tenant-a/plan?shift_type=NOT_A_TYPE")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
 
 
 def test_public_plan_unknown_organization_returns_404(
@@ -134,7 +241,9 @@ def test_public_plan_serializes_all_games_but_only_existing_grill_shifts(
         def __init__(self, _db: object, _organization_id: UUID) -> None:
             pass
 
-        def list_public_events(self, _from_date: date) -> list[object]:
+        def list_public_events(
+            self, _from_date: date, shift_type: ShiftType = ShiftType.GRILL
+        ) -> list[object]:
             return events
 
     app.dependency_overrides[get_db] = lambda: object()

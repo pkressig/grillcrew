@@ -81,13 +81,11 @@ export default function ProfilePage() {
   if (!auth.isAuthenticated) {
     // /profile carries no organization slug of its own, and /login is the
     // staff/admin sign-in page -- wrong destination for a volunteer entirely.
-    // Route back to whichever club's page this browser last visited (its own
-    // login modal opens via ?login=1, the same mechanism the register page's
-    // "already registered" link uses) instead of a generic platform page.
+    // Route back to whichever club's hub page this browser last visited
+    // instead of a generic platform page. The hub page (org root) is not a
+    // shift-signup context, so no ?login=1/shift query carries over here.
     const lastOrganizationSlug = getLastOrganizationSlug();
-    const loginHref = lastOrganizationSlug
-      ? `/${encodeURIComponent(lastOrganizationSlug)}?login=1`
-      : "/";
+    const loginHref = lastOrganizationSlug ? `/${encodeURIComponent(lastOrganizationSlug)}` : "/";
     return (
       <AuthCard title="Anmeldung erforderlich" back={{ label: "Zurück", onClick: goBack }}>
         <p>Bitte melde dich an, um dein Helferprofil zu bearbeiten.</p>

@@ -261,7 +261,7 @@ describe("ProfilePage logged-out login link", () => {
     );
     expect(await screen.findByRole("link", { name: "Anmelden" })).toHaveAttribute(
       "href",
-      "/fc-beispiel?login=1",
+      "/fc-beispiel",
     );
   });
 

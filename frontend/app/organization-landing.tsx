@@ -43,10 +43,17 @@ const dateFormatter = new Intl.DateTimeFormat("de-CH", {
   year: "numeric",
   timeZone: "UTC",
 });
-export function OrganizationLanding() {
+export function OrganizationLanding({
+  shiftType,
+}: Readonly<{
+  shiftType: "GRILL" | "KIOSK";
+}>) {
   const organization = useOrganization();
   const auth = useAuth();
   const router = useRouter();
+  const basePath = shiftType === "GRILL" ? "grill" : "kiosk";
+  const areaLabel = shiftType === "GRILL" ? "Grill Helfer Einsatzplan" : "Kiosk Helfer Einsatzplan";
+  const orgBasePath = `/${encodeURIComponent(organization.slug)}/${basePath}`;
   const [plan, setPlan] = useState<PublicPlan | null>(null);
   const [error, setError] = useState(false);
   const [selectedShift, setSelectedShift] = useState<string | null>(null);
@@ -67,7 +74,7 @@ export function OrganizationLanding() {
   }, [organization.slug]);
 
   function goToRegister() {
-    const params = new URLSearchParams({ org: organization.slug });
+    const params = new URLSearchParams({ org: organization.slug, area: basePath });
     if (pendingShiftId) params.set("shift", pendingShiftId);
     router.replace(`/register?${params.toString()}`);
   }
@@ -98,9 +105,7 @@ export function OrganizationLanding() {
     params.delete("shift");
     params.delete("login");
     const nextSearch = params.toString();
-    router.replace(
-      `/${encodeURIComponent(organization.slug)}${nextSearch ? `?${nextSearch}` : ""}`,
-    );
+    router.replace(`${orgBasePath}${nextSearch ? `?${nextSearch}` : ""}`);
     // Runs once on mount to consume the redirect-carried query params.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -175,14 +180,14 @@ export function OrganizationLanding() {
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
-    void fetchPublicPlan(organization.slug, controller.signal)
+    void fetchPublicPlan(organization.slug, shiftType, controller.signal)
       .then((result) => active && setPlan(result))
       .catch(() => active && setError(true));
     return () => {
       active = false;
       controller.abort();
     };
-  }, [organization.slug]);
+  }, [organization.slug, shiftType]);
 
   useEffect(() => {
     if (!auth.isAuthenticated) {
@@ -275,7 +280,7 @@ export function OrganizationLanding() {
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-3">
           <OrganizationLogo organization={organization} className="h-11 w-11 rounded-lg" />
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold text-muted-foreground">Grill Helfer Einsatzplan</p>
+            <p className="text-xs font-semibold text-muted-foreground">{areaLabel}</p>
             <h1 className="truncate text-xl font-bold">{organization.name}</h1>
           </div>
           <nav className="flex items-center gap-2" aria-label="Konto">
@@ -287,7 +292,7 @@ export function OrganizationLanding() {
                 >
                   Mein Profil
                 </Link>
-                <LogoutButton redirectTo={`/${organization.slug}`} />
+                <LogoutButton redirectTo={orgBasePath} />
               </>
             ) : (
               <>
@@ -302,7 +307,7 @@ export function OrganizationLanding() {
                   Login
                 </a>
                 <Link
-                  href={`/register?org=${encodeURIComponent(organization.slug)}`}
+                  href={`/register?org=${encodeURIComponent(organization.slug)}&area=${basePath}`}
                   className={cn(buttonVariants(), "min-h-11")}
                 >
                   Registrieren

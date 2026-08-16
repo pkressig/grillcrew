@@ -245,22 +245,24 @@ class PlanningService:
             )
         )
 
-    def list_public_events(self, from_date: date) -> list[Event]:
-        """Return all published events on upcoming public grill-service days."""
-        grill_event = aliased(Event)
-        grill_season = aliased(Season)
-        grill_club_year = aliased(ClubYear)
-        public_grill_day_exists = (
+    def list_public_events(
+        self, from_date: date, shift_type: ShiftType = ShiftType.GRILL
+    ) -> list[Event]:
+        """Return all published events on upcoming public service days for `shift_type`."""
+        public_event = aliased(Event)
+        public_season = aliased(Season)
+        public_club_year = aliased(ClubYear)
+        public_shift_day_exists = (
             select(Shift.id)
-            .join(grill_event, Shift.event_id == grill_event.id)
-            .join(grill_season, grill_event.season_id == grill_season.id)
-            .join(grill_club_year, grill_season.club_year_id == grill_club_year.id)
+            .join(public_event, Shift.event_id == public_event.id)
+            .join(public_season, public_event.season_id == public_season.id)
+            .join(public_club_year, public_season.club_year_id == public_club_year.id)
             .where(
-                grill_club_year.organization_id == self.organization_id,
-                grill_event.status == EventStatus.PUBLISHED,
-                grill_event.date == Event.date,
+                public_club_year.organization_id == self.organization_id,
+                public_event.status == EventStatus.PUBLISHED,
+                public_event.date == Event.date,
                 Shift.status != ShiftStatus.CANCELLED,
-                Shift.shift_type == ShiftType.GRILL,
+                Shift.shift_type == shift_type,
             )
             .exists()
         )
@@ -274,7 +276,7 @@ class PlanningService:
                     ClubYear.organization_id == self.organization_id,
                     Event.status == EventStatus.PUBLISHED,
                     Event.date >= from_date,
-                    public_grill_day_exists,
+                    public_shift_day_exists,
                 )
                 .order_by(Event.date, Event.id)
             )

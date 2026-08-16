@@ -136,10 +136,10 @@ const profile = {
   ],
 };
 
-function renderPage() {
+function renderPage(shiftType: "GRILL" | "KIOSK" = "GRILL") {
   return render(
     <OrganizationProvider organization={organization}>
-      <OrganizationLanding />
+      <OrganizationLanding shiftType={shiftType} />
     </OrganizationProvider>,
   );
 }
@@ -154,7 +154,7 @@ describe("mobile public plan", () => {
     mockedRequestPasswordReset.mockReset();
     replaceMock.mockReset();
     localStorage.clear();
-    window.history.replaceState({}, "", "/example");
+    window.history.replaceState({}, "", "/example/grill");
   });
   afterEach(cleanup);
 
@@ -250,11 +250,11 @@ describe("mobile public plan", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Samstag, 05. September 2026/ }));
     fireEvent.click(screen.getByRole("button", { name: /Einsatz anmelden: Junioren/ }));
     fireEvent.click(screen.getByRole("button", { name: "Noch kein Konto? Jetzt registrieren" }));
-    expect(replaceMock).toHaveBeenCalledWith("/register?org=example&shift=s1");
+    expect(replaceMock).toHaveBeenCalledWith("/register?org=example&area=grill&shift=s1");
   });
 
   it("restores a pending shift signup after returning from registration, expanding its day and opening the form", async () => {
-    window.history.pushState({}, "", "/example?shift=s1");
+    window.history.pushState({}, "", "/example/grill?shift=s1");
     authState.isAuthenticated = true;
     renderPage();
     await waitFor(() =>
@@ -265,14 +265,14 @@ describe("mobile public plan", () => {
     );
     const form = screen.getByRole("form", { name: /Eintragung für Junioren/ });
     expect(within(form).getByText("+41 79 000 00 00 · private@example.test")).toBeInTheDocument();
-    expect(replaceMock).toHaveBeenCalledWith("/example");
+    expect(replaceMock).toHaveBeenCalledWith("/example/grill");
   });
 
   it("opens the login modal when returning from registration with ?login=1", async () => {
-    window.history.pushState({}, "", "/example?login=1");
+    window.history.pushState({}, "", "/example/grill?login=1");
     renderPage();
     expect(await screen.findByRole("heading", { name: "Helfer-Login" })).toBeInTheDocument();
-    expect(replaceMock).toHaveBeenCalledWith("/example");
+    expect(replaceMock).toHaveBeenCalledWith("/example/grill");
   });
 
   it("shows own upcoming signups only when authenticated and prevents duplicate signup", async () => {

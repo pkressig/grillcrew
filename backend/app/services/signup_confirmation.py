@@ -9,6 +9,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from app.core.config import Settings
+from app.models.planning import ShiftType
 from app.services.email.base import EmailMessage, EmailSender, EmailSendError
 from app.services.email.branding import (
     OrganizationBranding,
@@ -19,6 +20,10 @@ from app.services.email.factory import build_email_sender
 
 logger = logging.getLogger(__name__)
 SUBJECT = "Deine GrillCrew-Eintragung ist bestätigt"
+_PUBLIC_PLAN_PATH_SEGMENT: dict[ShiftType, str] = {
+    ShiftType.GRILL: "grill",
+    ShiftType.KIOSK: "kiosk",
+}
 
 
 def dispatch_signup_confirmation_email(
@@ -32,6 +37,7 @@ def dispatch_signup_confirmation_email(
     event_type: str,
     shift_starts_at: datetime,
     shift_ends_at: datetime,
+    shift_type: ShiftType,
     organization_timezone: str,
     volunteer_public_name: str,
     management_token: str,
@@ -58,6 +64,7 @@ def dispatch_signup_confirmation_email(
         event_type=event_type,
         shift_starts_at=shift_starts_at,
         shift_ends_at=shift_ends_at,
+        shift_type=shift_type,
         organization_timezone=organization_timezone,
         volunteer_public_name=volunteer_public_name,
         management_token=management_token,
@@ -77,6 +84,7 @@ def send_signup_confirmation_email(
     event_type: str,
     shift_starts_at: datetime,
     shift_ends_at: datetime,
+    shift_type: ShiftType,
     organization_timezone: str,
     volunteer_public_name: str,
     management_token: str,
@@ -86,8 +94,11 @@ def send_signup_confirmation_email(
     local_start = shift_starts_at.astimezone(timezone)
     local_end = shift_ends_at.astimezone(timezone)
     frontend_url = settings.frontend_public_url.rstrip("/")
-    public_plan_url = f"{frontend_url}/{organization_slug}"
-    management_url = f"{public_plan_url}/manage-signup/{management_token}"
+    path_segment = _PUBLIC_PLAN_PATH_SEGMENT[shift_type]
+    public_plan_url = f"{frontend_url}/{organization_slug}/{path_segment}"
+    # manage-signup is its own top-level route under the org (not nested under
+    # /grill or /kiosk), so it must NOT inherit the plan-type path segment.
+    management_url = f"{frontend_url}/{organization_slug}/manage-signup/{management_token}"
     event_label = event_title
     if event_type and event_type != event_title:
         event_label = f"{event_title} ({event_type})"

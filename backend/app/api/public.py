@@ -13,6 +13,7 @@ from app.api.dependencies import CurrentUser, get_current_user, validate_csrf
 from app.core.config import get_settings
 from app.core.security.rate_limit import InMemoryRateLimiter, RateLimitRule
 from app.db.session import get_db
+from app.models.identity import StaffMembership, StaffRole, User
 from app.models.organization import Organization
 from app.models.planning import ShiftStatus, ShiftType, Signup, SignupStatus, Volunteer
 from app.schemas.organization import (
@@ -30,6 +31,8 @@ from app.schemas.planning import (
     PublicSignupCreate,
     PublicSignupResponse,
     PublicSignupSummary,
+    VolunteerInterestCreate,
+    VolunteerInterestResponse,
 )
 from app.services.email.branding import resolve_organization_branding
 from app.services.organization_context import (
@@ -49,6 +52,7 @@ from app.services.public_signup import (
     normalize_phone,
 )
 from app.services.signup_confirmation import dispatch_signup_confirmation_email
+from app.services.volunteer_interest import dispatch_volunteer_interest_email
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -90,6 +94,7 @@ def public_organization(
 def public_plan(
     request: Request,
     organization_slug: str,
+    shift_type: ShiftType = ShiftType.GRILL,
     db: Session = Depends(get_db),  # noqa: B008
 ) -> PublicPlanResponse:
     """Return the tenant's upcoming published plan without private planning data."""
@@ -107,7 +112,7 @@ def public_plan(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="organization not found")
 
     today = datetime.now(ZoneInfo(organization.timezone)).date()
-    events = PlanningService(db, organization.id).list_public_events(today)
+    events = PlanningService(db, organization.id).list_public_events(today, shift_type=shift_type)
     return PublicPlanResponse(
         events=[
             PublicEventResponse(
@@ -141,7 +146,7 @@ def public_plan(
                             item
                             for item in event.shifts
                             if item.status != ShiftStatus.CANCELLED
-                            and item.shift_type == ShiftType.GRILL
+                            and item.shift_type == shift_type
                         ),
                         key=lambda item: (item.sort_order, item.starts_at, item.id),
                     )
@@ -219,6 +224,7 @@ def public_signup(
         event_type=signup.shift.event.event_type,
         shift_starts_at=signup.shift.starts_at,
         shift_ends_at=signup.shift.ends_at,
+        shift_type=signup.shift.shift_type,
         organization_timezone=organization.timezone,
         volunteer_public_name=signup.public_name_snapshot,
         management_token=created.management_token,
@@ -280,6 +286,7 @@ def authenticated_signup(
         event_type=signup.shift.event.event_type,
         shift_starts_at=signup.shift.starts_at,
         shift_ends_at=signup.shift.ends_at,
+        shift_type=signup.shift.shift_type,
         organization_timezone=organization.timezone,
         volunteer_public_name=signup.public_name_snapshot,
         management_token=created.management_token,
@@ -296,6 +303,78 @@ def authenticated_signup(
         ),
         management_url=f"/{organization.slug}/manage-signup/{created.management_token}",
     )
+
+
+@router.post(
+    "/{organization_slug}/volunteer-interest",
+    response_model=VolunteerInterestResponse,
+)
+def volunteer_interest(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    organization_slug: str,
+    payload: VolunteerInterestCreate,
+    db: Session = Depends(get_db),  # noqa: B008
+) -> VolunteerInterestResponse:
+    """Notify ADMIN/KOORDINATION staff about a public 'Bewerbung' contact form.
+
+    v1 is email-only: nothing is persisted. The honeypot/minimum-fill-time/rate-limit
+    checks mirror `public_signup()` so bots get the same generic, silent handling.
+    """
+    organization = _resolve_path_organization(request, organization_slug, db)
+    if payload.website.strip():
+        return VolunteerInterestResponse()
+    now = datetime.now(UTC)
+    started_at = payload.form_started_at
+    if started_at.tzinfo is None or (now - started_at).total_seconds() < MINIMUM_FILL_SECONDS:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="try again")
+    settings = organization.settings
+    window_seconds = settings.signup_rate_limit_window_minutes * 60
+    contact_key = payload.contact.strip().casefold()
+    client_ip = request.client.host if request.client else "unknown"
+    contact_allowed = signup_rate_limiter.allow(
+        key=f"interest:contact:{organization.id}:{contact_key}",
+        rule=RateLimitRule(
+            max_attempts=settings.signup_rate_limit_per_contact,
+            window_seconds=window_seconds,
+        ),
+    )
+    ip_allowed = signup_rate_limiter.allow(
+        key=f"interest:ip:{organization.id}:{client_ip}",
+        rule=RateLimitRule(max_attempts=20, window_seconds=window_seconds),
+    )
+    if not contact_allowed or not ip_allowed:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="try again")
+
+    recipients = list(
+        db.scalars(
+            select(User.email_normalized)
+            .join(StaffMembership, StaffMembership.user_id == User.id)
+            .where(
+                StaffMembership.organization_id == organization.id,
+                StaffMembership.active.is_(True),
+                StaffMembership.role.in_([StaffRole.ADMIN, StaffRole.KOORDINATION]),
+            )
+            .distinct()
+        )
+    )
+    branding = resolve_organization_branding(
+        db, organization, frontend_public_url=get_settings().frontend_public_url
+    )
+    for recipient in recipients:
+        background_tasks.add_task(
+            dispatch_volunteer_interest_email,
+            get_settings(),
+            recipient=recipient,
+            organization_name=organization.name,
+            first_name=payload.first_name.strip(),
+            last_name=payload.last_name.strip(),
+            contact=payload.contact.strip(),
+            area=payload.area,
+            message=payload.message,
+            branding=branding,
+        )
+    return VolunteerInterestResponse()
 
 
 @router.get("/{organization_slug}/signups/manage/{token}", response_model=ManagedSignupResponse)

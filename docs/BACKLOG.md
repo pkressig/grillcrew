@@ -23,6 +23,13 @@
   bevor er umgesetzt wird. Bis dahin zeigt die Helfer-Detailansicht bei fehlendem Konto nur einen
   Hinweistext statt einer Aktion.
 
+## Nach Domain-/Landingpage-Umbau (D-053)
+
+- Bewerbungen (`volunteer-interest`) im Adminbereich als Liste sichtbar machen (aktuell v1:
+  reine E-Mail-Benachrichtigung an ADMIN/KOORDINATION-Staff, keine Persistenz).
+- Domain-Umzug selbst (Custom Domain in Vercel, `FRONTEND_PUBLIC_URL`/`CORS_ALLOWED_ORIGINS`
+  auf Render) ist eigenständige Infra-Aufgabe, sobald Domain/Marke entschieden sind.
+
 ## Später
 - Kiosk-Modul: feste Zuteilungsmatrix (Datum x Person), eigene Schichterzeugung aus
   Kiosk-Öffnungszeiten, Darstellung im bestehenden Kalender. Datenmodell-Grundlage

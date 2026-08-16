@@ -76,6 +76,7 @@ export function RegisterForm({
   onSwitchToLogin,
   variant = "page",
   pendingShiftId = null,
+  area = "grill",
 }: Readonly<{
   organization: PublicOrganization;
   onSuccess?: () => void;
@@ -84,11 +85,17 @@ export function RegisterForm({
   variant?: "page" | "modal";
   /** A shift the visitor was trying to sign up for before being sent here to register. */
   pendingShiftId?: string | null;
+  /**
+   * Which shift-signup page to return to. Defaults to "grill" for
+   * backward compatibility with old bookmarked/emailed register links that
+   * predate the Grill/Kiosk split and carry no `area` param.
+   */
+  area?: "grill" | "kiosk";
 }>) {
   const router = useRouter();
   const auth = useAuth();
   const minimumLength = organization.settings.volunteer_password_min_length;
-  const backUrl = `/${encodeURIComponent(organization.slug)}`;
+  const backUrl = `/${encodeURIComponent(organization.slug)}/${area}`;
   const successUrl = pendingShiftId
     ? `${backUrl}?shift=${encodeURIComponent(pendingShiftId)}`
     : backUrl;

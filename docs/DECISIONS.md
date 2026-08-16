@@ -409,3 +409,50 @@ Liste zeigt.
 
 **Entschieden von:** Product Owner, 2026-08-16 (Rückmeldung zu falschen Kiosk-/Grill-Status-Tags im
 Spielplan bei überlappenden Schichten und Wunsch nach einer tagesbasierten Spieltag-Übersicht).
+
+## D-053 – Öffentliche Kiosk-Selbstanmeldung, Vereins-Hub-/Bewerbungsseite, plattformweite Landingpage
+
+**Entscheid:** Der bisherige `/{org}`-Pfad war die öffentliche Grill-Einsatzplan-Seite
+(`organization-landing.tsx`). Er wird zur Info-/Werbe-Landingpage für potenzielle Helfer; die
+Einsatzplan-Seiten leben neu unter `/{org}/grill` (unverändertes Verhalten) und `/{org}/kiosk`
+(neu, identische Selbstanmeldung wie Grill). `organization-landing.tsx` bekommt dafür eine
+`shiftType: "GRILL" | "KIOSK"`-Prop; `GET /api/public/{org}/plan` bekommt einen optionalen
+`shift_type`-Query-Parameter (Default `GRILL`, rückwärtskompatibel). Die
+Signup-Erstellung selbst war bereits schicht-typ-unabhängig; einzig `PlanningService.
+list_public_events` hatte einen weiteren, unabhängigen Hardcode auf GRILL in einer
+Tag-Existenz-Subquery, der ebenfalls parametrisiert wurde – ohne diesen Fix hätte
+`?shift_type=KIOSK` reine Kiosk-Spieltage stillschweigend unterschlagen.
+
+Interne Rückkehr-Links (Registrierung, Logout, Profil-"Anmelden") unterscheiden neu zwischen
+Hub (`/{org}`, generisch) und Einsatzplan-Seite (`/{org}/grill|kiosk`, Kontext-gebunden) über
+einen neuen `?area=grill|kiosk`-Parameter im Registrierungslink (Default `grill` für alte Links).
+Die Bestätigungs-E-Mail (`signup_confirmation.py`) verlinkt neu je nach Schicht-Typ auf
+`/grill` oder `/kiosk`; der separate Verwaltungslink (`manage-signup/{token}`) bleibt bewusst
+unter `/{org}/manage-signup/...` und NICHT unter `/grill`/`/kiosk` verschachtelt, da diese
+Route nicht verschoben wurde. Die Willkommens-E-Mail nach Registrierung verlinkt unverändert auf
+`/{org}` – das zeigt nach dem Umbau automatisch korrekt auf den neuen Hub. Bestehende, pro
+Organisation gebrandete E-Mail-Inhalte (Betreff, Text, Branding) bleiben unverändert; nur
+Linkpfade wurden angepasst.
+
+Neu: `POST /api/public/{organization_slug}/volunteer-interest` (Schema
+`VolunteerInterestCreate`) für Interessenten, die noch keine Helfer sind – Name, Kontakt,
+optionale Nachricht/Interessensgebiet, honeypot- und min-fill-time-geschützt wie die
+Schicht-Anmeldung. Keine Persistenz in v1: die Anfrage geht per E-Mail an alle aktiven
+ADMIN/KOORDINATION-Staffmitglieder der Organisation. Diese Bewerbungs-Sektion lebt auf der
+neuen `/{org}`-Hub-Seite zusammen mit Links zu Grill/Kiosk und einem Direktkontakt-Block
+(wiederverwendet das bestehende `coordination_contact_label`/`coordination_contact_phone`
+WhatsApp/Anruf-Muster aus `ContactModal`).
+
+Zusätzlich neu: eine vereinsneutrale, plattformweite Marketing-Landingpage unter dem echten
+Top-Level-Pfad `/` (`frontend/app/page.tsx`), unabhängig vom finalen Domain-/Markennamen (noch
+nicht entschieden) – Basis für den späteren SaaS-Auftritt, mit Kontakt-CTA statt Self-Signup, da
+neue Organisationen weiterhin manuell/durch einen Admin angelegt werden.
+
+**Abgrenzung:** Keine Persistenz für Bewerbungen in v1 (siehe `docs/BACKLOG.md`). Kein
+Self-Service zum Anlegen neuer Organisationen. Domain-Umzug selbst (Custom Domain, `FRONTEND_
+PUBLIC_URL`/`CORS_ALLOWED_ORIGINS`) ist reine Infra und wartet auf eine externe Domain-/
+Marken-Entscheidung.
+
+**Entschieden von:** Product Owner, 2026-08-17 (Wunsch nach eigener Domain mit `/{org}/grill`
+und `/{org}/kiosk`, einer Helfer-Info-Landingpage zur Gewinnung neuer Helfer, und einer
+Bewerbungsmöglichkeit für Nicht-Helfer als Alternative zur direkten Selbstanmeldung).

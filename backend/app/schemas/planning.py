@@ -292,6 +292,23 @@ class AuthenticatedSignupCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class VolunteerInterestCreate(BaseModel):  # type: ignore[explicit-any]
+    """Public 'Bewerbung' (volunteer interest) contact form, email-only in v1."""
+
+    model_config = ConfigDict(extra="forbid")
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    contact: str = Field(min_length=3, max_length=255)
+    message: str | None = Field(default=None, max_length=2000)
+    area: Literal["GRILL", "KIOSK", "EITHER"] | None = None
+    website: str = Field(default="", max_length=500)
+    form_started_at: datetime
+
+
+class VolunteerInterestResponse(BaseModel):  # type: ignore[explicit-any]
+    ok: bool = True
+
+
 class PublicSignupSummary(BaseModel):  # type: ignore[explicit-any]
     public_name: str
     occupied_volunteers: int

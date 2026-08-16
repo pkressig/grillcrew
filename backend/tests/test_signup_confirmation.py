@@ -7,6 +7,7 @@ from uuid import UUID
 import pytest
 
 from app.core.config import AppEnv, Settings
+from app.models.planning import ShiftType
 from app.services.email.base import EmailMessage, EmailSendError
 from app.services.email.branding import OrganizationBranding
 from app.services.signup_confirmation import (
@@ -31,7 +32,7 @@ class FailingSender:
         raise EmailSendError("delivery failed")
 
 
-def email_kwargs() -> dict[str, object]:
+def email_kwargs(shift_type: ShiftType = ShiftType.GRILL) -> dict[str, object]:
     return {
         "recipient": "mia@example.test",
         "signup_id": SIGNUP_ID,
@@ -41,6 +42,7 @@ def email_kwargs() -> dict[str, object]:
         "event_type": "Match",
         "shift_starts_at": datetime(2026, 8, 1, 8, 30, tzinfo=UTC),
         "shift_ends_at": datetime(2026, 8, 1, 10, 45, tzinfo=UTC),
+        "shift_type": shift_type,
         "organization_timezone": "Europe/Zurich",
         "volunteer_public_name": "Mia Muster",
         "management_token": TOKEN,
@@ -64,9 +66,27 @@ def test_confirmation_message_contains_local_details_and_absolute_links() -> Non
     assert "01.08.2026" in message.body_text
     assert "10:30-12:45 Uhr" in message.body_text
     assert "Hallo Mia Muster" in message.body_text
-    assert "https://crew.example.test/example" in message.body_text
+    assert "https://crew.example.test/example/grill" in message.body_text
     assert f"https://crew.example.test/example/manage-signup/{TOKEN}" in message.body_text
     assert "nur für berechtigte Verantwortliche sichtbar" in message.body_text
+
+
+def test_confirmation_message_links_to_kiosk_plan_for_kiosk_shifts() -> None:
+    sender = RecordingSender()
+
+    send_signup_confirmation_email(
+        sender,
+        settings=Settings(frontend_public_url="https://crew.example.test/"),
+        **email_kwargs(shift_type=ShiftType.KIOSK),  # type: ignore[arg-type]
+    )
+
+    assert len(sender.messages) == 1
+    message = sender.messages[0]
+    assert "https://crew.example.test/example/kiosk" in message.body_text
+    assert f"https://crew.example.test/example/manage-signup/{TOKEN}" in message.body_text
+    # manage-signup is a shared route, never nested under /grill or /kiosk.
+    assert f"https://crew.example.test/example/kiosk/manage-signup/{TOKEN}" not in message.body_text
+    assert "https://crew.example.test/example/grill" not in message.body_text
 
 
 def test_confirmation_email_applies_organization_branding() -> None:

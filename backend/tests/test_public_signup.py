@@ -12,7 +12,7 @@ from app.api import public
 from app.core.security.rate_limit import InMemoryRateLimiter
 from app.db.session import get_db
 from app.main import app
-from app.models.planning import Signup
+from app.models.planning import ShiftType, Signup
 from app.services.public_signup import (
     CreatedPublicSignup,
     PublicSignupNotFoundError,
@@ -59,6 +59,7 @@ def test_public_signup_returns_safe_summary(
         shift=SimpleNamespace(
             starts_at=datetime(2026, 8, 1, 8, tzinfo=UTC),
             ends_at=datetime(2026, 8, 1, 10, tzinfo=UTC),
+            shift_type=ShiftType.GRILL,
             event=SimpleNamespace(title="Heimspiel", event_type="Match"),
         ),
     )

@@ -100,7 +100,7 @@ describe("RegisterForm page navigation (default variant)", () => {
     render(<RegisterForm organization={organization} />);
     fillRequiredFields();
     fireEvent.click(screen.getByRole("button", { name: "Registrieren" }));
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/example"));
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/example/grill"));
   });
 
   it("returns to the pending shift after a successful registration", async () => {
@@ -108,27 +108,27 @@ describe("RegisterForm page navigation (default variant)", () => {
     render(<RegisterForm organization={organization} pendingShiftId="shift-1" />);
     fillRequiredFields();
     fireEvent.click(screen.getByRole("button", { name: "Registrieren" }));
-    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/example?shift=shift-1"));
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("/example/grill?shift=shift-1"));
   });
 
   it("navigates back to the org overview via the back button", () => {
     render(<RegisterForm organization={organization} />);
     fireEvent.click(screen.getByRole("button", { name: "Zurück zur Übersicht" }));
-    expect(replaceMock).toHaveBeenCalledWith("/example");
+    expect(replaceMock).toHaveBeenCalledWith("/example/grill");
   });
 
   it("carries the pending shift and opens the login modal via the 'already registered' link", () => {
     render(<RegisterForm organization={organization} pendingShiftId="shift-1" />);
     expect(
       screen.getByRole("link", { name: "Bereits registriert? Zur Anmeldung" }),
-    ).toHaveAttribute("href", "/example?shift=shift-1&login=1");
+    ).toHaveAttribute("href", "/example/grill?shift=shift-1&login=1");
   });
 
   it("opens the login modal via the 'already registered' link without a pending shift", () => {
     render(<RegisterForm organization={organization} />);
     expect(
       screen.getByRole("link", { name: "Bereits registriert? Zur Anmeldung" }),
-    ).toHaveAttribute("href", "/example?login=1");
+    ).toHaveAttribute("href", "/example/grill?login=1");
   });
 
   it("does not show a back button or the direct login link for the modal variant", () => {
@@ -137,5 +137,11 @@ describe("RegisterForm page navigation (default variant)", () => {
     expect(
       screen.queryByRole("link", { name: "Bereits registriert? Zur Anmeldung" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("returns to the Kiosk overview when the area prop is kiosk", () => {
+    render(<RegisterForm organization={organization} area="kiosk" />);
+    fireEvent.click(screen.getByRole("button", { name: "Zurück zur Übersicht" }));
+    expect(replaceMock).toHaveBeenCalledWith("/example/kiosk");
   });
 });
