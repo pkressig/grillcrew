@@ -9,6 +9,8 @@ import {
   createFamily,
   createFamilyMember,
   createVolunteer,
+  deleteFamily,
+  deleteFamilyMember,
   deleteVolunteer,
   loadAllVolunteers,
   loadFamilies,
@@ -42,6 +44,67 @@ const compensationLabels: Record<VolunteerCompensation, string> = {
   PAYOUT: "Bezahlt",
 };
 const statusLabels: Record<VolunteerStatus, string> = { ACTIVE: "Aktiv", INACTIVE: "Inaktiv" };
+
+type HelperArea = "all" | "grill" | "kiosk";
+
+function helperAreaBadges(volunteer: Pick<FamilyVolunteer, "is_grill_helper" | "is_kiosk_helper">) {
+  const badges: string[] = [];
+  if (volunteer.is_grill_helper) badges.push("Grill");
+  if (volunteer.is_kiosk_helper) badges.push("Kiosk");
+  return badges;
+}
+
+/** Grill defaults on. Checking Kiosk turns Grill off, so being both requires
+ * the deliberate second step of re-checking Grill afterwards. */
+function HelperTypeFields({
+  idPrefix,
+  grill,
+  kiosk,
+  onGrillChange,
+  onKioskChange,
+  disabled,
+}: Readonly<{
+  idPrefix: string;
+  grill: boolean;
+  kiosk: boolean;
+  onGrillChange: (value: boolean) => void;
+  onKioskChange: (value: boolean) => void;
+  disabled: boolean;
+}>) {
+  return (
+    <div className="grid gap-2">
+      <span className="text-sm font-medium">Einsatzbereich</span>
+      <div className="flex flex-wrap gap-4">
+        <label className="flex min-h-11 items-center gap-2 text-sm" htmlFor={`${idPrefix}-grill`}>
+          <input
+            className="size-5"
+            id={`${idPrefix}-grill`}
+            type="checkbox"
+            checked={grill}
+            disabled={disabled}
+            onChange={(event) => onGrillChange(event.target.checked)}
+          />
+          Grill
+        </label>
+        <label className="flex min-h-11 items-center gap-2 text-sm" htmlFor={`${idPrefix}-kiosk`}>
+          <input
+            className="size-5"
+            id={`${idPrefix}-kiosk`}
+            type="checkbox"
+            checked={kiosk}
+            disabled={disabled}
+            onChange={(event) => {
+              const checked = event.target.checked;
+              onKioskChange(checked);
+              if (checked) onGrillChange(false);
+            }}
+          />
+          Kiosk
+        </label>
+      </div>
+    </div>
+  );
+}
 
 type Tab = "helfer" | "familien" | "kinder";
 
@@ -145,6 +208,7 @@ function VolunteersView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [area, setArea] = useState<HelperArea>("all");
   const [selectedId, setSelectedId] = useState<string | null>(() => queryParam("volunteer"));
   const [creating, setCreating] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -176,12 +240,18 @@ function VolunteersView({
   const selected = volunteers.find((volunteer) => volunteer.id === selectedId) ?? null;
   const filtered = useMemo(
     () =>
-      volunteers.filter((volunteer) =>
-        `${volunteer.first_name} ${volunteer.last_name}`
-          .toLocaleLowerCase()
-          .includes(search.trim().toLocaleLowerCase()),
-      ),
-    [volunteers, search],
+      volunteers
+        .filter((volunteer) =>
+          `${volunteer.first_name} ${volunteer.last_name}`
+            .toLocaleLowerCase()
+            .includes(search.trim().toLocaleLowerCase()),
+        )
+        .filter((volunteer) => {
+          if (area === "grill") return volunteer.is_grill_helper;
+          if (area === "kiosk") return volunteer.is_kiosk_helper;
+          return true;
+        }),
+    [volunteers, search, area],
   );
 
   function select(id: string | null, preserveSuccess = false) {
@@ -254,6 +324,27 @@ function VolunteersView({
                   Suche löschen
                 </Button>
               ) : null}
+              <div className="mt-3 flex gap-2" role="tablist" aria-label="Einsatzbereich filtern">
+                {(
+                  [
+                    ["all", "Alle Helfer"],
+                    ["grill", "Grill"],
+                    ["kiosk", "Kiosk"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    size="sm"
+                    aria-selected={area === value}
+                    variant={area === value ? "primary" : "secondary"}
+                    onClick={() => setArea(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
               {loading ? (
                 <p className="mt-4" role="status">
                   Helfer werden geladen …
@@ -269,14 +360,18 @@ function VolunteersView({
                     aria-label="Helfer"
                   >
                     <colgroup>
-                      <col className="w-[55%]" />
-                      <col className="w-[25%]" />
+                      <col className="w-[40%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[20%]" />
                       <col className="w-[20%]" />
                     </colgroup>
                     <thead className="bg-muted/60 text-sm text-muted-foreground">
                       <tr>
                         <th className="px-3 py-2 font-medium" scope="col">
                           Helfer
+                        </th>
+                        <th className="px-3 py-2 font-medium" scope="col">
+                          Bereich
                         </th>
                         <th className="px-3 py-2 font-medium" scope="col">
                           Familie
@@ -307,6 +402,19 @@ function VolunteersView({
                                 {volunteer.first_name} {volunteer.last_name}
                               </button>
                             </th>
+                            <td className="px-3 py-2">
+                              <span className="flex flex-wrap gap-1">
+                                {helperAreaBadges(volunteer).length === 0 ? (
+                                  <span className="text-sm text-muted-foreground">–</span>
+                                ) : (
+                                  helperAreaBadges(volunteer).map((label) => (
+                                    <Badge key={label} variant="neutral">
+                                      {label}
+                                    </Badge>
+                                  ))
+                                )}
+                              </span>
+                            </td>
                             <td className="px-3 py-2">
                               {volunteer.family_display_name ? (
                                 <Badge className="border-primary/30 bg-primary/10 text-primary">
@@ -410,6 +518,8 @@ function VolunteerCreateForm({
 }>) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [grill, setGrill] = useState(true);
+  const [kiosk, setKiosk] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -432,6 +542,8 @@ function VolunteerCreateForm({
           phone,
           email,
           compensation_preference: data.get("compensation_preference") as VolunteerCompensation,
+          is_grill_helper: grill,
+          is_kiosk_helper: kiosk,
         }),
       );
     } catch (caught) {
@@ -511,6 +623,14 @@ function VolunteerCreateForm({
             ))}
           </select>
         </label>
+        <HelperTypeFields
+          idPrefix="volunteer-create"
+          grill={grill}
+          kiosk={kiosk}
+          onGrillChange={setGrill}
+          onKioskChange={setKiosk}
+          disabled={busy}
+        />
         <div className="flex flex-wrap gap-2">
           <Button type="submit" disabled={busy}>
             {busy ? "Wird erstellt …" : "Helfer erstellen"}
@@ -1182,6 +1302,12 @@ function FamiliesView({ org }: Readonly<{ org: string }>) {
                   org={org}
                   members={cache[selected.id]}
                   onMembers={cacheMembers}
+                  onDeleted={() => {
+                    const deletedId = selected.id;
+                    setFamilies((current) => current.filter((item) => item.id !== deletedId));
+                    setSuccess("Familie wurde gelöscht.");
+                    select(null, true);
+                  }}
                 />
               ) : (
                 <p>Wählen Sie eine Familie aus, um die Details anzuzeigen.</p>
@@ -1544,16 +1670,20 @@ function FamilyDetail({
   org,
   members,
   onMembers,
+  onDeleted,
 }: Readonly<{
   family: Family;
   org: string;
   members: FamilyMember[] | undefined;
   onMembers: (familyId: string, members: FamilyMember[]) => void;
+  onDeleted: () => void;
 }>) {
   const [loading, setLoading] = useState(members === undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [deletingFamily, setDeletingFamily] = useState(false);
+  const [deleteFamilyError, setDeleteFamilyError] = useState<string | null>(null);
   const [volunteers, setVolunteers] = useState<FamilyVolunteer[]>([]);
   const [volunteersLoading, setVolunteersLoading] = useState(true);
   const [volunteersError, setVolunteersError] = useState<string | null>(null);
@@ -1620,6 +1750,43 @@ function FamilyDetail({
       );
     } finally {
       setBusy(false);
+    }
+  }
+  async function removeMember(member: FamilyMember) {
+    if (!window.confirm(`${member.first_name} ${member.last_name} aus der Familie entfernen?`))
+      return;
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await deleteFamilyMember(org, family.id, member.id);
+      setSuccess(`${member.first_name} ${member.last_name} wurde entfernt.`);
+      await refresh();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Das Mitglied konnte nicht entfernt werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function removeFamily() {
+    if (
+      !window.confirm(
+        `Familie "${family.display_name}" endgültig löschen? Dies kann nicht rückgängig gemacht werden.`,
+      )
+    )
+      return;
+    setDeletingFamily(true);
+    setDeleteFamilyError(null);
+    try {
+      await deleteFamily(org, family.id);
+      onDeleted();
+    } catch (caught) {
+      setDeleteFamilyError(
+        caught instanceof Error ? caught.message : "Die Familie konnte nicht gelöscht werden.",
+      );
+      setDeletingFamily(false);
     }
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -1759,16 +1926,27 @@ function FamilyDetail({
                           ? ` · ${member.team_name}`
                           : ""}
                       </span>
-                      <Badge
-                        className={
-                          member.member_type === "HELPER"
-                            ? "border-primary/30 bg-primary/10 text-primary"
-                            : undefined
-                        }
-                        variant="neutral"
-                      >
-                        {memberTypeLabels[member.member_type]}
-                      </Badge>
+                      <span className="flex items-center gap-2">
+                        <Badge
+                          className={
+                            member.member_type === "HELPER"
+                              ? "border-primary/30 bg-primary/10 text-primary"
+                              : undefined
+                          }
+                          variant="neutral"
+                        >
+                          {memberTypeLabels[member.member_type]}
+                        </Badge>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          disabled={busy}
+                          onClick={() => void removeMember(member)}
+                        >
+                          Entfernen
+                        </Button>
+                      </span>
                     </div>
                     {member.member_type === "HELPER" ? (
                       <div className="grid gap-3 border-t pt-3">
@@ -1892,6 +2070,37 @@ function FamilyDetail({
           </ul>
         )}
       </section>
+      <section className="mt-5 border-t pt-4" aria-labelledby="delete-family-heading">
+        <h3 id="delete-family-heading" className="font-semibold">
+          Familie löschen
+        </h3>
+        {members === undefined || members.length > 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">
+            Erst alle Mitglieder oben entfernen, dann kann die Familie gelöscht werden.
+          </p>
+        ) : (
+          <>
+            <Button
+              className="mt-3"
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={deletingFamily}
+              onClick={() => void removeFamily()}
+            >
+              {deletingFamily ? "Wird gelöscht …" : "Familie endgültig löschen"}
+            </Button>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Entfernt die Familie dauerhaft. Nicht rückgängig zu machen.
+            </p>
+          </>
+        )}
+        {deleteFamilyError ? (
+          <p className="mt-2 text-sm text-status-error" role="alert">
+            {deleteFamilyError}
+          </p>
+        ) : null}
+      </section>
     </div>
   );
 }
@@ -1912,6 +2121,8 @@ function VolunteerKartei({
   const [editing, setEditing] = useState(startEditing);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [grill, setGrill] = useState(volunteer.is_grill_helper);
+  const [kiosk, setKiosk] = useState(volunteer.is_kiosk_helper);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1926,6 +2137,8 @@ function VolunteerKartei({
         String(data.get("compensation_family_member_id") ?? "") || null,
       internal_note: String(data.get("internal_note") ?? "").trim() || null,
       status: data.get("status") as VolunteerStatus,
+      is_grill_helper: grill,
+      is_kiosk_helper: kiosk,
     };
     if (!payload.first_name || !payload.last_name || !payload.email) {
       setError("Vorname, Nachname und E-Mail sind erforderlich.");
@@ -1956,11 +2169,30 @@ function VolunteerKartei({
           </p>
           <div className="flex items-center gap-2">
             {volunteer.status === "INACTIVE" ? <Badge variant="neutral">Inaktiv</Badge> : null}
-            <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                setGrill(volunteer.is_grill_helper);
+                setKiosk(volunteer.is_kiosk_helper);
+                setEditing(true);
+              }}
+            >
               Bearbeiten
             </Button>
           </div>
         </div>
+        <p className="flex flex-wrap gap-1">
+          {helperAreaBadges(volunteer).length === 0 ? (
+            <span className="text-muted-foreground">Kein Einsatzbereich zugeordnet</span>
+          ) : (
+            helperAreaBadges(volunteer).map((label) => (
+              <Badge key={label} className="border-primary/30 bg-primary/10 text-primary">
+                {label}
+              </Badge>
+            ))
+          )}
+        </p>
         <p className="text-muted-foreground">
           {volunteer.phone} · {volunteer.email}
         </p>
@@ -2077,6 +2309,14 @@ function VolunteerKartei({
           disabled={busy}
         />
       </label>
+      <HelperTypeFields
+        idPrefix={`kartei-${volunteer.id}`}
+        grill={grill}
+        kiosk={kiosk}
+        onGrillChange={setGrill}
+        onKioskChange={setKiosk}
+        disabled={busy}
+      />
       <label className="grid gap-1 text-sm" htmlFor={`kartei-status-${volunteer.id}`}>
         Status
         <select

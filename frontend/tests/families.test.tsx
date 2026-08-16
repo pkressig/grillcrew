@@ -39,8 +39,20 @@ const directoryVolunteer = {
   compensation_family_member_id: null,
   internal_note: null,
   status: "ACTIVE",
+  is_grill_helper: true,
+  is_kiosk_helper: false,
   has_account: true,
   family_display_name: "Familie Muster",
+};
+
+const kioskVolunteer = {
+  ...directoryVolunteer,
+  id: "volunteer-kiosk",
+  first_name: "Karl",
+  last_name: "Kiosk",
+  is_grill_helper: false,
+  is_kiosk_helper: true,
+  family_display_name: null,
 };
 
 function session(role: StaffRole): AuthSession {
@@ -70,6 +82,8 @@ type FetchOptions = {
   volunteerFamilyResponses?: Response[];
   childrenResponses?: Response[];
   deleteVolunteerResponse?: Response;
+  deleteMemberResponse?: Response;
+  deleteFamilyResponse?: Response;
   extra?: (url: string, init: RequestInit | undefined) => Response | undefined;
 };
 
@@ -117,6 +131,10 @@ function adminFetch(role: StaffRole, options: FetchOptions = {}) {
       const volunteerId = JSON.parse(String(init?.body)).volunteer_id as string | null;
       return Response.json({ ...member, volunteer_id: volunteerId });
     }
+    if (/\/families\/family-1\/members\/[^/]+$/.test(url) && method === "DELETE")
+      return options.deleteMemberResponse ?? new Response(null, { status: 204 });
+    if (url.endsWith("/families/family-1") && method === "DELETE")
+      return options.deleteFamilyResponse ?? new Response(null, { status: 204 });
     if (url.includes("/families/volunteers/") && url.endsWith("/family") && method === "GET")
       return volunteerFamilyResponses[
         Math.min(volunteerFamilyIndex++, volunteerFamilyResponses.length - 1)
@@ -230,6 +248,32 @@ describe("volunteer (Helfer) admin — primary view", () => {
     expect(screen.getByRole("button", { name: "Anna Zeta" })).toBeInTheDocument();
   });
 
+  it("shows Grill/Kiosk badges per helper and filters the list by Einsatzbereich", async () => {
+    renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", {
+        allVolunteersResponses: [Response.json([directoryVolunteer, kioskVolunteer])],
+      }),
+    );
+    const grillRow = (await screen.findByRole("button", { name: "Anna Zeta" })).closest("tr")!;
+    expect(within(grillRow).getByText("Grill")).toBeInTheDocument();
+    expect(within(grillRow).queryByText("Kiosk")).not.toBeInTheDocument();
+    const kioskRow = screen.getByRole("button", { name: "Karl Kiosk" }).closest("tr")!;
+    expect(within(kioskRow).getByText("Kiosk")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Kiosk" }));
+    expect(screen.queryByRole("button", { name: "Anna Zeta" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Karl Kiosk" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Grill" }));
+    expect(screen.getByRole("button", { name: "Anna Zeta" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Karl Kiosk" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Alle Helfer" }));
+    expect(screen.getByRole("button", { name: "Anna Zeta" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Karl Kiosk" })).toBeInTheDocument();
+  });
+
   it("shows loading and empty states for the volunteer list", async () => {
     let resolveVolunteers!: (response: Response) => void;
     const pending = new Promise<Response>((resolve) => {
@@ -307,6 +351,53 @@ describe("volunteer (Helfer) admin — primary view", () => {
     );
     expect(await screen.findByText("Helfer wurde erstellt.")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Anna Zeta" })).toBeInTheDocument();
+  });
+
+  it("defaults new-helper creation to Grill, switches to Kiosk-only on click, and allows both after re-checking Grill", async () => {
+    document.cookie = "gc_csrf=create-token";
+    const fetchMock = renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", { allVolunteersResponses: [Response.json([])] }),
+    );
+    await screen.findByText("Noch keine Helfer vorhanden.");
+    fireEvent.click(screen.getByRole("button", { name: "Neuer Helfer" }));
+    const grillCheckbox = screen.getByLabelText("Grill") as HTMLInputElement;
+    const kioskCheckbox = screen.getByLabelText("Kiosk") as HTMLInputElement;
+    expect(grillCheckbox.checked).toBe(true);
+    expect(kioskCheckbox.checked).toBe(false);
+
+    fireEvent.click(kioskCheckbox);
+    expect(grillCheckbox.checked).toBe(false);
+    expect(kioskCheckbox.checked).toBe(true);
+
+    fireEvent.click(grillCheckbox);
+    expect(grillCheckbox.checked).toBe(true);
+    expect(kioskCheckbox.checked).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Beide" } });
+    fireEvent.change(screen.getByLabelText("Nachname"), { target: { value: "Bereiche" } });
+    fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "079 222 22 22" } });
+    fireEvent.change(screen.getByLabelText("E-Mail"), {
+      target: { value: "beide@example.invalid" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Helfer erstellen" }));
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/families\/volunteers$/),
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"is_grill_helper":true'),
+        }),
+      ),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/\/families\/volunteers$/),
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"is_kiosk_helper":true'),
+      }),
+    );
   });
 
   it("shows the family drill-down for a linked volunteer with team_name on children", async () => {
@@ -631,6 +722,47 @@ describe("family (Familien) admin — secondary view", () => {
       "text-primary",
     );
     expect(await screen.findByLabelText("Volunteer für Mia Andere")).toBeInTheDocument();
+  });
+
+  it("removes a family member, then allows deleting the now-empty family", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", {
+        familyResponses: [Response.json([family])],
+        memberResponses: [Response.json([member]), Response.json([])],
+      }),
+    );
+    await openFamilienTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    await screen.findByText("Mia Andere");
+    expect(
+      screen.getByText(
+        "Erst alle Mitglieder oben entfernen, dann kann die Familie gelöscht werden.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Familie endgültig löschen" }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Entfernen" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/families\/family-1\/members\/member-1$/),
+        expect.objectContaining({ method: "DELETE" }),
+      ),
+    );
+    await screen.findByText("Noch keine Familienmitglieder vorhanden.");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Familie endgültig löschen" }));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringMatching(/\/families\/family-1$/),
+        expect.objectContaining({ method: "DELETE" }),
+      ),
+    );
+    expect(await screen.findByText("Familie wurde gelöscht.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Familie Muster" })).not.toBeInTheDocument();
   });
 
   it.each(["ADMIN", "KOORDINATION"] as const)("is visible and accessible for %s", async (role) => {

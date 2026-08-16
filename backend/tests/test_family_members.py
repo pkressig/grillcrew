@@ -18,6 +18,7 @@ from app.models.organization import Organization
 from app.models.planning import Volunteer, VolunteerCompensation, VolunteerStatus
 from app.schemas.family import FamilyMemberCreate, FamilyMemberVolunteerUpdate, VolunteerAdminUpdate
 from app.services.family import (
+    FamilyHasMembersError,
     FamilyMemberLinkError,
     FamilyMemberNotFoundError,
     FamilyNotFoundError,
@@ -251,6 +252,7 @@ class _LinkDb:
         self.volunteers = volunteers or []
         self.statements: list[object] = []
         self.added: list[object] = []
+        self.deleted: list[object] = []
         self.commits = 0
 
     def scalar(self, statement: object) -> object | None:
@@ -263,6 +265,9 @@ class _LinkDb:
 
     def add(self, item: object) -> None:
         self.added.append(item)
+
+    def delete(self, item: object) -> None:
+        self.deleted.append(item)
 
     def commit(self) -> None:
         self.commits += 1
@@ -484,6 +489,8 @@ def _volunteer() -> Volunteer:
             compensation_family_member_id=None,
             internal_note=None,
             status=VolunteerStatus.ACTIVE,
+            is_grill_helper=True,
+            is_kiosk_helper=False,
         ),
     )
 
@@ -668,6 +675,130 @@ def test_volunteer_update_route_returns_404_for_unknown_volunteer(
     assert response.status_code == 404
 
 
+def test_delete_member_removes_row_and_audits() -> None:
+    family_id = uuid4()
+    organization_id = uuid4()
+    actor_id = uuid4()
+    member = _helper(family_id)
+    db = _LinkDb([_family(family_id), member])
+    service = FamilyService(cast(object, db), organization_id)  # type: ignore[arg-type]
+
+    service.delete_member(family_id, member.id, actor_id)
+
+    assert db.deleted == [member]
+    assert db.commits == 1
+    audit = cast(AuditEvent, db.added[-1])
+    assert audit.action == "FAMILY_MEMBER_DELETED_BY_ADMIN"
+    assert audit.entity_id == member.id
+    assert audit.organization_id == organization_id
+    assert audit.actor_user_id == actor_id
+
+
+def test_delete_member_rejects_missing_member() -> None:
+    family_id = uuid4()
+    db = _LinkDb([_family(family_id), None])
+    with pytest.raises(FamilyMemberNotFoundError):
+        FamilyService(cast(object, db), uuid4()).delete_member(  # type: ignore[arg-type]
+            family_id, uuid4(), uuid4()
+        )
+    assert db.commits == 0 and db.added == []
+
+
+def test_delete_member_route_requires_csrf_and_origin(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[get_db] = lambda: _MemberDb(None)
+    monkeypatch.setattr(auth, "_organization_domains", lambda _db: set())
+    try:
+        missing_csrf = client.delete(f"/api/admin/tenant-a/families/{uuid4()}/members/{uuid4()}")
+        app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+        missing_origin = client.delete(f"/api/admin/tenant-a/families/{uuid4()}/members/{uuid4()}")
+    finally:
+        app.dependency_overrides.clear()
+    assert missing_csrf.status_code == 403
+    assert missing_origin.status_code == 403
+
+
+def test_delete_member_route_returns_404_for_unknown_member(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def delete_member(self, _family_id: UUID, _member_id: UUID, _actor_id: UUID) -> None:
+            raise FamilyMemberNotFoundError
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.delete(f"/api/admin/tenant-a/families/{uuid4()}/members/{uuid4()}")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 404
+
+
+def test_delete_family_removes_row_when_empty() -> None:
+    family_id = uuid4()
+    organization_id = uuid4()
+    actor_id = uuid4()
+    family = _family(family_id)
+    db = _LinkDb([family, 0])
+    service = FamilyService(cast(object, db), organization_id)  # type: ignore[arg-type]
+
+    service.delete_family(family_id, actor_id)
+
+    assert db.deleted == [family]
+    assert db.commits == 1
+    audit = cast(AuditEvent, db.added[-1])
+    assert audit.action == "FAMILY_DELETED_BY_ADMIN"
+    assert audit.entity_id == family_id
+    assert audit.organization_id == organization_id
+    assert audit.actor_user_id == actor_id
+
+
+def test_delete_family_rejects_when_members_remain() -> None:
+    family_id = uuid4()
+    family = _family(family_id)
+    db = _LinkDb([family, 2])
+    with pytest.raises(FamilyHasMembersError):
+        FamilyService(cast(object, db), uuid4()).delete_family(  # type: ignore[arg-type]
+            family_id, uuid4()
+        )
+    assert db.commits == 0 and db.added == []
+
+
+def test_delete_family_route_returns_409_when_members_remain(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def delete_family(self, _family_id: UUID, _actor_id: UUID) -> None:
+            raise FamilyHasMembersError("Die Familie hat noch Mitglieder.")
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.delete(f"/api/admin/tenant-a/families/{uuid4()}")
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 409
+
+
 def test_volunteer_list_api_returns_exact_fields(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -682,6 +813,8 @@ def test_volunteer_list_api_returns_exact_fields(
         compensation_family_member_id=None,
         internal_note="secret note",
         status=VolunteerStatus.ACTIVE,
+        is_grill_helper=True,
+        is_kiosk_helper=False,
         user_id="must not leak",
     )
 
@@ -709,6 +842,8 @@ def test_volunteer_list_api_returns_exact_fields(
         "compensation_family_member_id",
         "internal_note",
         "status",
+        "is_grill_helper",
+        "is_kiosk_helper",
     }
     assert listed.status_code == 200
     assert set(listed.json()[0]) == expected

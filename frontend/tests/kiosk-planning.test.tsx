@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KioskPlanningPanel } from "@/app/[org]/admin/kiosk-planning-panel";
 import * as proposals from "@/lib/proposals";
 import * as planningLib from "@/lib/planning";
+import * as familiesLib from "@/lib/families";
 
 vi.mock("@/lib/proposals", () => ({
   loadPlanningProposals: vi.fn(),
@@ -16,6 +17,11 @@ vi.mock("@/lib/proposals", () => ({
 vi.mock("@/lib/planning", () => ({
   loadShifts: vi.fn(),
   updateShift: vi.fn(),
+  assignVolunteer: vi.fn(),
+}));
+
+vi.mock("@/lib/families", () => ({
+  loadFamilyVolunteers: vi.fn(),
 }));
 
 const windowProposal = {
@@ -55,6 +61,7 @@ const windowProposal = {
 beforeEach(() => {
   vi.mocked(planningLib.loadShifts).mockResolvedValue([]);
   vi.mocked(proposals.updateKioskShiftSplits).mockResolvedValue(windowProposal);
+  vi.mocked(familiesLib.loadFamilyVolunteers).mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -316,6 +323,82 @@ describe("Kiosk planning", () => {
       ),
     );
     expect(await screen.findByText("1 von 3 Helfer angemeldet")).toBeInTheDocument();
+  });
+
+  it("offers an assign dropdown filtered to Kiosk helpers under a confirmed shift", async () => {
+    vi.mocked(familiesLib.loadFamilyVolunteers).mockResolvedValue([
+      {
+        id: "volunteer-grill",
+        first_name: "Grill",
+        last_name: "Only",
+        phone: "079 000 00 00",
+        email: "grill@example.invalid",
+        compensation_preference: "WORK_HOURS",
+        compensation_family_member_id: null,
+        internal_note: null,
+        status: "ACTIVE",
+        is_grill_helper: true,
+        is_kiosk_helper: false,
+      },
+      {
+        id: "volunteer-kiosk",
+        first_name: "Kiosk",
+        last_name: "Helper",
+        phone: "079 111 11 11",
+        email: "kiosk@example.invalid",
+        compensation_preference: "WORK_HOURS",
+        compensation_family_member_id: null,
+        internal_note: null,
+        status: "ACTIVE",
+        is_grill_helper: false,
+        is_kiosk_helper: true,
+      },
+    ]);
+    const confirmedWindow = {
+      ...windowProposal,
+      kiosk_confirmed: true,
+      covered_event_ids: ["event-1"],
+    };
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [confirmedWindow] });
+    const shift = {
+      id: "shift-1",
+      event_id: "event-1",
+      starts_at: "2026-09-12T08:30:00Z",
+      ends_at: "2026-09-12T12:30:00Z",
+      required_volunteers: 2,
+      occupied_volunteers: 1,
+      open_places: 1,
+      signups: [],
+      public_note: null,
+      internal_note: null,
+      status: "CLOSED" as const,
+      sort_order: 0,
+      shift_type: "KIOSK" as const,
+      assignment_mode: "OPEN_SIGNUP" as const,
+      menu_type: null,
+      crew_suggestion_overridden: false,
+    };
+    vi.mocked(planningLib.loadShifts).mockResolvedValue([shift]);
+    vi.mocked(planningLib.assignVolunteer).mockResolvedValue(shift);
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Kiosk-Entwurf angelegt");
+    const select = screen.getByLabelText(/Helfer für Einsatz .* für Kiosk zuweisen/);
+    const options = within(select)
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+    expect(options).toEqual(["Bitte wählen", "Kiosk Helper"]);
+
+    fireEvent.change(select, { target: { value: "volunteer-kiosk" } });
+    fireEvent.click(screen.getByRole("button", { name: "Zuweisen" }));
+
+    await waitFor(() =>
+      expect(planningLib.assignVolunteer).toHaveBeenCalledWith(
+        "example",
+        "shift-1",
+        "volunteer-kiosk",
+      ),
+    );
   });
 
   it("offers a reconcile action for an already-confirmed window that re-runs confirm", async () => {

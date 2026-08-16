@@ -197,6 +197,8 @@ def test_create_volunteer_route_returns_created_volunteer(
         compensation_family_member_id=None,
         internal_note=None,
         status=VolunteerStatus.ACTIVE,
+        is_grill_helper=True,
+        is_kiosk_helper=False,
     )
 
     class FakeService:
@@ -294,6 +296,8 @@ def test_all_volunteers_route_returns_directory_fields_and_rejects_foreign_slug(
         compensation_family_member_id=None,
         internal_note=None,
         status=VolunteerStatus.INACTIVE,
+        is_grill_helper=True,
+        is_kiosk_helper=False,
         user_id=None,
     )
 

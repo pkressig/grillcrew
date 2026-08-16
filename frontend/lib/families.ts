@@ -48,6 +48,8 @@ export type FamilyVolunteer = {
   compensation_family_member_id: string | null;
   internal_note: string | null;
   status: VolunteerStatus;
+  is_grill_helper: boolean;
+  is_kiosk_helper: boolean;
 };
 export type FamilyVolunteerUpdate = {
   first_name: string;
@@ -58,6 +60,8 @@ export type FamilyVolunteerUpdate = {
   compensation_family_member_id: string | null;
   internal_note: string | null;
   status: VolunteerStatus;
+  is_grill_helper: boolean;
+  is_kiosk_helper: boolean;
 };
 
 /** Direct admin creation, without first creating a family member. */
@@ -70,6 +74,8 @@ export type VolunteerCreateInput = {
   compensation_family_member_id?: string | null;
   internal_note?: string | null;
   status?: VolunteerStatus;
+  is_grill_helper?: boolean;
+  is_kiosk_helper?: boolean;
 };
 
 /** Broader admin browse row: every org volunteer, plus account/family badges. */
@@ -239,6 +245,50 @@ export async function deleteVolunteer(org: string, volunteerId: string): Promise
     // Use the stable German fallback for non-JSON intermediary responses.
   }
   throw new Error(detail ?? "Der Helfer konnte nicht gelöscht werden.");
+}
+
+export async function deleteFamilyMember(
+  org: string,
+  familyId: string,
+  memberId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${apiBaseUrl}${memberPath(org, familyId)}/${encodeURIComponent(memberId)}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+      headers: { ...csrfHeaders() },
+    },
+  );
+  if (response.ok) return;
+  let detail: string | undefined;
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") detail = body.detail;
+  } catch {
+    // Use the stable German fallback for non-JSON intermediary responses.
+  }
+  throw new Error(detail ?? "Das Familienmitglied konnte nicht entfernt werden.");
+}
+
+export async function deleteFamily(org: string, familyId: string): Promise<void> {
+  const response = await fetch(
+    `${apiBaseUrl}${familiesPath(org)}/${encodeURIComponent(familyId)}`,
+    {
+      method: "DELETE",
+      credentials: "include",
+      headers: { ...csrfHeaders() },
+    },
+  );
+  if (response.ok) return;
+  let detail: string | undefined;
+  try {
+    const body = (await response.json()) as { detail?: unknown };
+    if (typeof body.detail === "string") detail = body.detail;
+  } catch {
+    // Use the stable German fallback for non-JSON intermediary responses.
+  }
+  throw new Error(detail ?? "Die Familie konnte nicht gelöscht werden.");
 }
 
 export const updateFamilyMemberVolunteer = (

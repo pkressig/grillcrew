@@ -27,6 +27,7 @@ import {
 } from "@/lib/planning";
 import { loadAdminPlanningData } from "@/lib/admin-planning-data";
 import { loadFamilyVolunteers, type FamilyVolunteer } from "@/lib/families";
+import { ShiftVolunteerAssignment } from "@/components/shift-volunteer-assignment";
 
 const eventStatusLabels: Record<EventStatus, string> = {
   DRAFT: "Entwurf",
@@ -1985,61 +1986,5 @@ function ShiftCreateForm({
         </Button>
       </form>
     </details>
-  );
-}
-
-function ShiftVolunteerAssignment({
-  shift,
-  eventTitle,
-  volunteers,
-  timezone,
-  busy,
-  onAssign,
-}: Readonly<{
-  shift: Shift;
-  eventTitle: string;
-  volunteers: FamilyVolunteer[];
-  timezone: string;
-  busy: boolean;
-  onAssign: (volunteerId: string) => Promise<boolean>;
-}>) {
-  const [volunteerId, setVolunteerId] = useState("");
-
-  async function handleAssign() {
-    if (!volunteerId) return;
-    const assigned = await onAssign(volunteerId);
-    if (assigned) setVolunteerId("");
-  }
-
-  return (
-    <div className="mt-3 flex flex-wrap items-end gap-2 border-t pt-3">
-      <label className="grid gap-1 text-xs font-medium" htmlFor={`assign-volunteer-${shift.id}`}>
-        <span>Helfer zuweisen</span>
-        <select
-          className="min-h-11 rounded-md border bg-background px-3 py-1"
-          id={`assign-volunteer-${shift.id}`}
-          value={volunteerId}
-          disabled={busy || volunteers.length === 0}
-          aria-label={`Helfer für Einsatz ${formatDateTime(shift.starts_at, timezone)} für ${eventTitle} zuweisen`}
-          onChange={(event) => setVolunteerId(event.target.value)}
-        >
-          <option value="">Bitte wählen</option>
-          {volunteers.map((volunteer) => (
-            <option key={volunteer.id} value={volunteer.id}>
-              {volunteer.first_name} {volunteer.last_name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <Button
-        className="min-h-11"
-        size="sm"
-        variant="secondary"
-        disabled={busy || !volunteerId}
-        onClick={() => void handleAssign()}
-      >
-        Zuweisen
-      </Button>
-    </div>
   );
 }

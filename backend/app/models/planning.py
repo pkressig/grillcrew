@@ -338,6 +338,8 @@ class Volunteer(Base):
     compensation_family_member_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("family_member.id", ondelete="SET NULL"), nullable=True
     )
+    is_grill_helper: Mapped[bool] = mapped_column(nullable=False, server_default="true")
+    is_kiosk_helper: Mapped[bool] = mapped_column(nullable=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

@@ -7,6 +7,7 @@ import { ExternalPlanComparisonWorkspace } from "@/app/[org]/admin/external-plan
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
 import { GameDayList } from "@/components/game-day-list";
+import { ShiftVolunteerAssignment } from "@/components/shift-volunteer-assignment";
 import {
   loadPlanningProposals,
   confirmPlanningProposal,
@@ -17,7 +18,8 @@ import {
   type ProposalGrillShiftSplitInput,
   type ProposalWindow,
 } from "@/lib/proposals";
-import { loadShifts, updateShift, type Shift } from "@/lib/planning";
+import { assignVolunteer, loadShifts, updateShift, type Shift } from "@/lib/planning";
+import { loadFamilyVolunteers, type FamilyVolunteer } from "@/lib/families";
 
 function dateTime(value: string, timezone: string) {
   return new Intl.DateTimeFormat("de-CH", {
@@ -191,6 +193,7 @@ function KioskWindowCard({
   timezone,
   window,
   shifts,
+  kioskVolunteers,
   onUpdated,
   onShiftsChanged,
 }: Readonly<{
@@ -198,6 +201,7 @@ function KioskWindowCard({
   timezone: string;
   window: ProposalWindow;
   shifts: Shift[];
+  kioskVolunteers: FamilyVolunteer[];
   onUpdated: (window: ProposalWindow) => void;
   onShiftsChanged: (shifts: Shift[]) => void;
 }>) {
@@ -210,6 +214,8 @@ function KioskWindowCard({
   const [confirming, setConfirming] = useState(false);
   const [confirmed, setConfirmed] = useState(window.kiosk_confirmed === true);
   const [error, setError] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
   const [splits, setSplits] = useState<SplitDraft[]>(() =>
     (window.kiosk_shift_splits ?? []).map((split) => ({
       startTime: formatTime(split.starts_at, timezone),
@@ -314,6 +320,24 @@ function KioskWindowCard({
       setError(errorText(caught, "Der Kiosk-Vorschlag konnte nicht bestätigt werden."));
     } finally {
       setConfirming(false);
+    }
+  }
+
+  async function assign(shift: Shift, volunteerId: string): Promise<boolean> {
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      await assignVolunteer(org, shift.id, volunteerId);
+      if (window.covered_event_ids?.[0]) {
+        const updatedShifts = await loadShifts(org, window.covered_event_ids[0]);
+        onShiftsChanged(updatedShifts);
+      }
+      return true;
+    } catch (caught) {
+      setAssignError(errorText(caught, "Der Helfer konnte nicht zugewiesen werden."));
+      return false;
+    } finally {
+      setAssigning(false);
     }
   }
 
@@ -650,28 +674,43 @@ function KioskWindowCard({
                     }}
                   />
                 ) : (
-                  <div key={shift.id} className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="text-sm">
-                      <p className="font-medium">
-                        {formatTime(shift.starts_at, timezone)}–
-                        {formatTime(shift.ends_at, timezone)} Uhr
-                      </p>
-                      <p>
-                        {shift.occupied_volunteers} von {shift.required_volunteers} Helfer
-                        angemeldet
-                      </p>
+                  <div key={shift.id}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-sm">
+                        <p className="font-medium">
+                          {formatTime(shift.starts_at, timezone)}–
+                          {formatTime(shift.ends_at, timezone)} Uhr
+                        </p>
+                        <p>
+                          {shift.occupied_volunteers} von {shift.required_volunteers} Helfer
+                          angemeldet
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setEditingShiftId(shift.id)}
+                      >
+                        Anpassen
+                      </Button>
                     </div>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setEditingShiftId(shift.id)}
-                    >
-                      Anpassen
-                    </Button>
+                    <ShiftVolunteerAssignment
+                      shift={shift}
+                      eventTitle="Kiosk"
+                      volunteers={kioskVolunteers}
+                      timezone={timezone}
+                      busy={assigning}
+                      onAssign={(volunteerId) => assign(shift, volunteerId)}
+                    />
                   </div>
                 ),
               )}
+            {assignError ? (
+              <p role="alert" className="text-sm text-status-error">
+                {assignError}
+              </p>
+            ) : null}
             <Button
               className="justify-self-start"
               type="button"
@@ -717,6 +756,13 @@ export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [shiftsByWindow, setShiftsByWindow] = useState<Record<string, Shift[]>>({});
+  const [kioskVolunteers, setKioskVolunteers] = useState<FamilyVolunteer[]>([]);
+
+  useEffect(() => {
+    void loadFamilyVolunteers(org)
+      .then((items) => setKioskVolunteers(items.filter((item) => item.is_kiosk_helper)))
+      .catch(() => setKioskVolunteers([]));
+  }, [org]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -861,6 +907,7 @@ export function KioskPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
                     timezone={timezone}
                     window={window}
                     shifts={shiftsByWindow[window.id] ?? []}
+                    kioskVolunteers={kioskVolunteers}
                     onShiftsChanged={(updated) =>
                       setShiftsByWindow((current) => ({ ...current, [window.id]: updated }))
                     }

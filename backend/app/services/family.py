@@ -59,6 +59,14 @@ class VolunteerHasRecordsError(Exception):
         self.detail = detail
 
 
+class FamilyHasMembersError(Exception):
+    """Raised when deleting a family that still has members."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
 class FamilyService:
     def __init__(self, db: Session, organization_id: uuid.UUID) -> None:
         self.db = db
@@ -216,6 +224,8 @@ class FamilyService:
             internal_note=payload.internal_note,
             compensation_preference=payload.compensation_preference,
             compensation_family_member_id=payload.compensation_family_member_id,
+            is_grill_helper=payload.is_grill_helper,
+            is_kiosk_helper=payload.is_kiosk_helper,
         )
         self.db.add(volunteer)
         self.db.flush()
@@ -259,6 +269,8 @@ class FamilyService:
             ),
             ("internal_note", volunteer.internal_note != payload.internal_note),
             ("status", volunteer.status != payload.status),
+            ("is_grill_helper", volunteer.is_grill_helper != payload.is_grill_helper),
+            ("is_kiosk_helper", volunteer.is_kiosk_helper != payload.is_kiosk_helper),
         )
         changed_fields = [field for field, changed in field_changes if changed]
         if not changed_fields:
@@ -273,6 +285,8 @@ class FamilyService:
         volunteer.compensation_family_member_id = payload.compensation_family_member_id
         volunteer.internal_note = payload.internal_note
         volunteer.status = payload.status
+        volunteer.is_grill_helper = payload.is_grill_helper
+        volunteer.is_kiosk_helper = payload.is_kiosk_helper
         self.db.add(
             AuditEvent(
                 organization_id=self.organization_id,
@@ -468,6 +482,56 @@ class FamilyService:
         self.db.commit()
         self.db.refresh(member)
         return member
+
+    def delete_member(
+        self, family_id: uuid.UUID, member_id: uuid.UUID, actor_user_id: uuid.UUID
+    ) -> None:
+        self._get_active_family(family_id)
+        member = self.db.scalar(
+            select(FamilyMember).where(
+                FamilyMember.id == member_id,
+                FamilyMember.family_id == family_id,
+            )
+        )
+        if member is None:
+            raise FamilyMemberNotFoundError
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="FAMILY_MEMBER_DELETED_BY_ADMIN",
+                entity_type="family_member",
+                entity_id=member.id,
+                event_metadata={
+                    "family_id": str(family_id),
+                    "member_type": member.member_type.value,
+                },
+            )
+        )
+        self.db.delete(member)
+        self.db.commit()
+
+    def delete_family(self, family_id: uuid.UUID, actor_user_id: uuid.UUID) -> None:
+        family = self._get_active_family(family_id)
+        remaining = self.db.scalar(
+            select(func.count(FamilyMember.id)).where(FamilyMember.family_id == family.id)
+        )
+        if remaining:
+            raise FamilyHasMembersError(
+                "Die Familie hat noch Mitglieder. Bitte zuerst alle Mitglieder entfernen."
+            )
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="FAMILY_DELETED_BY_ADMIN",
+                entity_type="family",
+                entity_id=family.id,
+                event_metadata={},
+            )
+        )
+        self.db.delete(family)
+        self.db.commit()
 
     def _get_active_family(self, family_id: uuid.UUID) -> Family:
         family = self.db.scalar(

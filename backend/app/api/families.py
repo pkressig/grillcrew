@@ -35,6 +35,7 @@ from app.schemas.family import (
 )
 from app.services.auth import dispatch_password_reset_email
 from app.services.family import (
+    FamilyHasMembersError,
     FamilyMemberLinkError,
     FamilyMemberNotFoundError,
     FamilyNotFoundError,
@@ -103,6 +104,8 @@ def _volunteer_response(volunteer: Volunteer) -> FamilyVolunteerResponse:
         compensation_family_member_id=volunteer.compensation_family_member_id,
         internal_note=volunteer.internal_note,
         status=volunteer.status,
+        is_grill_helper=volunteer.is_grill_helper,
+        is_kiosk_helper=volunteer.is_kiosk_helper,
     )
 
 
@@ -348,6 +351,43 @@ def create_family_member(
         return FamilyMemberResponse.model_validate(member)
     except FamilyNotFoundError:
         raise HTTPException(status_code=404, detail="family not found") from None
+
+
+@router.delete("/{family_id}/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_family_member(
+    organization_slug: str,
+    family_id: uuid.UUID,
+    member_id: uuid.UUID,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> None:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        _service(organization_slug, current, db).delete_member(
+            family_id, member_id, current.user.id
+        )
+    except (FamilyNotFoundError, FamilyMemberNotFoundError):
+        raise HTTPException(status_code=404, detail="family member not found") from None
+
+
+@router.delete("/{family_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_family(
+    organization_slug: str,
+    family_id: uuid.UUID,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> None:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        _service(organization_slug, current, db).delete_family(family_id, current.user.id)
+    except FamilyNotFoundError:
+        raise HTTPException(status_code=404, detail="family not found") from None
+    except FamilyHasMembersError as error:
+        raise HTTPException(status_code=409, detail=error.detail) from None
 
 
 @router.patch("/{family_id}/members/{member_id}/volunteer", response_model=FamilyMemberResponse)

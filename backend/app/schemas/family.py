@@ -99,6 +99,8 @@ class FamilyVolunteerResponse(BaseModel):  # type: ignore[explicit-any]
     compensation_family_member_id: uuid.UUID | None
     internal_note: str | None
     status: VolunteerStatus
+    is_grill_helper: bool
+    is_kiosk_helper: bool
 
 
 class VolunteerDirectoryResponse(FamilyVolunteerResponse):  # type: ignore[explicit-any]
@@ -119,6 +121,8 @@ class VolunteerAdminUpdate(BaseModel):  # type: ignore[explicit-any]
     compensation_family_member_id: uuid.UUID | None = None
     internal_note: str | None = Field(default=None, max_length=2000)
     status: VolunteerStatus
+    is_grill_helper: bool = True
+    is_kiosk_helper: bool = False
 
     @field_validator("first_name", "last_name", "phone", "email", mode="before")
     @classmethod
@@ -152,6 +156,8 @@ class VolunteerCreate(BaseModel):  # type: ignore[explicit-any]
     compensation_family_member_id: uuid.UUID | None = None
     internal_note: str | None = Field(default=None, max_length=2000)
     status: VolunteerStatus = VolunteerStatus.ACTIVE
+    is_grill_helper: bool = True
+    is_kiosk_helper: bool = False
 
     @field_validator("first_name", "last_name", "phone", "email", mode="before")
     @classmethod
