@@ -17,6 +17,7 @@ import { LogoutButton } from "@/components/logout-button";
 import { GameDayList } from "@/components/game-day-list";
 import { SignupCancelControl } from "@/components/signup-cancel-control";
 import { OrganizationLogo } from "@/components/organization-logo";
+import { formatShiftHeading } from "@/lib/shift-format";
 import { apiBaseUrl } from "@/lib/api";
 import {
   fetchVolunteerProfile,
@@ -42,13 +43,6 @@ const dateFormatter = new Intl.DateTimeFormat("de-CH", {
   year: "numeric",
   timeZone: "UTC",
 });
-const shortDateFormatter = new Intl.DateTimeFormat("de-CH", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
 export function OrganizationLanding() {
   const organization = useOrganization();
   const auth = useAuth();
@@ -204,14 +198,14 @@ export function OrganizationLanding() {
   }, [auth.isAuthenticated]);
 
   const days = useMemo(() => groupByDay(plan?.events ?? []), [plan]);
-  const ownShiftIds = useMemo(() => {
-    const ids = new Set<string>();
-    if (!volunteerProfile || !plan) return ids;
+  const ownSignups = useMemo(() => {
+    const map = new Map<string, VolunteerSignupSummary>();
+    if (!volunteerProfile || !plan) return map;
     for (const signup of volunteerProfile.upcoming_signups) {
       const match = findSignupShift(plan, signup);
-      if (match) ids.add(match.shift.id);
+      if (match) map.set(match.shift.id, signup);
     }
-    return ids;
+    return map;
   }, [plan, volunteerProfile]);
   const summary = useMemo(() => {
     const shifts = plan?.events.flatMap((event) => event.shifts) ?? [];
@@ -242,9 +236,10 @@ export function OrganizationLanding() {
   }
 
   const shiftProps = {
+    organization,
     organizationTimezone: organization.timezone,
     authIsAuthenticated: auth.isAuthenticated,
-    ownShiftIds,
+    ownSignups,
     selectedShift,
     highlightedShift,
     volunteerProfile,
@@ -259,6 +254,7 @@ export function OrganizationLanding() {
       }
     },
     onCancel: () => setSelectedShift(null),
+    onCancelled: setVolunteerProfile,
     onSubmit: submitSignup,
   };
 
@@ -423,7 +419,11 @@ function OwnSignups({
       ) : (
         <ul className="mt-2 grid gap-2 sm:grid-cols-2">
           {profile.upcoming_signups.map((entry) => {
-            const shiftLabel = `${shortDateFormatter.format(new Date(`${entry.event_date}T00:00:00Z`))}, ${formatTime(entry.shift_starts_at, organization.timezone)}–${formatTime(entry.shift_ends_at, organization.timezone)}`;
+            const shiftLabel = formatShiftHeading(
+              entry.shift_starts_at,
+              entry.shift_ends_at,
+              organization.timezone,
+            );
             const stillOpen = entry.signup_status === "ACTIVE" && entry.outcome === "OPEN";
             return (
               <li key={entry.id} className="rounded-lg border p-3 hover:bg-muted/60">
@@ -432,8 +432,8 @@ function OwnSignups({
                   onClick={() => onSelect(entry)}
                   className="block min-h-11 w-full text-left"
                 >
-                  <span className="block font-semibold">{entry.event_title}</span>
-                  <span className="block text-sm">{shiftLabel} Uhr</span>
+                  <span className="block font-bold">{shiftLabel}</span>
+                  <span className="block text-sm text-muted-foreground">{entry.event_title}</span>
                 </button>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <span>Status: {signupStatus(entry)}</span>
@@ -516,9 +516,10 @@ function Day({
 }
 
 type ShiftProps = {
+  organization: PublicOrganization;
   organizationTimezone: string;
   authIsAuthenticated: boolean;
-  ownShiftIds: Set<string>;
+  ownSignups: Map<string, VolunteerSignupSummary>;
   selectedShift: string | null;
   highlightedShift: string | null;
   volunteerProfile: VolunteerProfile | null;
@@ -526,15 +527,17 @@ type ShiftProps = {
   signupError: string | null;
   onChoose: (id: string) => void;
   onCancel: () => void;
+  onCancelled: (profile: VolunteerProfile) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>, id: string) => Promise<void>;
 };
 
 function Shift({
   event,
   shift,
+  organization,
   organizationTimezone,
   authIsAuthenticated,
-  ownShiftIds,
+  ownSignups,
   selectedShift,
   highlightedShift,
   volunteerProfile,
@@ -542,11 +545,14 @@ function Shift({
   signupError,
   onChoose,
   onCancel,
+  onCancelled,
   onSubmit,
 }: Readonly<{ event: PublicPlanEvent; shift: PublicShift } & ShiftProps>) {
   const full = shift.occupied_volunteers >= shift.required_volunteers;
   const status = shift.status === "CLOSED" ? "Geschlossen" : full ? "Vollständig belegt" : "Offen";
-  const isOwn = ownShiftIds.has(shift.id);
+  const ownSignup = ownSignups.get(shift.id);
+  const isOwn = ownSignup !== undefined;
+  const ownButtonLabel = `Bereits angemeldet: ${event.title}, ${formatTime(shift.starts_at, organizationTimezone)} bis ${formatTime(shift.ends_at, organizationTimezone)} Uhr`;
   return (
     <article
       id={`shift-${shift.id}`}
@@ -567,6 +573,7 @@ function Shift({
           >
             <Users aria-hidden="true" className="h-4 w-4" />
             {shift.occupied_volunteers} von {shift.required_volunteers} Plätzen besetzt
+            {shift.volunteer_names.length > 0 ? ` · ${shift.volunteer_names.join(", ")}` : ""}
           </p>
         </div>
         <Badge
@@ -578,24 +585,43 @@ function Shift({
           {status}
         </Badge>
       </div>
-      <Button
-        type="button"
-        disabled={shift.status !== "OPEN" || full || isOwn}
-        onClick={() => onChoose(shift.id)}
-        aria-label={`${isOwn ? "Bereits angemeldet" : shift.status !== "OPEN" ? "Geschlossen" : full ? "Vollständig belegt" : "Einsatz anmelden"}: ${event.title}, ${formatTime(shift.starts_at, organizationTimezone)} bis ${formatTime(shift.ends_at, organizationTimezone)} Uhr`}
-        aria-describedby={`shift-${shift.id}-capacity shift-${shift.id}-status`}
-        className="mt-3 min-h-11 w-full"
-      >
-        {isOwn
-          ? "Bereits angemeldet"
-          : shift.status !== "OPEN"
+      {isOwn && ownSignup ? (
+        <div className="mt-3 flex gap-2">
+          <Button
+            type="button"
+            disabled
+            aria-label={ownButtonLabel}
+            aria-describedby={`shift-${shift.id}-capacity shift-${shift.id}-status`}
+            className="min-h-11 flex-[4]"
+          >
+            Bereits angemeldet
+          </Button>
+          <SignupCancelControl
+            entry={ownSignup}
+            shiftLabel={formatShiftHeading(shift.starts_at, shift.ends_at, organizationTimezone)}
+            organization={organization}
+            onCancelled={onCancelled}
+            triggerClassName="min-h-11 flex-1 text-sm"
+          />
+        </div>
+      ) : (
+        <Button
+          type="button"
+          disabled={shift.status !== "OPEN" || full}
+          onClick={() => onChoose(shift.id)}
+          aria-label={`${shift.status !== "OPEN" ? "Geschlossen" : full ? "Vollständig belegt" : "Einsatz anmelden"}: ${event.title}, ${formatTime(shift.starts_at, organizationTimezone)} bis ${formatTime(shift.ends_at, organizationTimezone)} Uhr`}
+          aria-describedby={`shift-${shift.id}-capacity shift-${shift.id}-status`}
+          className="mt-3 min-h-11 w-full"
+        >
+          {shift.status !== "OPEN"
             ? "Geschlossen"
             : full
               ? "Vollständig belegt"
               : authIsAuthenticated
                 ? "Einsatz anmelden"
                 : "Anmelden und Einsatz wählen"}
-      </Button>
+        </Button>
+      )}
       {selectedShift === shift.id ? (
         <SignupForm
           event={event}
@@ -644,7 +670,10 @@ function SignupForm({
             {profile.first_name} {profile.last_name}
           </p>
           <p className="text-muted-foreground">
-            Kontaktdaten sehen nur berechtigte Verantwortliche.
+            {profile.phone} · {profile.email}
+          </p>
+          <p className="text-muted-foreground">
+            Öffentlich sichtbar ist nur dein Name; deine Kontaktdaten siehst nur du hier.
           </p>
           <Link className="underline" href="/profile">
             Profil bearbeiten

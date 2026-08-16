@@ -198,7 +198,7 @@ describe("mobile public plan", () => {
   it("shows shift capacity, status and 44px signup actions once its day is expanded", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /Samstag, 05. September 2026/ }));
-    expect(screen.getByText("1 von 3 Plätzen besetzt")).toBeInTheDocument();
+    expect(screen.getByText("1 von 3 Plätzen besetzt · Anna")).toBeInTheDocument();
     expect(screen.getByText("Offen")).toHaveClass("text-status-error");
     expect(screen.queryByText("Vollständig belegt")).not.toBeInTheDocument();
     const action = screen.getByRole("button", { name: /Einsatz anmelden: Junioren/ });
@@ -263,7 +263,8 @@ describe("mobile public plan", () => {
         "true",
       ),
     );
-    expect(screen.getByRole("form", { name: /Eintragung für Junioren/ })).toBeInTheDocument();
+    const form = screen.getByRole("form", { name: /Eintragung für Junioren/ });
+    expect(within(form).getByText("+41 79 000 00 00 · private@example.test")).toBeInTheDocument();
     expect(replaceMock).toHaveBeenCalledWith("/example");
   });
 
@@ -283,12 +284,24 @@ describe("mobile public plan", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Samstag, 05. September 2026/ }));
     const ownAction = await screen.findByRole("button", { name: /Bereits angemeldet: Junioren/ });
     expect(ownAction).toBeDisabled();
-    fireEvent.click(within(section).getByRole("button", { name: /^Junioren/ }));
+    fireEvent.click(within(section).getByRole("button", { name: /^Samstag/ }));
     expect(screen.getByRole("button", { name: /Samstag, 05. September 2026/ })).toHaveAttribute(
       "aria-expanded",
       "true",
     );
     await waitFor(() => expect(document.getElementById("shift-s1")).toHaveClass("ring-2"));
+  });
+
+  it("offers a compact Absagen control next to the disabled Bereits angemeldet button in the shift row", async () => {
+    authState.isAuthenticated = true;
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Samstag, 05. September 2026/ }));
+    const shiftRow = document.getElementById("shift-s1")!;
+    expect(
+      within(shiftRow).getByRole("button", { name: /Bereits angemeldet: Junioren/ }),
+    ).toBeDisabled();
+    fireEvent.click(within(shiftRow).getByRole("button", { name: 'Einsatz "Junioren" absagen' }));
+    expect(await screen.findByRole("dialog", { name: "Einsatz abmelden" })).toBeInTheDocument();
   });
 
   it("offers an Absagen control next to the status that opens the cancel-reason modal", async () => {

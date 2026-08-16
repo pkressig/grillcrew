@@ -9,6 +9,7 @@ import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getLastOrganizationSlug, rememberLastOrganizationSlug } from "@/lib/organization";
 import { SignupCancelControl } from "@/components/signup-cancel-control";
+import { formatShiftHeading } from "@/lib/shift-format";
 import {
   createChild,
   deleteChild,
@@ -21,23 +22,6 @@ import {
   type VolunteerProfile,
   type VolunteerSignupSummary,
 } from "@/lib/volunteer-profile";
-
-function formatShiftRange(startsAt: string, endsAt: string, timezone: string) {
-  const start = new Date(startsAt);
-  const end = new Date(endsAt);
-  const dateFormatter = new Intl.DateTimeFormat("de-CH", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: timezone,
-  });
-  const timeFormatter = new Intl.DateTimeFormat("de-CH", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: timezone,
-  });
-  return `${dateFormatter.format(start)}, ${timeFormatter.format(start)}–${timeFormatter.format(end)}`;
-}
 
 function statusBadge(entry: VolunteerSignupSummary): {
   label: string;
@@ -482,7 +466,7 @@ function SignupList({
         <ul className="mt-2 space-y-2 text-sm">
           {entries.map((entry) => {
             const badge = statusBadge(entry);
-            const shiftLabel = formatShiftRange(
+            const shiftLabel = formatShiftHeading(
               entry.shift_starts_at,
               entry.shift_ends_at,
               timezone,
@@ -490,8 +474,8 @@ function SignupList({
             const stillOpen = entry.signup_status === "ACTIVE" && entry.outcome === "OPEN";
             return (
               <li key={entry.id} className="rounded bg-muted/40 p-2">
-                <p className="font-medium">{entry.event_title}</p>
-                <p>{shiftLabel}</p>
+                <p className="font-bold">{shiftLabel}</p>
+                <p className="text-sm text-muted-foreground">{entry.event_title}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                   {stillOpen ? (

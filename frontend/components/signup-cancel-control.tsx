@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { telHref, whatsAppHref } from "@/lib/phone";
 import type { PublicOrganization } from "@/lib/organization";
 import {
@@ -11,6 +12,9 @@ import {
 } from "@/lib/volunteer-profile";
 
 type CancelableSignup = Pick<VolunteerSignupSummary, "id" | "event_title" | "can_cancel">;
+
+const DEFAULT_TRIGGER_CLASSNAME =
+  "min-h-8 shrink-0 rounded border border-status-error px-2 py-0.5 text-xs font-semibold text-status-error hover:bg-status-error/10";
 
 /** Small red "Absagen" trigger shown next to a signup's status badge. Within
  * the self-cancel deadline it opens the reason modal and cancels directly;
@@ -22,11 +26,13 @@ export function SignupCancelControl({
   shiftLabel,
   organization,
   onCancelled,
+  triggerClassName,
 }: Readonly<{
   entry: CancelableSignup;
   shiftLabel: string;
   organization: PublicOrganization;
   onCancelled: (profile: VolunteerProfile) => void;
+  triggerClassName?: string;
 }>) {
   const [open, setOpen] = useState<"reason" | "contact" | null>(null);
 
@@ -35,7 +41,7 @@ export function SignupCancelControl({
       <button
         type="button"
         aria-label={`Einsatz "${entry.event_title}" absagen`}
-        className="min-h-8 shrink-0 rounded border border-status-error px-2 py-0.5 text-xs font-semibold text-status-error hover:bg-status-error/10"
+        className={cn(DEFAULT_TRIGGER_CLASSNAME, triggerClassName)}
         onClick={(event) => {
           event.stopPropagation();
           setOpen(entry.can_cancel ? "reason" : "contact");
@@ -56,7 +62,6 @@ export function SignupCancelControl({
       ) : null}
       {open === "contact" ? (
         <ContactModal
-          entry={entry}
           shiftLabel={shiftLabel}
           organization={organization}
           onClose={() => setOpen(null)}
@@ -105,9 +110,8 @@ function ReasonModal({
     >
       <form className="w-full max-w-md rounded-lg bg-background p-4" onSubmit={confirmCancel}>
         <h2 className="text-xl font-bold">Einsatz abmelden</h2>
-        <p className="mt-2 text-sm">
-          {entry.event_title} · {shiftLabel}
-        </p>
+        <p className="mt-2 font-bold">{shiftLabel}</p>
+        <p className="text-sm text-muted-foreground">{entry.event_title}</p>
         <label className="mt-3 flex flex-col gap-1 text-sm font-medium">
           Grund (optional)
           <textarea
@@ -137,19 +141,17 @@ function ReasonModal({
 }
 
 function ContactModal({
-  entry,
   shiftLabel,
   organization,
   onClose,
 }: Readonly<{
-  entry: CancelableSignup;
   shiftLabel: string;
   organization: PublicOrganization;
   onClose: () => void;
 }>) {
   const label = organization.settings.coordination_contact_label;
   const phone = organization.settings.coordination_contact_phone;
-  const message = `Hallo${label ? " " + label : ""}, ich muss meinen Einsatz "${entry.event_title}" am ${shiftLabel} leider kurzfristig absagen.`;
+  const message = `Hallo${label ? " " + label : ""}, ich muss meinen Einsatz am ${shiftLabel} leider kurzfristig absagen.`;
 
   return (
     <div
@@ -161,30 +163,36 @@ function ContactModal({
     >
       <div className="w-full max-w-md rounded-lg bg-background p-4">
         <h2 className="text-xl font-bold">Direkte Abmeldung nicht mehr möglich</h2>
-        <p className="mt-2 text-sm">
-          {entry.event_title} · {shiftLabel}
-        </p>
-        <p className="mt-3 text-sm">
-          Die Abmeldefrist für diesen Einsatz ist bereits abgelaufen. Bitte melde dich für eine
-          kurzfristige Absage direkt{label ? ` bei ${label}` : ""}.
-        </p>
+        <p className="mt-2 font-bold">{shiftLabel}</p>
         {phone ? (
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-            <a
-              className={buttonVariants({ variant: "primary" })}
-              href={whatsAppHref(phone, message)}
-              target="_blank"
-              rel="noreferrer"
-            >
-              WhatsApp senden
-            </a>
-            <a className={buttonVariants({ variant: "secondary" })} href={telHref(phone)}>
-              {label ?? "Kontakt"} anrufen
-            </a>
-          </div>
+          <>
+            <p className="mt-3 text-sm">
+              Die Abmeldefrist für diesen Einsatz ist bereits abgelaufen. Bitte kontaktiere{" "}
+              {label ?? "die Koordination"} direkt per WhatsApp oder Telefon für eine kurzfristige
+              Absage.
+            </p>
+            <p className="mt-2 text-sm font-semibold">
+              {label ? `${label} · ` : ""}
+              {phone}
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <a
+                className={buttonVariants({ variant: "primary" })}
+                href={whatsAppHref(phone, message)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                WhatsApp senden
+              </a>
+              <a className={buttonVariants({ variant: "secondary" })} href={telHref(phone)}>
+                Anrufen
+              </a>
+            </div>
+          </>
         ) : (
           <p className="mt-3 text-sm text-muted-foreground">
-            Bitte kontaktiere die Koordination deiner Organisation.
+            Die Abmeldefrist für diesen Einsatz ist bereits abgelaufen. Bitte kontaktiere die
+            Koordination deiner Organisation für eine kurzfristige Absage.
           </p>
         )}
         <Button type="button" variant="secondary" className="mt-4" onClick={onClose}>

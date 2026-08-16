@@ -448,10 +448,11 @@ describe("ProfilePage cancel signup", () => {
       within(deadlineItem).getByRole("button", { name: 'Einsatz "Damen 1" absagen' }),
     );
     const dialog = await screen.findByRole("dialog", { name: "Kurzfristige Abmeldung" });
-    expect(within(dialog).getByText(/bei Pascal Kressig/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/kontaktiere Pascal Kressig/)).toBeInTheDocument();
+    expect(within(dialog).getByText("Pascal Kressig · 079 513 44 33")).toBeInTheDocument();
     const whatsapp = within(dialog).getByRole("link", { name: "WhatsApp senden" });
     expect(whatsapp).toHaveAttribute("href", expect.stringContaining("https://wa.me/41795134433"));
-    const call = within(dialog).getByRole("link", { name: "Pascal Kressig anrufen" });
+    const call = within(dialog).getByRole("link", { name: "Anrufen" });
     expect(call).toHaveAttribute("href", "tel:+41795134433");
   });
 });
