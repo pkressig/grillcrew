@@ -18,7 +18,14 @@ import {
   type ProposalGrillShiftSplitInput,
   type ProposalWindow,
 } from "@/lib/proposals";
-import { assignVolunteer, loadShifts, updateShift, type Shift } from "@/lib/planning";
+import {
+  assignVolunteer,
+  cancelSignup,
+  loadShifts,
+  updateShift,
+  type AdminSignup,
+  type Shift,
+} from "@/lib/planning";
 import { loadFamilyVolunteers, type FamilyVolunteer } from "@/lib/families";
 
 function dateTime(value: string, timezone: string) {
@@ -336,6 +343,23 @@ function KioskWindowCard({
     } catch (caught) {
       setAssignError(errorText(caught, "Der Helfer konnte nicht zugewiesen werden."));
       return false;
+    } finally {
+      setAssigning(false);
+    }
+  }
+
+  async function unassign(signup: AdminSignup) {
+    if (!globalThis.window.confirm(`${signup.public_name} von dieser Schicht abmelden?`)) return;
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      await cancelSignup(org, signup.id);
+      if (window.covered_event_ids?.[0]) {
+        const updatedShifts = await loadShifts(org, window.covered_event_ids[0]);
+        onShiftsChanged(updatedShifts);
+      }
+    } catch (caught) {
+      setAssignError(errorText(caught, "Die Abmeldung ist fehlgeschlagen."));
     } finally {
       setAssigning(false);
     }
@@ -695,6 +719,30 @@ function KioskWindowCard({
                         Anpassen
                       </Button>
                     </div>
+                    {shift.signups.length === 0 ? (
+                      <p className="mt-2 text-sm text-muted-foreground">Noch niemand zugewiesen.</p>
+                    ) : (
+                      <ul className="mt-2 grid gap-2">
+                        {shift.signups.map((signup) => (
+                          <li
+                            key={signup.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/30 p-2.5 text-sm"
+                          >
+                            <span className="font-medium">{signup.public_name}</span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              disabled={assigning}
+                              aria-label={`${signup.public_name} von dieser Schicht abmelden`}
+                              onClick={() => void unassign(signup)}
+                            >
+                              Abmelden
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <ShiftVolunteerAssignment
                       shift={shift}
                       eventTitle="Kiosk"

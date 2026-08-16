@@ -18,6 +18,7 @@ vi.mock("@/lib/planning", () => ({
   loadShifts: vi.fn(),
   updateShift: vi.fn(),
   assignVolunteer: vi.fn(),
+  cancelSignup: vi.fn(),
 }));
 
 vi.mock("@/lib/families", () => ({
@@ -399,6 +400,64 @@ describe("Kiosk planning", () => {
         "volunteer-kiosk",
       ),
     );
+  });
+
+  it("lists assigned helpers under a confirmed shift and unassigns them via Abmelden", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirmedWindow = {
+      ...windowProposal,
+      kiosk_confirmed: true,
+      covered_event_ids: ["event-1"],
+    };
+    vi.mocked(proposals.loadPlanningProposals).mockResolvedValue({ windows: [confirmedWindow] });
+    const shiftWithSignup = {
+      id: "shift-1",
+      event_id: "event-1",
+      starts_at: "2026-09-12T08:30:00Z",
+      ends_at: "2026-09-12T12:30:00Z",
+      required_volunteers: 2,
+      occupied_volunteers: 1,
+      open_places: 1,
+      signups: [
+        {
+          id: "signup-1",
+          public_name: "Karl Kiosk",
+          first_name: "Karl",
+          last_name: "Kiosk",
+          phone: "079 111 11 11",
+          email: "kiosk@example.invalid",
+          outcome: "OPEN" as const,
+          created_at: "2026-09-01T10:00:00Z",
+        },
+      ],
+      public_note: null,
+      internal_note: null,
+      status: "CLOSED" as const,
+      sort_order: 0,
+      shift_type: "KIOSK" as const,
+      assignment_mode: "OPEN_SIGNUP" as const,
+      menu_type: null,
+      crew_suggestion_overridden: false,
+    };
+    vi.mocked(planningLib.loadShifts)
+      .mockResolvedValueOnce([shiftWithSignup])
+      .mockResolvedValue([{ ...shiftWithSignup, occupied_volunteers: 0, signups: [] }]);
+    vi.mocked(planningLib.cancelSignup).mockResolvedValue({
+      ...shiftWithSignup,
+      occupied_volunteers: 0,
+      signups: [],
+    });
+    render(<KioskPlanningPanel org="example" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Kiosk-Entwurf angelegt");
+    expect(screen.getByText("Karl Kiosk")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Karl Kiosk von dieser Schicht abmelden" }));
+
+    await waitFor(() =>
+      expect(planningLib.cancelSignup).toHaveBeenCalledWith("example", "signup-1"),
+    );
+    await waitFor(() => expect(screen.getByText("Noch niemand zugewiesen.")).toBeInTheDocument());
   });
 
   it("offers a reconcile action for an already-confirmed window that re-runs confirm", async () => {
