@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminShell } from "@/app/[org]/admin/admin-shell";
 import { AuthProvider } from "@/components/auth-provider";
@@ -68,6 +68,7 @@ type FetchOptions = {
   familyVolunteersResponses?: Response[];
   allVolunteersResponses?: Response[];
   volunteerFamilyResponses?: Response[];
+  childrenResponses?: Response[];
   deleteVolunteerResponse?: Response;
   extra?: (url: string, init: RequestInit | undefined) => Response | undefined;
 };
@@ -78,11 +79,13 @@ function adminFetch(role: StaffRole, options: FetchOptions = {}) {
   const familyVolunteersResponses = options.familyVolunteersResponses ?? [Response.json([])];
   const allVolunteersResponses = options.allVolunteersResponses ?? [Response.json([])];
   const volunteerFamilyResponses = options.volunteerFamilyResponses ?? [Response.json(null)];
+  const childrenResponses = options.childrenResponses ?? [Response.json([])];
   let familyIndex = 0;
   let memberIndex = 0;
   let familyVolunteersIndex = 0;
   let allVolunteersIndex = 0;
   let volunteerFamilyIndex = 0;
+  let childrenIndex = 0;
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -90,6 +93,8 @@ function adminFetch(role: StaffRole, options: FetchOptions = {}) {
     if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "csrf-memory" });
     const custom = options.extra?.(url, init);
     if (custom) return custom;
+    if (url.endsWith("/families/children") && method === "GET")
+      return childrenResponses[Math.min(childrenIndex++, childrenResponses.length - 1)]!;
     if (url.endsWith("/families/all-volunteers") && method === "GET")
       return allVolunteersResponses[
         Math.min(allVolunteersIndex++, allVolunteersResponses.length - 1)
@@ -146,6 +151,27 @@ function renderAdmin(role: StaffRole, fetchMock = adminFetch(role)) {
 async function openFamilienTab() {
   fireEvent.click(await screen.findByRole("tab", { name: "Familien" }));
 }
+
+async function openKinderTab() {
+  fireEvent.click(await screen.findByRole("tab", { name: "Kinder" }));
+}
+
+const childItem = {
+  id: "child-1",
+  family_id: "family-1",
+  family_display_name: "Familie Muster",
+  first_name: "Leo",
+  last_name: "Muster",
+  team_name: "Junioren C",
+};
+
+const creditingVolunteer = {
+  ...directoryVolunteer,
+  id: "volunteer-credit",
+  first_name: "Karin",
+  last_name: "Muster",
+  compensation_family_member_id: "child-1",
+};
 
 afterEach(() => {
   cleanup();
@@ -900,5 +926,74 @@ describe("family (Familien) admin — secondary view", () => {
         body: expect.stringContaining('"status":"ACTIVE"'),
       }),
     );
+  });
+});
+
+describe("children (Kinder) admin — tertiary view", () => {
+  it("lists children with their family and team, and supports search", async () => {
+    renderAdmin("ADMIN", adminFetch("ADMIN", { childrenResponses: [Response.json([childItem])] }));
+    await openKinderTab();
+    await screen.findByRole("heading", { name: "Kinder" });
+    const row = (await screen.findByRole("button", { name: "Leo Muster" })).closest("tr")!;
+    expect(within(row).getByText("Familie Muster")).toBeInTheDocument();
+    expect(within(row).getByText("Junioren C")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Kinder suchen"), { target: { value: "zzz" } });
+    expect(screen.getByText("Keine Kinder für diese Suche gefunden.")).toBeInTheDocument();
+  });
+
+  it("shows child details with the credited helper and jumps to them in the Helfer tab", async () => {
+    renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", {
+        childrenResponses: [Response.json([childItem])],
+        familyVolunteersResponses: [Response.json([creditingVolunteer])],
+        allVolunteersResponses: [
+          Response.json([creditingVolunteer]),
+          Response.json([creditingVolunteer]),
+        ],
+      }),
+    );
+    await openKinderTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Leo Muster" }));
+    expect(screen.getByRole("heading", { name: "Leo Muster" })).toBeInTheDocument();
+    expect(screen.getByText("Mannschaft: Junioren C")).toBeInTheDocument();
+
+    const creditItem = (await screen.findByRole("button", { name: "Karin Muster" })).closest("li")!;
+    expect(within(creditItem).getByText("Sollstunden")).toBeInTheDocument();
+
+    fireEvent.click(within(creditItem).getByRole("button", { name: "Karin Muster" }));
+    expect(await screen.findByRole("tab", { name: "Helfer" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(await screen.findByRole("heading", { name: "Karin Muster" })).toBeInTheDocument();
+  });
+
+  it("shows an honest empty state when no helper credits compensation to the child", async () => {
+    renderAdmin("ADMIN", adminFetch("ADMIN", { childrenResponses: [Response.json([childItem])] }));
+    await openKinderTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Leo Muster" }));
+    expect(
+      await screen.findByText("Noch keinem Helfer für die Vergütung zugeordnet."),
+    ).toBeInTheDocument();
+  });
+
+  it("jumps to the family from a child's detail view", async () => {
+    renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", {
+        childrenResponses: [Response.json([childItem])],
+        familyResponses: [Response.json([family])],
+      }),
+    );
+    await openKinderTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Leo Muster" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Familie: Familie Muster" }));
+    expect(await screen.findByRole("tab", { name: "Familien" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(await screen.findByRole("heading", { name: "Familie Muster" })).toBeInTheDocument();
   });
 });

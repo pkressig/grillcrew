@@ -12,6 +12,7 @@ import {
   deleteVolunteer,
   loadAllVolunteers,
   loadFamilies,
+  loadFamilyChildren,
   loadFamilyMembers,
   loadFamilyVolunteers,
   loadVolunteerFamily,
@@ -20,6 +21,7 @@ import {
   updateFamilyMemberVolunteer,
   updateFamilyVolunteer,
   type Family,
+  type FamilyChild,
   type FamilyListItem,
   type FamilyMember,
   type FamilyMemberType,
@@ -41,7 +43,7 @@ const compensationLabels: Record<VolunteerCompensation, string> = {
 };
 const statusLabels: Record<VolunteerStatus, string> = { ACTIVE: "Aktiv", INACTIVE: "Inaktiv" };
 
-type Tab = "helfer" | "familien";
+type Tab = "helfer" | "familien" | "kinder";
 
 function queryParam(name: string) {
   return typeof window === "undefined"
@@ -51,7 +53,7 @@ function queryParam(name: string) {
 
 function initialTab(): Tab {
   const explicit = queryParam("tab");
-  if (explicit === "familien" || explicit === "helfer") return explicit;
+  if (explicit === "familien" || explicit === "helfer" || explicit === "kinder") return explicit;
   // A deep link that only carries ?family=… means "show me that family", so infer the tab.
   return queryParam("family") ? "familien" : "helfer";
 }
@@ -80,6 +82,14 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
     setTab("familien");
   }
 
+  function jumpToVolunteer(volunteerId: string) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", "helfer");
+    url.searchParams.set("volunteer", volunteerId);
+    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setTab("helfer");
+  }
+
   return (
     <section className="grid gap-7" aria-labelledby="families-heading">
       <div className="flex gap-2 border-b" role="tablist" aria-label="Ansicht">
@@ -101,11 +111,22 @@ export function FamiliesPanel({ org }: Readonly<{ org: string }>) {
         >
           Familien
         </Button>
+        <Button
+          type="button"
+          role="tab"
+          aria-selected={tab === "kinder"}
+          variant={tab === "kinder" ? "primary" : "ghost"}
+          onClick={() => selectTab("kinder")}
+        >
+          Kinder
+        </Button>
       </div>
       {tab === "helfer" ? (
         <VolunteersView org={org} onShowFamily={jumpToFamily} />
-      ) : (
+      ) : tab === "familien" ? (
         <FamiliesView org={org} />
+      ) : (
+        <ChildrenView org={org} onShowFamily={jumpToFamily} onShowVolunteer={jumpToVolunteer} />
       )}
     </section>
   );
@@ -1164,6 +1185,273 @@ function FamiliesView({ org }: Readonly<{ org: string }>) {
                 />
               ) : (
                 <p>Wählen Sie eine Familie aus, um die Details anzuzeigen.</p>
+              )}
+            </CardBody>
+          </Card>
+        </section>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Kinder (secondary): org-wide child roster with family and compensation
+// cross-reference, read-only (children are created/edited via Familien or
+// by the volunteer themselves in their self-service profile).
+// ---------------------------------------------------------------------------
+
+function ChildrenView({
+  org,
+  onShowFamily,
+  onShowVolunteer,
+}: Readonly<{
+  org: string;
+  onShowFamily: (familyId: string) => void;
+  onShowVolunteer: (volunteerId: string) => void;
+}>) {
+  const [children, setChildren] = useState<FamilyChild[]>([]);
+  const [volunteers, setVolunteers] = useState<FamilyVolunteer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [selectedId, setSelectedId] = useState<string | null>(() => queryParam("child"));
+
+  const refresh = useCallback(async () => {
+    setError(null);
+    try {
+      const [loadedChildren, loadedVolunteers] = await Promise.all([
+        loadFamilyChildren(org),
+        loadFamilyVolunteers(org),
+      ]);
+      setChildren(loadedChildren);
+      setVolunteers(loadedVolunteers);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Die Kinder konnten nicht geladen werden.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [org]);
+
+  useEffect(() => void refresh(), [refresh]);
+  useEffect(() => {
+    const sync = () => setSelectedId(queryParam("child"));
+    window.addEventListener("popstate", sync);
+    return () => window.removeEventListener("popstate", sync);
+  }, []);
+
+  const selected = children.find((child) => child.id === selectedId) ?? null;
+  const filtered = useMemo(
+    () =>
+      children.filter((child) =>
+        `${child.first_name} ${child.last_name}`
+          .toLocaleLowerCase()
+          .includes(search.trim().toLocaleLowerCase()),
+      ),
+    [children, search],
+  );
+
+  function select(id: string | null) {
+    const url = new URL(window.location.href);
+    if (id) url.searchParams.set("child", id);
+    else url.searchParams.delete("child");
+    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    setSelectedId(id);
+  }
+
+  function creditedBy(childId: string): FamilyVolunteer[] {
+    return volunteers.filter((volunteer) => volunteer.compensation_family_member_id === childId);
+  }
+
+  return (
+    <>
+      <PageHeader
+        title="Kinder"
+        description="Alle Kinder der Organisation durchsuchen und ihre Vergütungszuordnung einsehen."
+      />
+      {error ? (
+        <p
+          className="rounded-md border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error"
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(22rem,34rem)_minmax(0,1fr)]">
+        <section
+          className={`${selected ? "hidden lg:block" : "block"} min-w-0`}
+          aria-label="Kinderliste"
+        >
+          <Card className="h-full border-border/80">
+            <CardBody>
+              <label className="grid gap-1" htmlFor="child-search">
+                Kinder suchen
+                <input
+                  className={control}
+                  id="child-search"
+                  type="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </label>
+              {search ? (
+                <Button
+                  className="mt-2 px-0 underline"
+                  variant="ghost"
+                  onClick={() => setSearch("")}
+                >
+                  Suche löschen
+                </Button>
+              ) : null}
+              {loading ? (
+                <p className="mt-4" role="status">
+                  Kinder werden geladen …
+                </p>
+              ) : children.length === 0 ? (
+                <p className="mt-4">Noch keine Kinder vorhanden.</p>
+              ) : filtered.length === 0 ? (
+                <p className="mt-4">Keine Kinder für diese Suche gefunden.</p>
+              ) : (
+                <div className="mt-4 overflow-x-auto rounded-md border">
+                  <table
+                    className="w-full table-fixed border-collapse text-left"
+                    aria-label="Kinder"
+                  >
+                    <colgroup>
+                      <col className="w-[45%]" />
+                      <col className="w-[35%]" />
+                      <col className="w-[20%]" />
+                    </colgroup>
+                    <thead className="bg-muted/60 text-sm text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 font-medium" scope="col">
+                          Kind
+                        </th>
+                        <th className="px-3 py-2 font-medium" scope="col">
+                          Familie
+                        </th>
+                        <th className="px-3 py-2 font-medium" scope="col">
+                          Mannschaft
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filtered.map((child) => {
+                        const active = selected?.id === child.id;
+                        return (
+                          <tr
+                            className={cn(
+                              "border-t transition-colors",
+                              active ? "bg-primary/5" : "hover:bg-muted/40",
+                            )}
+                            key={child.id}
+                          >
+                            <th className="p-0 font-medium" scope="row">
+                              <button
+                                aria-current={active ? "true" : undefined}
+                                className="min-h-11 w-full truncate px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                                type="button"
+                                onClick={() => select(child.id)}
+                              >
+                                {child.first_name} {child.last_name}
+                              </button>
+                            </th>
+                            <td className="px-3 py-2">
+                              <Badge className="border-primary/30 bg-primary/10 text-primary">
+                                {child.family_display_name}
+                              </Badge>
+                            </td>
+                            <td className="px-3 py-2 text-sm text-muted-foreground">
+                              {child.team_name ?? "–"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardBody>
+          </Card>
+        </section>
+        <section
+          className={`${selected ? "block" : "hidden lg:block"} min-w-0`}
+          aria-label="Kinderdetails"
+        >
+          <Card className={cn("h-full border-border/80", selected && "border-primary/30")}>
+            <CardBody>
+              {selected ? (
+                <Button
+                  className="mb-4 px-0 underline lg:hidden"
+                  variant="ghost"
+                  onClick={() => select(null)}
+                >
+                  Zurück zu Kindern
+                </Button>
+              ) : null}
+              {selected ? (
+                <div>
+                  <h2 className="text-xl font-semibold">
+                    {selected.first_name} {selected.last_name}
+                  </h2>
+                  <div className="mt-2 grid gap-2">
+                    <button
+                      type="button"
+                      className="w-fit"
+                      onClick={() => onShowFamily(selected.family_id)}
+                    >
+                      <Badge className="border-primary/30 bg-primary/10 text-primary">
+                        Familie: {selected.family_display_name}
+                      </Badge>
+                    </button>
+                    <p className="text-sm text-muted-foreground">
+                      Mannschaft: {selected.team_name ?? "Keine Angabe"}
+                    </p>
+                  </div>
+                  <section
+                    className="mt-5 border-t pt-4"
+                    aria-labelledby={`compensation-heading-${selected.id}`}
+                  >
+                    <h3 id={`compensation-heading-${selected.id}`} className="font-semibold">
+                      Vergütung
+                    </h3>
+                    {loading ? (
+                      <p className="mt-2 text-sm text-muted-foreground" role="status">
+                        Wird geladen …
+                      </p>
+                    ) : creditedBy(selected.id).length === 0 ? (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        Noch keinem Helfer für die Vergütung zugeordnet.
+                      </p>
+                    ) : (
+                      <ul
+                        className="mt-2 grid gap-2"
+                        aria-label={`Vergütung für ${selected.first_name} ${selected.last_name}`}
+                      >
+                        {creditedBy(selected.id).map((volunteer) => (
+                          <li
+                            key={volunteer.id}
+                            className="flex items-center justify-between gap-3 rounded-md border bg-background px-3 py-2 text-sm"
+                          >
+                            <button
+                              type="button"
+                              className="text-left underline"
+                              onClick={() => onShowVolunteer(volunteer.id)}
+                            >
+                              {volunteer.first_name} {volunteer.last_name}
+                            </button>
+                            <Badge variant="neutral">
+                              {compensationLabels[volunteer.compensation_preference]}
+                            </Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                </div>
+              ) : (
+                <p>Wählen Sie ein Kind aus, um die Details anzuzeigen.</p>
               )}
             </CardBody>
           </Card>
