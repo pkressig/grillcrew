@@ -78,6 +78,42 @@ describe("AuthProvider", () => {
       expect.objectContaining({ credentials: "include" }),
     );
   });
+
+  it("silently trades an expired access token for a refreshed session instead of logging out", async () => {
+    document.cookie = "gc_csrf=stored-csrf-token";
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/api/auth/me")) return new Response(null, { status: 401 });
+      if (url.endsWith("/api/auth/refresh")) {
+        expect(init?.method).toBe("POST");
+        expect(init?.credentials).toBe("include");
+        expect((init?.headers as Record<string, string> | undefined)?.["X-CSRF-Token"]).toBe(
+          "stored-csrf-token",
+        );
+        return Response.json(session);
+      }
+      if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "refreshed-token" });
+      return new Response(null, { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>,
+    );
+    expect(await screen.findByText("Example Org")).toBeInTheDocument();
+    document.cookie = "gc_csrf=; Max-Age=0";
+  });
+
+  it("stays logged out when both the access token and the refresh token have expired", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>,
+    );
+    expect(await screen.findByText("anonymous")).toBeInTheDocument();
+  });
 });
 
 describe("LoginForm", () => {

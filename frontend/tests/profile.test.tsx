@@ -241,6 +241,45 @@ describe("ProfilePage back navigation", () => {
   });
 });
 
+describe("ProfilePage logged-out login link", () => {
+  afterEach(() => window.localStorage.clear());
+
+  it("sends a logged-out visitor to their own club's login instead of the generic staff login", async () => {
+    window.localStorage.setItem("grillcrew.last-organization-slug", "fc-beispiel");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    expect(await screen.findByRole("link", { name: "Anmelden" })).toHaveAttribute(
+      "href",
+      "/fc-beispiel?login=1",
+    );
+  });
+
+  it("falls back to the platform root when no organization was ever visited", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 401 })));
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    expect(await screen.findByRole("link", { name: "Anmelden" })).toHaveAttribute("href", "/");
+  });
+
+  it("remembers the organization once the profile loads successfully", async () => {
+    vi.stubGlobal("fetch", profileFetch(profile));
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    await screen.findByText("FC Beispiel");
+    expect(window.localStorage.getItem("grillcrew.last-organization-slug")).toBe("fc-beispiel");
+  });
+});
+
 describe("ProfilePage branding", () => {
   it("renders the organization's name and logo via AuthCard once loaded", async () => {
     vi.stubGlobal("fetch", profileFetch(profile));

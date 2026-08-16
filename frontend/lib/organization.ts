@@ -56,6 +56,29 @@ export const platformFallbackOrganization: PublicOrganization = {
   },
 };
 
+const LAST_ORGANIZATION_STORAGE_KEY = "grillcrew.last-organization-slug";
+
+/** Remembers which organization this browser last visited, so a page with no
+ * organization in its own URL (e.g. /profile) can still send a logged-out
+ * visitor to the right club's login instead of a generic platform page. */
+export function rememberLastOrganizationSlug(slug: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(LAST_ORGANIZATION_STORAGE_KEY, slug);
+  } catch {
+    // Ignore storage access errors (e.g. private browsing with storage disabled).
+  }
+}
+
+export function getLastOrganizationSlug(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(LAST_ORGANIZATION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchPublicOrganization(
   organizationHint?: string,
 ): Promise<PublicOrganization> {

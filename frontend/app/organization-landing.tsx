@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, Clock3, Users, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { useOrganization } from "@/components/organization-provider";
-import type { PublicOrganization } from "@/lib/organization";
+import { rememberLastOrganizationSlug, type PublicOrganization } from "@/lib/organization";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
@@ -66,6 +66,10 @@ export function OrganizationLanding() {
   const [accountModal, setAccountModal] = useState<"login" | null>(null);
   const [pendingShiftId, setPendingShiftId] = useState<string | null>(null);
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
+
+  useEffect(() => {
+    rememberLastOrganizationSlug(organization.slug);
+  }, [organization.slug]);
 
   function goToRegister() {
     const params = new URLSearchParams({ org: organization.slug });

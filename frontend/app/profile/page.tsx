@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth-provider";
 import { AuthCard } from "@/components/auth-card";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { getLastOrganizationSlug, rememberLastOrganizationSlug } from "@/lib/organization";
 import {
   cancelSignup,
   createChild,
@@ -73,6 +74,7 @@ export default function ProfilePage() {
     try {
       const loaded = await fetchVolunteerProfile();
       setProfile(loaded);
+      rememberLastOrganizationSlug(loaded.organization.slug);
       return loaded;
     } catch {
       setMessage("Profil konnte nicht geladen werden.");
@@ -93,15 +95,25 @@ export default function ProfilePage() {
   }
 
   if (auth.isLoading) return <main className="p-6">Profil wird geladen …</main>;
-  if (!auth.isAuthenticated)
+  if (!auth.isAuthenticated) {
+    // /profile carries no organization slug of its own, and /login is the
+    // staff/admin sign-in page -- wrong destination for a volunteer entirely.
+    // Route back to whichever club's page this browser last visited (its own
+    // login modal opens via ?login=1, the same mechanism the register page's
+    // "already registered" link uses) instead of a generic platform page.
+    const lastOrganizationSlug = getLastOrganizationSlug();
+    const loginHref = lastOrganizationSlug
+      ? `/${encodeURIComponent(lastOrganizationSlug)}?login=1`
+      : "/";
     return (
       <AuthCard title="Anmeldung erforderlich" back={{ label: "Zurück", onClick: goBack }}>
         <p>Bitte melde dich an, um dein Helferprofil zu bearbeiten.</p>
-        <Link className="mt-3 inline-block underline" href="/login">
+        <Link className="mt-3 inline-block underline" href={loginHref}>
           Anmelden
         </Link>
       </AuthCard>
     );
+  }
   if (!profile) return <main className="p-6">{message ?? "Profil wird geladen …"}</main>;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
