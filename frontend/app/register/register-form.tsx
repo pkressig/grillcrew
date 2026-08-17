@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { AuthCard } from "@/components/auth-card";
 import { useAuth } from "@/components/auth-provider";
 import type { PublicOrganization } from "@/lib/organization";
+import { cn } from "@/lib/utils";
 import { registerVolunteer } from "@/lib/volunteer-profile";
+
+type ChildDraft = { first_name: string; last_name: string; team_name: string };
 
 /**
  * Draft field values that are safe to persist across a close/reopen cycle.
@@ -18,10 +21,10 @@ type DraftFields = {
   phone: string;
   email: string;
   compensation_type: string;
-  child_first_name: string;
-  child_last_name: string;
-  child_team_name: string;
+  children: ChildDraft[];
 };
+
+const emptyChild: ChildDraft = { first_name: "", last_name: "", team_name: "" };
 
 const emptyDraft: DraftFields = {
   first_name: "",
@@ -29,9 +32,7 @@ const emptyDraft: DraftFields = {
   phone: "",
   email: "",
   compensation_type: "",
-  child_first_name: "",
-  child_last_name: "",
-  child_team_name: "",
+  children: [emptyChild],
 };
 
 const DRAFT_STORAGE_PREFIX = "grillcrew.register-draft.";
@@ -128,11 +129,38 @@ export function RegisterForm({
     setFields((current) => ({ ...current, [name]: value }));
   }
 
+  function updateChildField(index: number, field: keyof ChildDraft, value: string) {
+    setFields((current) => ({
+      ...current,
+      children: current.children.map((child, i) =>
+        i === index ? { ...child, [field]: value } : child,
+      ),
+    }));
+  }
+
+  function addChild() {
+    setFields((current) => ({ ...current, children: [...current.children, { ...emptyChild }] }));
+  }
+
+  function removeChild(index: number) {
+    setFields((current) => ({
+      ...current,
+      children: current.children.filter((_, i) => i !== index),
+    }));
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSaving(true);
     try {
+      const children = fields.children
+        .filter((child) => child.first_name.trim() && child.last_name.trim())
+        .map((child) => ({
+          first_name: child.first_name.trim(),
+          last_name: child.last_name.trim(),
+          team_name: child.team_name.trim() || undefined,
+        }));
       await registerVolunteer({
         organization_slug: organization.slug,
         first_name: fields.first_name,
@@ -141,9 +169,7 @@ export function RegisterForm({
         email: fields.email,
         password,
         compensation_preference: fields.compensation_type || undefined,
-        child_first_name: fields.child_first_name || undefined,
-        child_last_name: fields.child_last_name || undefined,
-        child_team_name: fields.child_team_name || undefined,
+        children,
       });
       clearDraft(organization.slug);
       await auth.refresh();
@@ -239,33 +265,56 @@ export function RegisterForm({
               Falls die Einsätze einem Kind oder Familienmitglied gutgeschrieben werden sollen.
             </p>
           </div>
-          <label className="flex flex-col gap-1 font-medium">
-            Vorname des Kindes
-            <input
-              className="min-h-11 rounded border px-3 font-normal"
-              name="child_first_name"
-              value={fields.child_first_name}
-              onChange={updateField}
-            />
-          </label>
-          <label className="flex flex-col gap-1 font-medium">
-            Nachname des Kindes
-            <input
-              className="min-h-11 rounded border px-3 font-normal"
-              name="child_last_name"
-              value={fields.child_last_name}
-              onChange={updateField}
-            />
-          </label>
-          <label className="flex flex-col gap-1 font-medium">
-            Mannschaft des Kindes
-            <input
-              className="min-h-11 rounded border px-3 font-normal"
-              name="child_team_name"
-              value={fields.child_team_name}
-              onChange={updateField}
-            />
-          </label>
+          {fields.children.map((child, index) => {
+            const suffix = fields.children.length > 1 ? ` ${index + 1}` : "";
+            return (
+              <div
+                key={index}
+                className={cn("flex flex-col gap-3", index > 0 && "border-t border-border/70 pt-3")}
+              >
+                <label className="flex flex-col gap-1 font-medium">
+                  {`Vorname des Kindes${suffix}`}
+                  <input
+                    className="min-h-11 rounded border px-3 font-normal"
+                    value={child.first_name}
+                    onChange={(event) => updateChildField(index, "first_name", event.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 font-medium">
+                  {`Nachname des Kindes${suffix}`}
+                  <input
+                    className="min-h-11 rounded border px-3 font-normal"
+                    value={child.last_name}
+                    onChange={(event) => updateChildField(index, "last_name", event.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-1 font-medium">
+                  {`Mannschaft des Kindes${suffix}`}
+                  <input
+                    className="min-h-11 rounded border px-3 font-normal"
+                    value={child.team_name}
+                    onChange={(event) => updateChildField(index, "team_name", event.target.value)}
+                  />
+                </label>
+                {fields.children.length > 1 ? (
+                  <button
+                    type="button"
+                    className="min-h-11 self-start text-sm font-medium text-status-error underline"
+                    onClick={() => removeChild(index)}
+                  >
+                    Kind entfernen
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            className="min-h-11 rounded border px-4 font-medium"
+            onClick={addChild}
+          >
+            + Weiteres Kind hinzufügen
+          </button>
         </div>
         {error ? (
           <p role="alert" className="text-sm text-status-error">

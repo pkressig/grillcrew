@@ -17,6 +17,12 @@ class LoginRequest(BaseModel):  # type: ignore[explicit-any]
     password: str = Field(min_length=1)
 
 
+class VolunteerRegisterChild(BaseModel):  # type: ignore[explicit-any]
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    team_name: str | None = Field(default=None, max_length=100)
+
+
 class VolunteerRegisterRequest(BaseModel):  # type: ignore[explicit-any]
     organization_slug: str = Field(min_length=1, max_length=100)
     first_name: str = Field(min_length=1, max_length=100)
@@ -25,9 +31,7 @@ class VolunteerRegisterRequest(BaseModel):  # type: ignore[explicit-any]
     email: str = Field(min_length=3, max_length=320)
     password: str = Field(min_length=1, max_length=1024)
     compensation_preference: VolunteerCompensation = VolunteerCompensation.WORK_HOURS
-    child_first_name: str | None = Field(default=None, max_length=100)
-    child_last_name: str | None = Field(default=None, max_length=100)
-    child_team_name: str | None = Field(default=None, max_length=100)
+    children: list[VolunteerRegisterChild] = Field(default_factory=list, max_length=10)
 
 
 class VolunteerRegisterResponse(BaseModel):  # type: ignore[explicit-any]

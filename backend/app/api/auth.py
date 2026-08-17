@@ -133,18 +133,20 @@ def register_volunteer(
             volunteer_id=volunteer.id,
         )
     )
-    if payload.child_first_name and payload.child_last_name:
-        child_team_name = (payload.child_team_name or "").strip() or None
+    for index, child_payload in enumerate(payload.children):
         child = FamilyMember(
             family_id=family.id,
             member_type=FamilyMemberType.CHILD,
-            first_name=payload.child_first_name.strip(),
-            last_name=payload.child_last_name.strip(),
-            team_name=child_team_name,
+            first_name=child_payload.first_name.strip(),
+            last_name=child_payload.last_name.strip(),
+            team_name=(child_payload.team_name or "").strip() or None,
         )
         db.add(child)
         db.flush()
-        volunteer.compensation_family_member_id = child.id
+        # The first child becomes the default compensation assignment; the volunteer
+        # can change it (or assign per-signup) afterwards from their profile.
+        if index == 0:
+            volunteer.compensation_family_member_id = child.id
     now = datetime.now(UTC)
     session = issue_session(db=db, user=user, settings=settings, now=now)
     db.commit()

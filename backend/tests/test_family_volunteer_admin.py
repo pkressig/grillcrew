@@ -48,7 +48,7 @@ from app.models.planning import (
     VolunteerStatus,
 )
 from app.models.work_record import WorkRecord
-from app.schemas.auth import VolunteerRegisterRequest
+from app.schemas.auth import VolunteerRegisterChild, VolunteerRegisterRequest
 from app.schemas.family import FamilyMemberCreate, VolunteerCreate
 from app.services.family import (
     FamilyMemberLinkError,
@@ -121,11 +121,26 @@ def test_volunteer_register_request_accepts_and_trims_child_team_name() -> None:
         phone="0791111111",
         email="anna@example.invalid",
         password="a-very-long-password",
-        child_first_name="Lina",
-        child_last_name="Zeta",
-        child_team_name="  U12  ",
+        children=[VolunteerRegisterChild(first_name="Lina", last_name="Zeta", team_name="  U12  ")],
     )
-    assert payload.child_team_name == "  U12  "  # trimming happens in the endpoint, like the names
+    # trimming happens in the endpoint, like the names
+    assert payload.children[0].team_name == "  U12  "
+
+
+def test_volunteer_register_request_accepts_several_children() -> None:
+    payload = VolunteerRegisterRequest(
+        organization_slug="tenant-a",
+        first_name="Anna",
+        last_name="Zeta",
+        phone="0791111111",
+        email="anna@example.invalid",
+        password="a-very-long-password",
+        children=[
+            VolunteerRegisterChild(first_name="Lina", last_name="Zeta"),
+            VolunteerRegisterChild(first_name="Nico", last_name="Zeta", team_name="U14"),
+        ],
+    )
+    assert [child.first_name for child in payload.children] == ["Lina", "Nico"]
 
 
 # ---------------------------------------------------------------------------

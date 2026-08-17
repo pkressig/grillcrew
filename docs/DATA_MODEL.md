@@ -386,8 +386,8 @@ change or clear the `volunteerId` link on a HELPER member.
 - teamName nullable (F016 admin surface, migration `0031`): free-text "Mannschaft" affiliation,
   meaningful only for `memberType = CHILD`; schema-validated (`FamilyMemberCreate`) to reject a
   non-null value on a HELPER member. Set on creation via the admin "Kind hinzufügen" form and via
-  the public registration form's optional child fields (`child_team_name`); not present on
-  `Volunteer`/adult helpers.
+  the public registration form's optional, repeatable child blocks (`children[].team_name`, up to
+  10 per registration, D-059); not present on `Volunteer`/adult helpers.
 
 ### FamilyRequirement
 

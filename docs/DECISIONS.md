@@ -605,3 +605,22 @@ hinterlegt ist (dann nur die FAQ-Antworten mit generischem "der Koordination"-Ve
 **Entschieden von:** Product Owner, 2026-08-17 (mitgebrachter FAQ-Text-Entwurf zur Überarbeitung
 und Integration; Wunsch nach einem Kontaktformular nach dem Vorbild der bestehenden
 Absagefrist-Kontaktoption, mit frei eingebbarem Text statt fester Nachricht).
+
+## D-059 – Registrierung: beliebig viele Kinder statt nur einem
+
+**Entscheid:** Die öffentliche Registrierung (`POST /api/auth/volunteer/register`) akzeptiert
+jetzt eine Liste `children` (max. 10, je `first_name`/`last_name`/optional `team_name`) statt der
+bisherigen drei fest verdrahteten `child_first_name`/`child_last_name`/`child_team_name`-Felder;
+jedes Element wird als eigenes `FamilyMember` (`memberType = CHILD`) angelegt, das erste in der
+Liste wird wie bisher automatisch die Standard-Vergütungszuordnung des neuen Helferkontos (später
+im Profil änderbar). Im Registrierungsformular (`register-form.tsx`) lässt sich der
+"Mitglied/Kind"-Block per neuem "+ Weiteres Kind hinzufügen"-Button beliebig oft duplizieren
+(Vorname/Nachname/Mannschaft je Block); ab dem zweiten Block werden die Blöcke nummeriert und
+einzeln über "Kind entfernen" wieder entfernbar. Komplett leer gelassene Blöcke werden beim
+Absenden stillschweigend übersprungen statt einen Validierungsfehler auszulösen.
+
+**Abgrenzung:** Kein Rückwärtskompatibilitäts-Shim für die alten Einzelfeld-Namen – die
+Registrierung ist ein reiner First-Party-Endpunkt ohne externe API-Konsumenten.
+
+**Entschieden von:** Product Owner, 2026-08-17 (Wunsch, mehrere Kinder direkt bei der
+Registrierung erfassen zu können statt nur eines).

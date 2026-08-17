@@ -136,6 +136,12 @@ export async function requestPasswordReset(email: string): Promise<void> {
   });
 }
 
+export type RegisterVolunteerChild = {
+  first_name: string;
+  last_name: string;
+  team_name?: string;
+};
+
 export async function registerVolunteer(payload: {
   organization_slug: string;
   first_name: string;
@@ -144,9 +150,7 @@ export async function registerVolunteer(payload: {
   email: string;
   password: string;
   compensation_preference?: string;
-  child_first_name?: string;
-  child_last_name?: string;
-  child_team_name?: string;
+  children?: RegisterVolunteerChild[];
 }) {
   return request<{ ok: boolean }>("/api/auth/volunteer/register", {
     method: "POST",
