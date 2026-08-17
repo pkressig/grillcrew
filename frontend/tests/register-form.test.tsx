@@ -145,6 +145,29 @@ describe("RegisterForm multiple children", () => {
   });
 });
 
+describe("RegisterForm autofill hints", () => {
+  beforeEach(() => window.sessionStorage.clear());
+  afterEach(cleanup);
+
+  it("gives each account field its own autocomplete token instead of a shared 'name' hint", () => {
+    // Regression test: phone and email previously shared autoComplete="name" with the name
+    // fields, so a browser's saved-profile autofill wrote the person's name into every field,
+    // including phone and email.
+    render(<RegisterForm organization={organization} />);
+    expect(screen.getByLabelText("Vorname")).toHaveAttribute("autocomplete", "given-name");
+    expect(screen.getByLabelText("Nachname")).toHaveAttribute("autocomplete", "family-name");
+    expect(screen.getByLabelText("Telefon")).toHaveAttribute("autocomplete", "tel");
+    expect(screen.getByLabelText("E-Mail")).toHaveAttribute("autocomplete", "email");
+  });
+
+  it("opts the child fields out of autofill entirely, since they are not the account holder", () => {
+    render(<RegisterForm organization={organization} />);
+    expect(screen.getByLabelText("Vorname des Kindes")).toHaveAttribute("autocomplete", "off");
+    expect(screen.getByLabelText("Nachname des Kindes")).toHaveAttribute("autocomplete", "off");
+    expect(screen.getByLabelText("Mannschaft des Kindes")).toHaveAttribute("autocomplete", "off");
+  });
+});
+
 function fillRequiredFields() {
   fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Mia" } });
   fireEvent.change(screen.getByLabelText("Nachname"), { target: { value: "Muster" } });

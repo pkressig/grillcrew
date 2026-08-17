@@ -642,3 +642,22 @@ bleibt eine spätere, separate Erweiterung bei Bedarf.
 
 **Entschieden von:** Product Owner, 2026-08-17 (Wunsch, den Familiennamen im Familien-Tab
 nachträglich anpassen zu können).
+
+## D-061 – Bugfix: Browser-Autofill füllte Telefon/E-Mail im Registrierungsformular mit dem Namen
+
+**Entscheid:** In `register-form.tsx` teilten sich Vorname-, Nachname-, Telefon- und E-Mail-Feld
+faktisch dasselbe `autoComplete="name"` (nur E-Mail war explizit ausgenommen) – ein
+Screenshot-Report zeigte, dass ein Handy-Browser beim Ausfüllen aus gespeicherten Kontaktdaten
+dadurch überall den Namen einsetzte, auch ins Telefon- und E-Mail-Feld. Jedes Feld bekommt jetzt
+sein korrektes, spezifisches Token (`given-name`, `family-name`, `tel`, `email`), damit
+Browser-Autofill jedes Feld mit dem passenden gespeicherten Wert befüllt statt überall denselben
+Namen einzusetzen. Die Kind-Felder (Vorname/Nachname/Mannschaft des Kindes) bekommen zusätzlich
+`autoComplete="off"`, da sie nicht die Daten der registrierenden Person sind und nie aus deren
+gespeichertem Profil vorbefüllt werden sollen.
+
+**Abgrenzung:** Keine Änderung an anderen Formularen – der einzige weitere Treffer für
+`autoComplete="name"` (`invite/[token]/invitation-form.tsx`, "Anzeigename") ist ein einzelnes
+Freitext-Namensfeld ohne Vor-/Nachname-Aufteilung und dort korrekt.
+
+**Entschieden von:** Product Owner, 2026-08-17 (Bug-Meldung mit Screenshot: Telefon- und
+E-Mail-Feld wurden beim Autofill mit dem Namen befüllt statt mit Telefonnummer/E-Mail).

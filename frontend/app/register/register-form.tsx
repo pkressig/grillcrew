@@ -211,12 +211,12 @@ export function RegisterForm({
         </p>
         {(
           [
-            ["first_name", "Vorname", "text"],
-            ["last_name", "Nachname", "text"],
-            ["phone", "Telefon", "tel"],
-            ["email", "E-Mail", "email"],
+            ["first_name", "Vorname", "text", "given-name"],
+            ["last_name", "Nachname", "text", "family-name"],
+            ["phone", "Telefon", "tel", "tel"],
+            ["email", "E-Mail", "email", "email"],
           ] as const
-        ).map(([name, label, type]) => (
+        ).map(([name, label, type, autoComplete]) => (
           <label key={name} className="flex flex-col gap-1 font-medium">
             {label}
             <input
@@ -226,7 +226,7 @@ export function RegisterForm({
               value={fields[name]}
               onChange={updateField}
               required
-              autoComplete={name === "email" ? "email" : "name"}
+              autoComplete={autoComplete}
             />
           </label>
         ))}
@@ -278,6 +278,7 @@ export function RegisterForm({
                     className="min-h-11 rounded border px-3 font-normal"
                     value={child.first_name}
                     onChange={(event) => updateChildField(index, "first_name", event.target.value)}
+                    autoComplete="off"
                   />
                 </label>
                 <label className="flex flex-col gap-1 font-medium">
@@ -286,6 +287,7 @@ export function RegisterForm({
                     className="min-h-11 rounded border px-3 font-normal"
                     value={child.last_name}
                     onChange={(event) => updateChildField(index, "last_name", event.target.value)}
+                    autoComplete="off"
                   />
                 </label>
                 <label className="flex flex-col gap-1 font-medium">
@@ -294,6 +296,7 @@ export function RegisterForm({
                     className="min-h-11 rounded border px-3 font-normal"
                     value={child.team_name}
                     onChange={(event) => updateChildField(index, "team_name", event.target.value)}
+                    autoComplete="off"
                   />
                 </label>
                 {fields.children.length > 1 ? (
