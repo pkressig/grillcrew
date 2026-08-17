@@ -41,6 +41,12 @@ class FamilyUpdate(BaseModel):  # type: ignore[explicit-any]
         return value.strip() if isinstance(value, str) else value
 
 
+class FamilyMergeRequest(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+
+    source_family_id: uuid.UUID
+
+
 class FamilyResponse(BaseModel):  # type: ignore[explicit-any]
     model_config = ConfigDict(from_attributes=True)
 

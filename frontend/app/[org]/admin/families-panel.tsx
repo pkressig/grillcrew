@@ -18,6 +18,7 @@ import {
   loadFamilyMembers,
   loadFamilyVolunteers,
   loadVolunteerFamily,
+  mergeFamilies,
   sendVolunteerPasswordReset,
   setVolunteerPassword,
   updateFamily,
@@ -1300,6 +1301,7 @@ function FamiliesView({ org }: Readonly<{ org: string }>) {
                 <FamilyDetail
                   key={selected.id}
                   family={selected}
+                  otherFamilies={families.filter((item) => item.id !== selected.id)}
                   org={org}
                   members={cache[selected.id]}
                   onMembers={cacheMembers}
@@ -1314,6 +1316,10 @@ function FamiliesView({ org }: Readonly<{ org: string }>) {
                         .sort((a, b) => a.display_name.localeCompare(b.display_name)),
                     );
                     setSuccess("Familienname wurde gespeichert.");
+                  }}
+                  onMerged={(removedFamilyId) => {
+                    setFamilies((current) => current.filter((item) => item.id !== removedFamilyId));
+                    setSuccess("Familien wurden zusammengeführt.");
                   }}
                   onDeleted={() => {
                     const deletedId = selected.id;
@@ -1680,17 +1686,21 @@ function FamilyForm({
 
 function FamilyDetail({
   family,
+  otherFamilies,
   org,
   members,
   onMembers,
   onUpdated,
+  onMerged,
   onDeleted,
 }: Readonly<{
   family: Family;
+  otherFamilies: FamilyListItem[];
   org: string;
   members: FamilyMember[] | undefined;
   onMembers: (familyId: string, members: FamilyMember[]) => void;
   onUpdated: (family: Family) => void;
+  onMerged: (removedFamilyId: string) => void;
   onDeleted: () => void;
 }>) {
   const [loading, setLoading] = useState(members === undefined);
@@ -1699,6 +1709,9 @@ function FamilyDetail({
   const [success, setSuccess] = useState<string | null>(null);
   const [deletingFamily, setDeletingFamily] = useState(false);
   const [deleteFamilyError, setDeleteFamilyError] = useState<string | null>(null);
+  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [merging, setMerging] = useState(false);
+  const [mergeError, setMergeError] = useState<string | null>(null);
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(family.display_name);
   const [savingName, setSavingName] = useState(false);
@@ -1829,6 +1842,34 @@ function FamilyDetail({
         caught instanceof Error ? caught.message : "Die Familie konnte nicht gelöscht werden.",
       );
       setDeletingFamily(false);
+    }
+  }
+  async function mergeIntoThisFamily() {
+    const source = otherFamilies.find((item) => item.id === mergeSourceId);
+    if (!source) return;
+    if (
+      !window.confirm(
+        `Alle Mitglieder von "${source.display_name}" zu "${family.display_name}" hinzufügen? ` +
+          `"${source.display_name}" wird danach endgültig gelöscht. Dies kann nicht rückgängig ` +
+          "gemacht werden.",
+      )
+    )
+      return;
+    setMerging(true);
+    setMergeError(null);
+    try {
+      await mergeFamilies(org, family.id, source.id);
+      onMerged(source.id);
+      setMergeSourceId("");
+      await refresh();
+    } catch (caught) {
+      setMergeError(
+        caught instanceof Error
+          ? caught.message
+          : "Die Familien konnten nicht zusammengeführt werden.",
+      );
+    } finally {
+      setMerging(false);
     }
   }
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -2162,6 +2203,54 @@ function FamilyDetail({
               </li>
             ))}
           </ul>
+        )}
+      </section>
+      <section className="mt-5 border-t pt-4" aria-labelledby="merge-family-heading">
+        <h3 id="merge-family-heading" className="font-semibold">
+          Familien zusammenführen
+        </h3>
+        {otherFamilies.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">Keine weiteren Familien vorhanden.</p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Verschiebt alle Helfer und Kinder einer anderen Familie hierher und löscht diese
+              anschliessend. Nützlich, wenn dieselbe Familie versehentlich zweimal angelegt wurde.
+            </p>
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+              <label className="grid flex-1 gap-1 text-sm" htmlFor="merge-source-family">
+                Andere Familie
+                <select
+                  className={control}
+                  id="merge-source-family"
+                  value={mergeSourceId}
+                  onChange={(event) => setMergeSourceId(event.target.value)}
+                  disabled={merging}
+                >
+                  <option value="">Bitte wählen</option>
+                  {otherFamilies.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.display_name} ({item.children_count} Kinder, {item.helpers_count}{" "}
+                      Helfer)
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                disabled={merging || !mergeSourceId}
+                onClick={() => void mergeIntoThisFamily()}
+              >
+                {merging ? "Wird zusammengeführt …" : "Zusammenführen"}
+              </Button>
+            </div>
+            {mergeError ? (
+              <p className="mt-2 text-sm text-status-error" role="alert">
+                {mergeError}
+              </p>
+            ) : null}
+          </>
         )}
       </section>
       <section className="mt-5 border-t pt-4" aria-labelledby="delete-family-heading">

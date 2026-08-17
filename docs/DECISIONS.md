@@ -716,3 +716,32 @@ Callback bereits aktualisiert, ohne eine separate Kopie zu betreffen.
 **Entschieden von:** Product Owner, 2026-08-17 (Rückmeldung: die in D-062 beschriebene Korrektur
 über "Bearbeiten" → "Speichern" zeigte in der Familienmitglieder-Liste weiterhin den alten,
 doppelten Namen).
+
+## D-064 – Familien zusammenführen
+
+**Entscheid:** Neuer Endpunkt `POST /api/admin/{organization_slug}/families/{family_id}/merge`
+(Payload `{source_family_id}`) verschiebt alle Familienmitglieder (Helfer wie Kinder) der
+Quell-Familie zur Ziel-Familie und löscht anschliessend die jetzt leere Quell-Familie
+(`FamilyService.merge()`, Audit-Eintrag `FAMILY_MERGED_BY_ADMIN` mit `merged_family_id` und
+Anzahl verschobener Mitglieder). Adressiert den Fall, dass für dasselbe Kind zwei Elternteile
+unabhängig voneinander ein Helferkonto registriert haben und dadurch zwei separate
+Familien-Gruppen für denselben Haushalt entstanden sind. Doppelte Kinder-Einträge nach dem
+Zusammenführen müssen weiterhin manuell über "Entfernen" bereinigt werden – dafür gibt es
+bewusst keine automatische Duplikaterkennung (Namen sind nicht eindeutig, ein Admin muss das
+beurteilen).
+
+Im Familien-Tab gibt es dafür eine neue Sektion "Familien zusammenführen" (zwischen
+Familienmitglieder-Liste und "Familie löschen"): ein Dropdown mit allen anderen aktiven Familien
+der Organisation (samt Kinder-/Helfer-Anzahl zur Orientierung) und ein Button
+"Zusammenführen", der vor dem irreversiblen Verschieben+Löschen eine `window.confirm`-Bestätigung
+verlangt. Nach Erfolg wird sowohl die Mitgliederliste der aktuell angezeigten (Ziel-)Familie neu
+geladen als auch die Quell-Familie aus der Familienliste links entfernt.
+
+**Abgrenzung:** Keine Zusammenführung über Organisationsgrenzen hinweg (der Service prüft beide
+Familien tenant-scoped über `_get_active_family`). Keine automatische Zusammenführung von
+`internal_note` – die der Ziel-Familie bleibt unverändert, die der Quell-Familie geht beim Löschen
+verloren (nicht angefragt, out of scope).
+
+**Entschieden von:** Product Owner, 2026-08-17 (konkreter Vorfall: zwei Elternteile eines Kindes
+hatten sich unabhängig registriert und zwei "Züger"-Familien erzeugt; Wunsch, Helfer und Kinder in
+eine gemeinsame Familie zusammenzuführen und doppelte Kinder danach manuell zu bereinigen).

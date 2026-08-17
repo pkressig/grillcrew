@@ -25,6 +25,7 @@ from app.schemas.family import (
     FamilyMemberCreate,
     FamilyMemberResponse,
     FamilyMemberVolunteerUpdate,
+    FamilyMergeRequest,
     FamilyResponse,
     FamilyUpdate,
     FamilyVolunteerResponse,
@@ -39,6 +40,7 @@ from app.services.family import (
     FamilyHasMembersError,
     FamilyMemberLinkError,
     FamilyMemberNotFoundError,
+    FamilyMergeError,
     FamilyNotFoundError,
     FamilyService,
     VolunteerHasNoAccountError,
@@ -111,6 +113,28 @@ def update_family(
         )
     except FamilyNotFoundError:
         raise HTTPException(status_code=404, detail="family not found") from None
+
+
+@router.post("/{family_id}/merge", response_model=FamilyResponse)
+def merge_family(
+    organization_slug: str,
+    family_id: uuid.UUID,
+    payload: FamilyMergeRequest,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> FamilyResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        merged = _service(organization_slug, current, db).merge(
+            family_id, payload.source_family_id, current.user.id
+        )
+    except FamilyNotFoundError:
+        raise HTTPException(status_code=404, detail="family not found") from None
+    except FamilyMergeError as error:
+        raise HTTPException(status_code=422, detail=error.detail) from None
+    return FamilyResponse.model_validate(merged)
 
 
 def _volunteer_response(volunteer: Volunteer) -> FamilyVolunteerResponse:

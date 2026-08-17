@@ -148,6 +148,20 @@ export const updateFamily = (org: string, familyId: string, payload: FamilyUpdat
     "Der Familienname konnte nicht gespeichert werden.",
   );
 
+/** Moves every member of `sourceFamilyId` into `targetFamilyId`, then deletes the
+ * now-empty source family. For two accidentally-separate registrations of the same
+ * household (e.g. both parents signing up independently). */
+export const mergeFamilies = (org: string, targetFamilyId: string, sourceFamilyId: string) =>
+  request<Family>(
+    `${familiesPath(org)}/${encodeURIComponent(targetFamilyId)}/merge`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+      body: JSON.stringify({ source_family_id: sourceFamilyId }),
+    },
+    "Die Familien konnten nicht zusammengeführt werden.",
+  );
+
 const memberPath = (org: string, familyId: string) =>
   `${familiesPath(org)}/${encodeURIComponent(familyId)}/members`;
 

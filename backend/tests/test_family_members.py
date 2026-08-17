@@ -27,6 +27,7 @@ from app.services.family import (
     FamilyHasMembersError,
     FamilyMemberLinkError,
     FamilyMemberNotFoundError,
+    FamilyMergeError,
     FamilyNotFoundError,
     FamilyService,
     VolunteerNotFoundError,
@@ -922,6 +923,151 @@ def test_update_family_route_returns_404_for_unknown_family(
     try:
         response = client.patch(
             f"/api/admin/tenant-a/families/{uuid4()}", json={"display_name": "Neu"}
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 404
+
+
+def test_merge_moves_members_and_deletes_the_source_family() -> None:
+    organization_id = uuid4()
+    actor_id = uuid4()
+    target_id = uuid4()
+    source_id = uuid4()
+    target = _family(target_id)
+    source = _family(source_id)
+    db = _LinkDb([target, source])
+    service = FamilyService(cast(object, db), organization_id)  # type: ignore[arg-type]
+
+    merged = service.merge(target_id, source_id, actor_id)
+
+    assert merged is target
+    assert len(db.executed) == 1
+    move_statement = str(db.executed[0])
+    assert "UPDATE family_member" in move_statement
+    assert db.deleted == [source]
+    assert db.commits == 1
+    audit = cast(AuditEvent, db.added[-1])
+    assert audit.action == "FAMILY_MERGED_BY_ADMIN"
+    assert audit.organization_id == organization_id
+    assert audit.actor_user_id == actor_id
+    assert audit.entity_id == target_id
+    assert audit.event_metadata["merged_family_id"] == str(source_id)
+
+
+def test_merge_rejects_merging_a_family_into_itself() -> None:
+    family_id = uuid4()
+    db = _LinkDb([])
+    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
+
+    with pytest.raises(FamilyMergeError):
+        service.merge(family_id, family_id, uuid4())
+    assert db.commits == 0 and db.added == [] and db.deleted == []
+
+
+def test_merge_raises_not_found_when_the_source_family_is_missing() -> None:
+    target = _family(uuid4())
+    db = _LinkDb([target, None])
+    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
+
+    with pytest.raises(FamilyNotFoundError):
+        service.merge(target.id, uuid4(), uuid4())
+
+
+def test_merge_family_route_returns_the_merged_family(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    target_id = uuid4()
+    source_id = uuid4()
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def merge(
+            self, received_target_id: UUID, received_source_id: UUID, _actor_id: UUID
+        ) -> object:
+            assert received_target_id == target_id
+            assert received_source_id == source_id
+            now = datetime.now(UTC)
+            return SimpleNamespace(
+                id=target_id,
+                organization_id=uuid4(),
+                display_name="Familie Muster",
+                status=FamilyStatus.ACTIVE,
+                internal_note=None,
+                created_at=now,
+                updated_at=now,
+            )
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.post(
+            f"/api/admin/tenant-a/families/{target_id}/merge",
+            json={"source_family_id": str(source_id)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["id"] == str(target_id)
+
+
+def test_merge_family_route_returns_422_for_a_self_merge(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    family_id = uuid4()
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def merge(self, _target_id: UUID, _source_id: UUID, _actor_id: UUID) -> object:
+            raise FamilyMergeError(
+                "Eine Familie kann nicht mit sich selbst zusammengeführt werden."
+            )
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.post(
+            f"/api/admin/tenant-a/families/{family_id}/merge",
+            json={"source_family_id": str(family_id)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 422
+
+
+def test_merge_family_route_returns_404_for_an_unknown_family(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def merge(self, _target_id: UUID, _source_id: UUID, _actor_id: UUID) -> object:
+            raise FamilyNotFoundError
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.post(
+            f"/api/admin/tenant-a/families/{uuid4()}/merge",
+            json={"source_family_id": str(uuid4())},
         )
     finally:
         app.dependency_overrides.clear()

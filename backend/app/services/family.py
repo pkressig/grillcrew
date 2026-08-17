@@ -2,8 +2,10 @@
 
 import uuid
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -91,6 +93,14 @@ class FamilyHasMembersError(Exception):
         self.detail = detail
 
 
+class FamilyMergeError(Exception):
+    """Raised when a family merge request is invalid (e.g. merging a family into itself)."""
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
 class FamilyService:
     def __init__(self, db: Session, organization_id: uuid.UUID) -> None:
         self.db = db
@@ -150,6 +160,49 @@ class FamilyService:
             self.db.commit()
             self.db.refresh(family)
         return family
+
+    def merge(
+        self,
+        target_family_id: uuid.UUID,
+        source_family_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+    ) -> Family:
+        """Move every member of `source_family_id` into `target_family_id`, then delete the
+        now-empty source family. Used when two admin-created signups for the same
+        household ended up as separate families (e.g. two parents each registering
+        independently) and should become one.
+        """
+        if target_family_id == source_family_id:
+            raise FamilyMergeError(
+                "Eine Familie kann nicht mit sich selbst zusammengeführt werden."
+            )
+        target = self._get_active_family(target_family_id)
+        source = self._get_active_family(source_family_id)
+        moved = cast(
+            "CursorResult[None]",
+            self.db.execute(
+                update(FamilyMember)
+                .where(FamilyMember.family_id == source.id)
+                .values(family_id=target.id)
+            ),
+        )
+        self.db.add(
+            AuditEvent(
+                organization_id=self.organization_id,
+                actor_user_id=actor_user_id,
+                action="FAMILY_MERGED_BY_ADMIN",
+                entity_type="family",
+                entity_id=target.id,
+                event_metadata={
+                    "merged_family_id": str(source.id),
+                    "moved_members": moved.rowcount or 0,
+                },
+            )
+        )
+        self.db.delete(source)
+        self.db.commit()
+        self.db.refresh(target)
+        return target
 
     def list_members(self, family_id: uuid.UUID) -> list[FamilyMember]:
         self._get_active_family(family_id)

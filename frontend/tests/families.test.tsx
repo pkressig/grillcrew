@@ -85,6 +85,7 @@ type FetchOptions = {
   deleteMemberResponse?: Response;
   deleteFamilyResponse?: Response;
   renameFamilyResponse?: Response;
+  mergeFamiliesResponse?: Response;
   extra?: (url: string, init: RequestInit | undefined) => Response | undefined;
 };
 
@@ -141,6 +142,8 @@ function adminFetch(role: StaffRole, options: FetchOptions = {}) {
       const payload = JSON.parse(String(init?.body)) as { display_name: string };
       return Response.json({ ...family, display_name: payload.display_name });
     }
+    if (/\/families\/[^/]+\/merge$/.test(url) && method === "POST")
+      return options.mergeFamiliesResponse ?? Response.json(family);
     if (url.includes("/families/volunteers/") && url.endsWith("/family") && method === "GET")
       return volunteerFamilyResponses[
         Math.min(volunteerFamilyIndex++, volunteerFamilyResponses.length - 1)
@@ -771,6 +774,89 @@ describe("family (Familien) admin — secondary view", () => {
     expect(screen.getByRole("heading", { name: "Familie Muster" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Familienname bearbeiten" }));
     expect(screen.getByLabelText("Familienname")).toHaveValue("Familie Muster");
+  });
+
+  it("shows a fallback message when there are no other families to merge", async () => {
+    renderAdmin("ADMIN", adminFetch("ADMIN", { familyResponses: [Response.json([family])] }));
+    await openFamilienTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    expect(await screen.findByText("Keine weiteren Familien vorhanden.")).toBeInTheDocument();
+  });
+
+  it("merges another family into the current one on confirm, moving its members here", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const otherFamily = {
+      ...family,
+      id: "family-2",
+      display_name: "Familie Keller",
+      children_count: 1,
+      helpers_count: 1,
+    };
+    const fetchMock = adminFetch("ADMIN", {
+      familyResponses: [Response.json([family, otherFamily])],
+      memberResponses: [
+        Response.json([member]),
+        Response.json([member, { ...member, id: "member-2", first_name: "Silvana" }]),
+      ],
+    });
+    renderAdmin("ADMIN", fetchMock);
+    await openFamilienTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+
+    const select = await screen.findByLabelText("Andere Familie");
+    expect(within(select).getByText(/Familie Keller/)).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "family-2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Zusammenführen" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Familien wurden zusammengeführt.")).toBeInTheDocument(),
+    );
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith("/families/family-1/merge") &&
+          (init as RequestInit | undefined)?.method === "POST" &&
+          JSON.parse(String((init as RequestInit).body)).source_family_id === "family-2",
+      ),
+    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "Familie Keller" })).not.toBeInTheDocument();
+  });
+
+  it("does nothing when the merge confirmation is declined", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    const otherFamily = { ...family, id: "family-2", display_name: "Familie Keller" };
+    const fetchMock = adminFetch("ADMIN", {
+      familyResponses: [Response.json([family, otherFamily])],
+    });
+    renderAdmin("ADMIN", fetchMock);
+    await openFamilienTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    fireEvent.change(await screen.findByLabelText("Andere Familie"), {
+      target: { value: "family-2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Zusammenführen" }));
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith("/merge"))).toBe(false);
+  });
+
+  it("shows an error when merging the families fails", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const otherFamily = { ...family, id: "family-2", display_name: "Familie Keller" };
+    const fetchMock = adminFetch("ADMIN", {
+      familyResponses: [Response.json([family, otherFamily])],
+      mergeFamiliesResponse: new Response(null, { status: 500 }),
+    });
+    renderAdmin("ADMIN", fetchMock);
+    await openFamilienTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    fireEvent.change(await screen.findByLabelText("Andere Familie"), {
+      target: { value: "family-2" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Zusammenführen" }));
+
+    expect(
+      await screen.findByText("Die Familien konnten nicht zusammengeführt werden."),
+    ).toBeInTheDocument();
   });
 
   it("renders children and helpers as visible semantic badge variants", async () => {
