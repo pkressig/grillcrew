@@ -43,6 +43,44 @@ const dateFormatter = new Intl.DateTimeFormat("de-CH", {
   year: "numeric",
   timeZone: "UTC",
 });
+const compactDateFormatter = new Intl.DateTimeFormat("de-CH", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "UTC",
+});
+const WEEKDAY_ABBREVIATIONS = ["So.", "Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa."] as const;
+// Below this width a full weekday name plus the day-status badge no longer
+// reliably fit on one line (varies by device font metrics), so both switch
+// to compact wording instead of wrapping onto a second line.
+const NARROW_LAYOUT_QUERY = "(max-width: 639px)";
+
+function formatDayHeading(date: string, compact: boolean): string {
+  const value = new Date(`${date}T00:00:00Z`);
+  if (!compact) return dateFormatter.format(value);
+  return `${WEEKDAY_ABBREVIATIONS[value.getUTCDay()]} ${compactDateFormatter.format(value)}`;
+}
+
+/** Tracks a CSS media query client-side. Defaults to `false` (the wide/full
+ * layout) when `matchMedia` is unavailable (SSR, or jsdom in tests without a
+ * polyfill), so server-rendered markup and unrelated tests are unaffected. */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(query).matches
+      : false,
+  );
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const mediaQueryList = window.matchMedia(query);
+    const update = () => setMatches(mediaQueryList.matches);
+    update();
+    mediaQueryList.addEventListener("change", update);
+    return () => mediaQueryList.removeEventListener("change", update);
+  }, [query]);
+  return matches;
+}
+
 export function OrganizationLanding({
   shiftType,
 }: Readonly<{
@@ -51,6 +89,7 @@ export function OrganizationLanding({
   const organization = useOrganization();
   const auth = useAuth();
   const router = useRouter();
+  const compactDayLayout = useMediaQuery(NARROW_LAYOUT_QUERY);
   const basePath = shiftType === "GRILL" ? "grill" : "kiosk";
   const areaLabel = shiftType === "GRILL" ? "Grill Helfer Einsatzplan" : "Kiosk Helfer Einsatzplan";
   const orgBasePath = `/${encodeURIComponent(organization.slug)}/${basePath}`;
@@ -227,19 +266,6 @@ export function OrganizationLanding({
     };
   }, [plan]);
 
-  function focusOwnSignup(signup: VolunteerSignupSummary) {
-    if (!plan) return;
-    const match = findSignupShift(plan, signup);
-    if (!match) return;
-    setExpandedDay(match.event.date);
-    setHighlightedShift(match.shift.id);
-    window.requestAnimationFrame(() => {
-      const target = document.getElementById(`shift-${match.shift.id}`);
-      target?.scrollIntoView?.({ behavior: "smooth", block: "center" });
-      target?.focus({ preventScroll: true });
-    });
-  }
-
   const shiftProps = {
     organization,
     organizationTimezone: organization.timezone,
@@ -348,7 +374,6 @@ export function OrganizationLanding({
             profile={volunteerProfile}
             loaded={profileLoaded}
             organization={organization}
-            onSelect={focusOwnSignup}
             onCancelled={setVolunteerProfile}
           />
         ) : null}
@@ -382,6 +407,7 @@ export function OrganizationLanding({
                 <Day
                   key={day.date}
                   day={day}
+                  compact={compactDayLayout}
                   expanded={expandedDay === day.date}
                   onToggle={() =>
                     setExpandedDay((current) => (current === day.date ? null : day.date))
@@ -401,13 +427,11 @@ function OwnSignups({
   profile,
   loaded,
   organization,
-  onSelect,
   onCancelled,
 }: Readonly<{
   profile: VolunteerProfile | null;
   loaded: boolean;
   organization: PublicOrganization;
-  onSelect: (entry: VolunteerSignupSummary) => void;
   onCancelled: (profile: VolunteerProfile) => void;
 }>) {
   return (
@@ -432,14 +456,15 @@ function OwnSignups({
             const stillOpen = entry.signup_status === "ACTIVE" && entry.outcome === "OPEN";
             return (
               <li key={entry.id} className="rounded-lg border p-3 hover:bg-muted/60">
-                <button
-                  type="button"
-                  onClick={() => onSelect(entry)}
-                  className="block min-h-11 w-full text-left"
+                <Link
+                  href={`/profile/signups/${entry.id}`}
+                  className="block min-h-11 w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 >
-                  <span className="block font-bold">{shiftLabel}</span>
+                  <span className="block font-bold underline decoration-dotted underline-offset-2">
+                    {shiftLabel}
+                  </span>
                   <span className="block text-sm text-muted-foreground">{entry.event_title}</span>
-                </button>
+                </Link>
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                   <span>Status: {signupStatus(entry)}</span>
                   {stillOpen ? (
@@ -462,11 +487,13 @@ function OwnSignups({
 
 function Day({
   day,
+  compact,
   expanded,
   onToggle,
   shiftProps,
 }: Readonly<{
   day: DayGroup;
+  compact: boolean;
   expanded: boolean;
   onToggle: () => void;
   shiftProps: ShiftProps;
@@ -484,9 +511,9 @@ function Day({
         onClick={onToggle}
         className="flex min-h-11 w-full items-center justify-between gap-3 p-4 text-left font-bold"
       >
-        <span>{dateFormatter.format(new Date(`${day.date}T00:00:00Z`))}</span>
-        <span className="flex items-center gap-2">
-          <DayStatusBadge stats={dayStats} />
+        <span className="min-w-0 flex-1 truncate">{formatDayHeading(day.date, compact)}</span>
+        <span className="flex shrink-0 items-center gap-2">
+          <DayStatusBadge stats={dayStats} compact={compact} />
           <ChevronDown
             aria-hidden="true"
             className={cn("h-5 w-5 shrink-0 transition-transform", expanded && "rotate-180")}
@@ -927,18 +954,20 @@ function summarizeDayShifts(shifts: PublicShift[]): DayShiftStats {
     ),
   };
 }
-function DayStatusBadge({ stats }: Readonly<{ stats: DayShiftStats }>) {
+function DayStatusBadge({ stats, compact }: Readonly<{ stats: DayShiftStats; compact: boolean }>) {
   if (stats.totalShifts === 0) return null;
   if (stats.openShifts === 0)
     return (
-      <Badge variant="success">
+      <Badge variant="success" className="whitespace-nowrap">
         Alle {stats.totalShifts === 1 ? "Schicht" : "Schichten"} belegt
       </Badge>
     );
+  const placesLabel = `${stats.openPlaces} ${stats.openPlaces === 1 ? "Platz" : "Plätze"}`;
   return (
-    <Badge variant="error">
-      {stats.openShifts} {stats.openShifts === 1 ? "Schicht" : "Schichten"} offen ·{" "}
-      {stats.openPlaces} {stats.openPlaces === 1 ? "Platz" : "Plätze"}
+    <Badge variant="error" className="whitespace-nowrap">
+      {compact
+        ? `${placesLabel} offen`
+        : `${stats.openShifts} ${stats.openShifts === 1 ? "Schicht" : "Schichten"} offen · ${placesLabel}`}
     </Badge>
   );
 }

@@ -323,6 +323,22 @@ describe("ProfilePage signup status badges", () => {
   });
 });
 
+describe("ProfilePage signup detail links", () => {
+  it("links each signup's heading to its own-signup detail page", async () => {
+    vi.stubGlobal("fetch", profileFetch(profile));
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    const openItem = (await screen.findByText("Senioren 30+")).closest("li")!;
+    expect(within(openItem).getByRole("link")).toHaveAttribute(
+      "href",
+      "/profile/signups/signup-open",
+    );
+  });
+});
+
 describe("ProfilePage per-signup compensation", () => {
   it("updates a signup's compensation type via PATCH and reflects the new value", async () => {
     const fetchMock = profileFetch(profile);

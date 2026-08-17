@@ -275,21 +275,19 @@ describe("mobile public plan", () => {
     expect(replaceMock).toHaveBeenCalledWith("/example/grill");
   });
 
-  it("shows own upcoming signups only when authenticated and prevents duplicate signup", async () => {
+  it("shows own upcoming signups only when authenticated, linking each to its detail page, and prevents duplicate signup", async () => {
     authState.isAuthenticated = true;
     renderPage();
     const section = await screen.findByRole("region", { name: "Meine kommenden Einsätze" });
     expect(within(section).getByText("Status: Angemeldet")).toBeInTheDocument();
     expect(screen.queryByText("private@example.test")).not.toBeInTheDocument();
+    expect(within(section).getByRole("link", { name: /^Samstag/ })).toHaveAttribute(
+      "href",
+      "/profile/signups/signup-1",
+    );
     fireEvent.click(await screen.findByRole("button", { name: /Samstag, 05. September 2026/ }));
     const ownAction = await screen.findByRole("button", { name: /Bereits angemeldet: Junioren/ });
     expect(ownAction).toBeDisabled();
-    fireEvent.click(within(section).getByRole("button", { name: /^Samstag/ }));
-    expect(screen.getByRole("button", { name: /Samstag, 05. September 2026/ })).toHaveAttribute(
-      "aria-expanded",
-      "true",
-    );
-    await waitFor(() => expect(document.getElementById("shift-s1")).toHaveClass("ring-2"));
   });
 
   it("offers a compact Absagen control next to the disabled Bereits angemeldet button in the shift row", async () => {
@@ -362,5 +360,57 @@ describe("mobile public plan", () => {
       screen.queryByRole("region", { name: "Meine kommenden Einsätze" }),
     ).not.toBeInTheDocument();
     expect(mockedProfile).not.toHaveBeenCalled();
+  });
+});
+
+describe("compact day-row layout on narrow screens", () => {
+  beforeEach(() => {
+    authState.isAuthenticated = false;
+    mockedPlan.mockReset().mockResolvedValue(plan);
+    localStorage.clear();
+    window.history.replaceState({}, "", "/example/grill");
+    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+  });
+  afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(window, "matchMedia");
+  });
+
+  it("abbreviates the weekday and shows only free places instead of wrapping to a second line", async () => {
+    renderPage();
+    expect(
+      await screen.findByRole("button", { name: /Sa\. 05\.09\.2026.*2 Plätze offen/ }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /So\. 06\.09\.2026.*2 Plätze offen/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Schicht offen/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Samstag, 05\. September 2026/)).not.toBeInTheDocument();
+  });
+
+  it("keeps the fully-booked label as is", async () => {
+    mockedPlan.mockReset().mockResolvedValue({
+      events: plan.events.map((eventItem) =>
+        eventItem.id === "e3"
+          ? {
+              ...eventItem,
+              shifts: eventItem.shifts.map((shift) => ({
+                ...shift,
+                occupied_volunteers: shift.required_volunteers,
+                volunteer_names: ["Chris", "Deniz"],
+              })),
+            }
+          : eventItem,
+      ),
+    });
+    renderPage();
+    expect(
+      await screen.findByRole("button", { name: /So\. 06\.09\.2026.*Alle Schicht belegt/ }),
+    ).toBeInTheDocument();
   });
 });

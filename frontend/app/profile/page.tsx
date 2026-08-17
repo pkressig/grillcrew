@@ -472,8 +472,15 @@ function SignupList({
             const stillOpen = entry.signup_status === "ACTIVE" && entry.outcome === "OPEN";
             return (
               <li key={entry.id} className="rounded bg-muted/40 p-2">
-                <p className="font-bold">{shiftLabel}</p>
-                <p className="text-sm text-muted-foreground">{entry.event_title}</p>
+                <Link
+                  href={`/profile/signups/${entry.id}`}
+                  className="block rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                >
+                  <p className="font-bold underline decoration-dotted underline-offset-2">
+                    {shiftLabel}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{entry.event_title}</p>
+                </Link>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                   {stillOpen ? (

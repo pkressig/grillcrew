@@ -517,3 +517,43 @@ nicht betroffen, siehe D-053).
 **Entschieden von:** Product Owner, 2026-08-17 (Wunsch, den Vereins-Slug von
 "fc-thusis-cazis" auf "fctc" zu ändern, verwaltbar in den Einstellungen statt einmaligem Fix;
 Meldung einer "komischen Seite" bei falscher/unbekannter Vereins-URL).
+
+## D-056 – Mobile Tages-Zeile ohne Zeilenumbruch, eigene Eintragung ohne E-Mail-Link erreichbar
+
+**Entscheid:** Zwei unabhängige Mobile-Feinheiten aus einem gemeldeten Screenshot-Vergleich
+(Samsung Internet vs. Chrome auf Android) sind behoben:
+
+Erstens rendert `html` jetzt mit `text-size-adjust: 100%` (`frontend/app/globals.css`) – Chrome
+auf Android vergrössert Text in schmalen Blöcken automatisch ("Font Boosting"), was bei
+identischem CSS zu einem sichtbar grösseren Schriftbild als in Samsung Internet führte und damit
+Zeilenumbrüche auslöste, die in Samsung Internet nicht auftraten. Zusätzlich bricht die
+Tages-Zeile in `organization-landing.tsx` (Wochentag + Status-Badge) jetzt nie mehr um: der
+Wochentag trunkiert statt umzubrechen, und unterhalb von 640px CSS-Breite (`useMediaQuery`,
+`matchMedia`-basiert, standardmässig `false` bei SSR/Tests ohne Polyfill) wird der Wochentag
+abgekürzt (`Sa., 22.08.2026` statt `Samstag, 22. August 2026`) und das Status-Badge zeigt nur
+noch die Anzahl freier Plätze statt zusätzlich der Schichtanzahl (`"2 Plätze offen"` statt
+`"1 Schicht offen · 2 Plätze"`).
+
+Zweitens ist die "Meine Eintragung"-Detailseite (bisher nur über den persönlichen, einmaligen
+E-Mail-Link mit `management_token` erreichbar, da der Token nur gehasht persistiert wird und
+serverseitig nicht rekonstruierbar ist) jetzt zusätzlich für eingeloggte Helfer direkt in der App
+erreichbar: ein neuer, authentifizierter Endpunkt `GET /api/volunteer/signups/{signup_id}`
+liefert dieselbe Projektion (`ManagedSignupResponse`, wiederverwendet über die bereits
+bestehende, jetzt modulübergreifend importierte `_managed_signup_response()`-Hilfsfunktion aus
+`app/api/public.py`) für eine eigene Anmeldung, per Besitzprüfung über die aktuelle Session statt
+per Token. Die reine Anzeige-Darstellung wurde aus `managed-signup-page.tsx` in eine gemeinsame
+Komponente `frontend/components/signup-detail-card.tsx` extrahiert; die Absage-Sektion bleibt je
+Aufrufer unterschiedlich (E-Mail-Link: eigener Bestätigungsdialog; App: die bestehende
+`SignupCancelControl`, inkl. Frist-Fallback auf Direktkontakt). Die neue Seite
+`/profile/signups/{id}` ist von zwei Stellen aus verlinkt: der "Kommende Einsätze"-Liste auf der
+Profilseite und dem "Meine kommenden Einsätze"-Widget oben auf der Grill-/Kiosk-Seite (dessen
+Klick bisher nur zur betroffenen Schicht in der Liste weiter unten scrollte – das entfällt
+zugunsten der Detailseite, da die Absage bereits inline in diesem Widget möglich ist).
+
+**Abgrenzung:** Keine Änderung an den bestehenden, token-basierten E-Mail-Links selbst – diese
+bleiben unverändert nutzbar (z. B. für Helfer, die sich nicht einloggen). Keine
+Redirect-Weiterleitung vom alten Klickverhalten des "Meine kommenden Einsätze"-Widgets.
+
+**Entschieden von:** Product Owner, 2026-08-17 (Screenshot-Vergleich Samsung Internet vs. Chrome
+mit Bitte um konsistente, nie umbrechende Darstellung; Wunsch, die "Meine Eintragung"-Seite auch
+ohne den E-Mail-Link über Profil bzw. Klick auf einen kommenden Einsatz erreichen zu können).

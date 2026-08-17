@@ -389,6 +389,46 @@ def test_get_profile_reports_cannot_cancel_past_the_deadline(
     assert near["can_cancel"] is False
 
 
+def test_get_own_signup_returns_the_same_detail_shape_as_the_emailed_management_link(
+    client: TestClient, scenario: Scenario
+) -> None:
+    response = client.get(
+        f"/api/volunteer/signups/{scenario.upcoming_signup.id}", headers=_headers()
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["organization_slug"] == "org"
+    assert body["event_title"] == "Match far away"
+    assert body["public_name"] == "Mia Muster"
+    assert body["can_cancel"] is True
+    assert body["signup_status"] == "ACTIVE"
+
+
+def test_get_own_signup_reports_cannot_cancel_past_the_deadline(
+    client: TestClient, scenario: Scenario
+) -> None:
+    response = client.get(
+        f"/api/volunteer/signups/{scenario.past_deadline_signup.id}", headers=_headers()
+    )
+    assert response.status_code == 200
+    assert response.json()["can_cancel"] is False
+    assert response.json()["cancellation_guidance"]
+
+
+def test_get_own_signup_rejects_a_signup_owned_by_another_volunteer(
+    client: TestClient, scenario: Scenario
+) -> None:
+    response = client.get(
+        f"/api/volunteer/signups/{scenario.other_volunteer_signup.id}", headers=_headers()
+    )
+    assert response.status_code == 404
+
+
+def test_get_own_signup_rejects_an_unknown_signup_id(client: TestClient) -> None:
+    response = client.get(f"/api/volunteer/signups/{uuid.uuid4()}", headers=_headers())
+    assert response.status_code == 404
+
+
 def test_update_signup_sets_a_per_shift_compensation_override(
     client: TestClient, scenario: Scenario
 ) -> None:

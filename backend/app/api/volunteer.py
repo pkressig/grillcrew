@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import _ensure_origin_and_host
 from app.api.dependencies import CurrentUser, get_current_user, validate_csrf
-from app.api.public import to_public_response
+from app.api.public import _managed_signup_response, to_public_response
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.family import FamilyMember, FamilyMemberType
@@ -34,6 +34,7 @@ from app.schemas.auth import (
     VolunteerSignupCompensationUpdate,
     VolunteerSignupSummary,
 )
+from app.schemas.planning import ManagedSignupResponse
 from app.services.public_signup import can_self_cancel
 
 router = APIRouter(prefix="/api/volunteer", tags=["volunteer"])
@@ -204,6 +205,20 @@ def update_profile(
     db.commit()
     db.refresh(volunteer)
     return get_profile(current_user, db)
+
+
+@router.get("/signups/{signup_id}", response_model=ManagedSignupResponse)
+def get_own_signup(
+    signup_id: uuid.UUID,
+    current_user: CurrentUser = Depends(get_current_user),  # noqa: B008
+    db: Session = Depends(get_db),  # noqa: B008
+) -> ManagedSignupResponse:
+    volunteer = _get_profile(current_user.user.id, db)
+    signup = _get_own_signup(signup_id, volunteer, db)
+    organization = db.get(Organization, volunteer.organization_id)
+    if organization is None:
+        raise HTTPException(status_code=500, detail="organization missing")
+    return _managed_signup_response(organization, signup)
 
 
 @router.patch("/signups/{signup_id}", response_model=VolunteerProfileResponse)

@@ -1,5 +1,6 @@
 import { apiBaseUrl, csrfHeaders, ensureCsrfToken } from "@/lib/api";
 import type { PublicOrganization } from "@/lib/organization";
+import type { ManagedSignup } from "@/lib/public-plan";
 
 export type CompensationType = "WORK_HOURS" | "VOLUNTARY" | "PAYOUT";
 
@@ -77,6 +78,12 @@ export async function updateSignupCompensation(
     headers: { "Content-Type": "application/json", ...csrfHeaders() },
     body: JSON.stringify(payload),
   });
+}
+
+/** Same detail shape as the emailed manage-signup link, fetched for the
+ * signed-in volunteer's own signup instead of via a one-time token. */
+export async function fetchOwnSignupDetail(signupId: string): Promise<ManagedSignup> {
+  return request<ManagedSignup>(`/api/volunteer/signups/${signupId}`);
 }
 
 export async function cancelSignup(signupId: string, payload: { reason: string | null }) {

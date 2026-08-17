@@ -46,6 +46,12 @@
 
 html {
   font-size: 100%;
+  /* Chrome on Android auto-inflates text in narrow blocks ("font boosting"),
+   * which Samsung Internet and other mobile browsers don't apply the same
+   * way -- identical CSS then renders at different sizes per browser. Pin
+   * this to 100% so layout is consistent across browsers/devices. */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
