@@ -26,6 +26,7 @@ from app.schemas.family import (
     FamilyMemberResponse,
     FamilyMemberVolunteerUpdate,
     FamilyResponse,
+    FamilyUpdate,
     FamilyVolunteerResponse,
     VolunteerAdminUpdate,
     VolunteerCreate,
@@ -91,6 +92,25 @@ def create_family(
 ) -> FamilyResponse:
     _ensure_origin_and_host(request, db, get_settings())
     return FamilyResponse.model_validate(_service(organization_slug, current, db).create(payload))
+
+
+@router.patch("/{family_id}", response_model=FamilyResponse)
+def update_family(
+    organization_slug: str,
+    family_id: uuid.UUID,
+    payload: FamilyUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> FamilyResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        return FamilyResponse.model_validate(
+            _service(organization_slug, current, db).update(family_id, payload, current.user.id)
+        )
+    except FamilyNotFoundError:
+        raise HTTPException(status_code=404, detail="family not found") from None
 
 
 def _volunteer_response(volunteer: Volunteer) -> FamilyVolunteerResponse:

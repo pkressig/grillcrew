@@ -624,3 +624,21 @@ Registrierung ist ein reiner First-Party-Endpunkt ohne externe API-Konsumenten.
 
 **Entschieden von:** Product Owner, 2026-08-17 (Wunsch, mehrere Kinder direkt bei der
 Registrierung erfassen zu können statt nur eines).
+
+## D-060 – Familienname im Admin-Bereich Familien bearbeitbar
+
+**Entscheid:** `Family.display_name` ist bislang nur bei der Erstellung setzbar; ein neuer
+ADMIN/KOORDINATION-Endpunkt `PATCH /api/admin/{organization_slug}/families/{family_id}`
+(`FamilyUpdate`, nur `display_name`) erlaubt das nachträgliche Umbenennen. Im Familien-Tab
+erscheint neben der Familien-Überschrift ein "Bearbeiten"-Button (aria-label "Familienname
+bearbeiten", um Kollisionen mit dem gleichnamigen Bearbeiten-Button im Helfer-Bearbeitungsformular
+zu vermeiden), der ein Inline-Formular mit Speichern/Abbrechen öffnet. Nach erfolgreichem
+Speichern wird sowohl die Detailansicht als auch die Familienliste links (samt erneuter
+alphabetischer Sortierung) sofort aktualisiert, ohne einen Reload der gesamten Liste. Ist der neue
+Name identisch mit dem alten, wird kein Request ausgelöst (No-Op, kein unnötiger Audit-Eintrag).
+
+**Abgrenzung:** Keine Bearbeitung von `internal_note` über diesen Endpunkt (nur der Name) – das
+bleibt eine spätere, separate Erweiterung bei Bedarf.
+
+**Entschieden von:** Product Owner, 2026-08-17 (Wunsch, den Familiennamen im Familien-Tab
+nachträglich anpassen zu können).

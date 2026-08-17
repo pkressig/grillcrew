@@ -135,6 +135,19 @@ export const createFamily = (org: string, payload: FamilyInput) =>
     "Die Familie konnte nicht erstellt werden.",
   );
 
+export type FamilyUpdateInput = { display_name: string };
+
+export const updateFamily = (org: string, familyId: string, payload: FamilyUpdateInput) =>
+  request<Family>(
+    `${familiesPath(org)}/${encodeURIComponent(familyId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
+      body: JSON.stringify(payload),
+    },
+    "Der Familienname konnte nicht gespeichert werden.",
+  );
+
 const memberPath = (org: string, familyId: string) =>
   `${familiesPath(org)}/${encodeURIComponent(familyId)}/members`;
 

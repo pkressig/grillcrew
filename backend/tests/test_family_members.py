@@ -1,5 +1,6 @@
 """F007 Step 2 family-member model, service, API, and security tests."""
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
@@ -16,7 +17,12 @@ from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStat
 from app.models.identity import AuditEvent, StaffMembership, StaffRole, User
 from app.models.organization import Organization
 from app.models.planning import Volunteer, VolunteerCompensation, VolunteerStatus
-from app.schemas.family import FamilyMemberCreate, FamilyMemberVolunteerUpdate, VolunteerAdminUpdate
+from app.schemas.family import (
+    FamilyMemberCreate,
+    FamilyMemberVolunteerUpdate,
+    FamilyUpdate,
+    VolunteerAdminUpdate,
+)
 from app.services.family import (
     FamilyHasMembersError,
     FamilyMemberLinkError,
@@ -797,6 +803,116 @@ def test_delete_family_route_returns_409_when_members_remain(
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 409
+
+
+def test_update_family_renames_and_audits() -> None:
+    family_id = uuid4()
+    organization_id = uuid4()
+    actor_id = uuid4()
+    family = cast(
+        Family,
+        SimpleNamespace(id=family_id, status=FamilyStatus.ACTIVE, display_name="Alt"),
+    )
+    db = _LinkDb([family])
+    service = FamilyService(cast(object, db), organization_id)  # type: ignore[arg-type]
+
+    updated = service.update(family_id, FamilyUpdate(display_name="Neu"), actor_id)
+
+    assert updated.display_name == "Neu"
+    assert db.commits == 1
+    audit = cast(AuditEvent, db.added[-1])
+    assert audit.action == "FAMILY_RENAMED_BY_ADMIN"
+    assert audit.entity_id == family_id
+    assert audit.organization_id == organization_id
+    assert audit.actor_user_id == actor_id
+
+
+def test_update_family_is_a_noop_when_name_is_unchanged() -> None:
+    family_id = uuid4()
+    family = cast(
+        Family,
+        SimpleNamespace(id=family_id, status=FamilyStatus.ACTIVE, display_name="Gleich"),
+    )
+    db = _LinkDb([family])
+    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
+
+    service.update(family_id, FamilyUpdate(display_name="Gleich"), uuid4())
+
+    assert db.commits == 0
+    assert db.added == []
+
+
+def test_update_family_raises_not_found_for_an_unknown_family() -> None:
+    db = _LinkDb([None])
+    service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
+    with pytest.raises(FamilyNotFoundError):
+        service.update(uuid4(), FamilyUpdate(display_name="Neu"), uuid4())
+
+
+def test_update_family_route_returns_the_renamed_family(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+    family_id = uuid4()
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def update(
+            self, received_family_id: UUID, payload: FamilyUpdate, _actor_id: UUID
+        ) -> object:
+            assert received_family_id == family_id
+            now = datetime.now(UTC)
+            return SimpleNamespace(
+                id=family_id,
+                organization_id=uuid4(),
+                display_name=payload.display_name,
+                status=FamilyStatus.ACTIVE,
+                internal_note=None,
+                created_at=now,
+                updated_at=now,
+            )
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.patch(
+            f"/api/admin/tenant-a/families/{family_id}", json={"display_name": "Neuer Name"}
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "Neuer Name"
+
+
+def test_update_family_route_returns_404_for_unknown_family(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = _current()
+
+    class FakeService:
+        def __init__(self, _db: object, _organization_id: UUID) -> None:
+            pass
+
+        def update(self, _family_id: UUID, _payload: FamilyUpdate, _actor_id: UUID) -> object:
+            raise FamilyNotFoundError
+
+    app.dependency_overrides[families.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: object()
+    monkeypatch.setattr(families, "FamilyService", FakeService)
+    monkeypatch.setattr(families, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.patch(
+            f"/api/admin/tenant-a/families/{uuid4()}", json={"display_name": "Neu"}
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 404
 
 
 def test_volunteer_list_api_returns_exact_fields(

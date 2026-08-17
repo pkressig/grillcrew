@@ -30,6 +30,17 @@ class FamilyCreate(BaseModel):  # type: ignore[explicit-any]
         return value.strip() if isinstance(value, str) else value
 
 
+class FamilyUpdate(BaseModel):  # type: ignore[explicit-any]
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str = Field(min_length=1, max_length=160)
+
+    @field_validator("display_name", mode="before")
+    @classmethod
+    def trim_display_name(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
 class FamilyResponse(BaseModel):  # type: ignore[explicit-any]
     model_config = ConfigDict(from_attributes=True)
 

@@ -84,6 +84,7 @@ type FetchOptions = {
   deleteVolunteerResponse?: Response;
   deleteMemberResponse?: Response;
   deleteFamilyResponse?: Response;
+  renameFamilyResponse?: Response;
   extra?: (url: string, init: RequestInit | undefined) => Response | undefined;
 };
 
@@ -135,6 +136,11 @@ function adminFetch(role: StaffRole, options: FetchOptions = {}) {
       return options.deleteMemberResponse ?? new Response(null, { status: 204 });
     if (url.endsWith("/families/family-1") && method === "DELETE")
       return options.deleteFamilyResponse ?? new Response(null, { status: 204 });
+    if (url.endsWith("/families/family-1") && method === "PATCH") {
+      if (options.renameFamilyResponse) return options.renameFamilyResponse;
+      const payload = JSON.parse(String(init?.body)) as { display_name: string };
+      return Response.json({ ...family, display_name: payload.display_name });
+    }
     if (url.includes("/families/volunteers/") && url.endsWith("/family") && method === "GET")
       return volunteerFamilyResponses[
         Math.min(volunteerFamilyIndex++, volunteerFamilyResponses.length - 1)
@@ -698,6 +704,73 @@ describe("family (Familien) admin — secondary view", () => {
     window.history.back();
     window.dispatchEvent(new PopStateEvent("popstate"));
     expect(await screen.findByLabelText("Familienliste")).toBeInTheDocument();
+  });
+
+  it("renames a family and reflects the new name in both the detail heading and the list", async () => {
+    const fetchMock = renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", { familyResponses: [Response.json([family])] }),
+    );
+    await openFamilienTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    await screen.findByRole("heading", { name: "Familie Muster" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Familienname bearbeiten" }));
+    const input = screen.getByLabelText("Familienname");
+    fireEvent.change(input, { target: { value: "Familie Neu" } });
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "Familie Neu" })).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("button", { name: "Familie Neu" })).toBeInTheDocument();
+    expect(screen.getByText("Familienname wurde gespeichert.")).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith("/families/family-1") &&
+          (init as RequestInit | undefined)?.method === "PATCH" &&
+          JSON.parse(String((init as RequestInit).body)).display_name === "Familie Neu",
+      ),
+    ).toBe(true);
+  });
+
+  it("shows an error and keeps the form open when saving the family name fails", async () => {
+    renderAdmin(
+      "ADMIN",
+      adminFetch("ADMIN", {
+        familyResponses: [Response.json([family])],
+        renameFamilyResponse: new Response(null, { status: 500 }),
+      }),
+    );
+    await openFamilienTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Familienname bearbeiten" }));
+    fireEvent.change(screen.getByLabelText("Familienname"), {
+      target: { value: "Familie Neu" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+
+    expect(
+      await screen.findByText("Der Familienname konnte nicht gespeichert werden."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Familienname")).toHaveValue("Familie Neu");
+    expect(screen.queryByRole("heading", { name: "Familie Muster" })).not.toBeInTheDocument();
+  });
+
+  it("discards the draft name when editing is cancelled", async () => {
+    renderAdmin("ADMIN", adminFetch("ADMIN", { familyResponses: [Response.json([family])] }));
+    await openFamilienTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Familienname bearbeiten" }));
+    fireEvent.change(screen.getByLabelText("Familienname"), {
+      target: { value: "Verworfen" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
+
+    expect(screen.getByRole("heading", { name: "Familie Muster" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Familienname bearbeiten" }));
+    expect(screen.getByLabelText("Familienname")).toHaveValue("Familie Muster");
   });
 
   it("renders children and helpers as visible semantic badge variants", async () => {

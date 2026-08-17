@@ -17,7 +17,7 @@ from app.main import app
 from app.models.family import Family, FamilyStatus
 from app.models.identity import StaffMembership, StaffRole, User
 from app.models.organization import Organization
-from app.schemas.family import FamilyCreate
+from app.schemas.family import FamilyCreate, FamilyUpdate
 from app.services.family import FamilyService
 
 
@@ -54,6 +54,17 @@ def test_family_name_is_trimmed_and_payload_rejects_tenant_or_status() -> None:
         FamilyCreate.model_validate(
             {"display_name": "Muster", "organization_id": str(uuid4()), "status": "ACTIVE"}
         )
+
+
+def test_family_update_payload_is_trimmed_and_rejects_blank_or_extra_fields() -> None:
+    payload = FamilyUpdate(display_name="  Familie Neu  ")
+    assert payload.display_name == "Familie Neu"
+    with pytest.raises(ValidationError):
+        FamilyUpdate(display_name="   ")
+    with pytest.raises(ValidationError):
+        FamilyUpdate(display_name="x" * 161)
+    with pytest.raises(ValidationError):
+        FamilyUpdate.model_validate({"display_name": "Muster", "internal_note": "not allowed"})
 
 
 class _FamilyDb:

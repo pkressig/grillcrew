@@ -25,6 +25,7 @@ from app.schemas.family import (
     FamilyCreate,
     FamilyMemberCreate,
     FamilyMemberVolunteerUpdate,
+    FamilyUpdate,
     VolunteerAdminUpdate,
     VolunteerCreate,
 )
@@ -106,6 +107,26 @@ class FamilyService:
         self.db.add(family)
         self.db.commit()
         self.db.refresh(family)
+        return family
+
+    def update(
+        self, family_id: uuid.UUID, payload: FamilyUpdate, actor_user_id: uuid.UUID
+    ) -> Family:
+        family = self._get_active_family(family_id)
+        if family.display_name != payload.display_name:
+            family.display_name = payload.display_name
+            self.db.add(
+                AuditEvent(
+                    organization_id=self.organization_id,
+                    actor_user_id=actor_user_id,
+                    action="FAMILY_RENAMED_BY_ADMIN",
+                    entity_type="family",
+                    entity_id=family.id,
+                    event_metadata={},
+                )
+            )
+            self.db.commit()
+            self.db.refresh(family)
         return family
 
     def list_members(self, family_id: uuid.UUID) -> list[FamilyMember]:

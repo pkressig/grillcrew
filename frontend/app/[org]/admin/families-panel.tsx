@@ -20,6 +20,7 @@ import {
   loadVolunteerFamily,
   sendVolunteerPasswordReset,
   setVolunteerPassword,
+  updateFamily,
   updateFamilyMemberVolunteer,
   updateFamilyVolunteer,
   type Family,
@@ -1302,6 +1303,18 @@ function FamiliesView({ org }: Readonly<{ org: string }>) {
                   org={org}
                   members={cache[selected.id]}
                   onMembers={cacheMembers}
+                  onUpdated={(updated) => {
+                    setFamilies((current) =>
+                      current
+                        .map((item) =>
+                          item.id === updated.id
+                            ? { ...item, display_name: updated.display_name }
+                            : item,
+                        )
+                        .sort((a, b) => a.display_name.localeCompare(b.display_name)),
+                    );
+                    setSuccess("Familienname wurde gespeichert.");
+                  }}
                   onDeleted={() => {
                     const deletedId = selected.id;
                     setFamilies((current) => current.filter((item) => item.id !== deletedId));
@@ -1670,12 +1683,14 @@ function FamilyDetail({
   org,
   members,
   onMembers,
+  onUpdated,
   onDeleted,
 }: Readonly<{
   family: Family;
   org: string;
   members: FamilyMember[] | undefined;
   onMembers: (familyId: string, members: FamilyMember[]) => void;
+  onUpdated: (family: Family) => void;
   onDeleted: () => void;
 }>) {
   const [loading, setLoading] = useState(members === undefined);
@@ -1684,6 +1699,10 @@ function FamilyDetail({
   const [success, setSuccess] = useState<string | null>(null);
   const [deletingFamily, setDeletingFamily] = useState(false);
   const [deleteFamilyError, setDeleteFamilyError] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(family.display_name);
+  const [savingName, setSavingName] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [volunteers, setVolunteers] = useState<FamilyVolunteer[]>([]);
   const [volunteersLoading, setVolunteersLoading] = useState(true);
   const [volunteersError, setVolunteersError] = useState<string | null>(null);
@@ -1770,6 +1789,29 @@ function FamilyDetail({
       setBusy(false);
     }
   }
+  async function saveName(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = nameDraft.trim();
+    if (!trimmed) {
+      setNameError("Der Familienname darf nicht leer sein.");
+      return;
+    }
+    setSavingName(true);
+    setNameError(null);
+    try {
+      const updated = await updateFamily(org, family.id, { display_name: trimmed });
+      onUpdated(updated);
+      setEditingName(false);
+    } catch (caught) {
+      setNameError(
+        caught instanceof Error
+          ? caught.message
+          : "Der Familienname konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setSavingName(false);
+    }
+  }
   async function removeFamily() {
     if (
       !window.confirm(
@@ -1828,7 +1870,54 @@ function FamilyDetail({
   }
   return (
     <div>
-      <h2 className="text-xl font-semibold">{family.display_name}</h2>
+      {editingName ? (
+        <form className="flex flex-wrap items-center gap-2" onSubmit={saveName}>
+          <label className="sr-only" htmlFor="family-name">
+            Familienname
+          </label>
+          <input
+            id="family-name"
+            className={cn(control, "w-auto max-w-xs")}
+            value={nameDraft}
+            onChange={(event) => setNameDraft(event.target.value)}
+            autoFocus
+            required
+          />
+          <Button type="submit" size="sm" disabled={savingName}>
+            {savingName ? "Wird gespeichert …" : "Speichern"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={savingName}
+            onClick={() => {
+              setEditingName(false);
+              setNameDraft(family.display_name);
+              setNameError(null);
+            }}
+          >
+            Abbrechen
+          </Button>
+        </form>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-xl font-semibold">{family.display_name}</h2>
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-label="Familienname bearbeiten"
+            onClick={() => setEditingName(true)}
+          >
+            Bearbeiten
+          </Button>
+        </div>
+      )}
+      {nameError ? (
+        <p role="alert" className="mt-1 text-sm text-status-error">
+          {nameError}
+        </p>
+      ) : null}
       {family.internal_note ? (
         <p className="mt-1 text-sm text-muted-foreground">{family.internal_note}</p>
       ) : null}
