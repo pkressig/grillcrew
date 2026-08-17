@@ -268,5 +268,19 @@ describe("OrganizationLanding", () => {
         "/register?org=example&area=kiosk",
       );
     });
+
+    it("links the header Hilfe button to the matching area's help page", async () => {
+      renderPage("GRILL");
+      expect(await screen.findByRole("link", { name: "Hilfe" })).toHaveAttribute(
+        "href",
+        "/example/grill/hilfe",
+      );
+      cleanup();
+      renderPage("KIOSK");
+      expect(await screen.findByRole("link", { name: "Hilfe" })).toHaveAttribute(
+        "href",
+        "/example/kiosk/hilfe",
+      );
+    });
   });
 });

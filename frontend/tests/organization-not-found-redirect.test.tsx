@@ -20,6 +20,12 @@ import OrganizationGrillPage, {
 import OrganizationKioskPage, {
   generateMetadata as generateKioskMetadata,
 } from "@/app/[org]/kiosk/page";
+import OrganizationGrillHelpPage, {
+  generateMetadata as generateGrillHelpMetadata,
+} from "@/app/[org]/grill/hilfe/page";
+import OrganizationKioskHelpPage, {
+  generateMetadata as generateKioskHelpMetadata,
+} from "@/app/[org]/kiosk/hilfe/page";
 
 describe("organization landing pages redirect to /vereine for an unknown slug", () => {
   beforeEach(() => {
@@ -31,6 +37,16 @@ describe("organization landing pages redirect to /vereine for an unknown slug", 
     { name: "recruitment hub", Page: OrganizationHubPage, generateMetadata: generateHubMetadata },
     { name: "grill plan", Page: OrganizationGrillPage, generateMetadata: generateGrillMetadata },
     { name: "kiosk plan", Page: OrganizationKioskPage, generateMetadata: generateKioskMetadata },
+    {
+      name: "grill help",
+      Page: OrganizationGrillHelpPage,
+      generateMetadata: generateGrillHelpMetadata,
+    },
+    {
+      name: "kiosk help",
+      Page: OrganizationKioskHelpPage,
+      generateMetadata: generateKioskHelpMetadata,
+    },
   ] as const;
 
   for (const { name, Page, generateMetadata } of cases) {

@@ -574,3 +574,34 @@ oder erfassten Arbeitszeiten – beides blockiert weiterhin wie bisher.
 
 **Entschieden von:** Product Owner, 2026-08-17 (Bug-Meldung: Helfer ohne sichtbare Zuweisung
 liess sich nicht löschen).
+
+## D-058 – Hilfe-Seite für Helfer (Grill/Kiosk), Kontaktformular mit vorbereitetem WhatsApp-Versand
+
+**Entscheid:** Neue, generische Hilfe-/FAQ-Seite unter `/{org}/grill/hilfe` und `/{org}/kiosk/hilfe`
+(gemeinsame Komponente `frontend/app/[org]/help-page.tsx`, gleiches `shiftType`-Muster wie
+`OrganizationLanding`), erreichbar über einen neuen "Hilfe"-Button im Header der Grill-/
+Kiosk-Einsatzplan-Seite (organization-landing.tsx). Inhalt: Kurzanleitung zur Schicht-Anmeldung
+(4 Schritte) und ein FAQ-Akkordeon (native `<details>`/`<summary>`, keine zusätzliche JS-Logik
+nötig) — Ausgangstext war ein vom Product Owner mit ChatGPT vorbereiteter Entwurf, überarbeitet
+und vereinsneutral gemacht: keine hartkodierten Vereinsnamen, Koordinator-Namen oder Domains;
+Vereinsname/-Koordinationskontakt kommen aus `organization.name` bzw.
+`organization.settings.coordination_contact_label/_phone` (bestehende Felder, D-verschieden),
+Links sind relative Pfade statt einer festen Domain.
+
+Zusätzlich: ein Kontaktformular-Abschnitt ("Direkt Kontakt", nur sichtbar wenn
+`coordination_contact_phone` gesetzt ist) nach demselben Prinzip wie die bestehende
+`ContactModal` bei abgelaufener Absagefrist (`signup-cancel-control.tsx`), aber mit frei
+eingebbarem Text statt einer festen Nachricht: eine neue Client-Komponente
+`frontend/components/help-contact-form.tsx` lässt den Helfer eine Nachricht in ein Textfeld
+schreiben, die live in einen `wa.me`-Link (`whatsAppHref()`) eingebaut wird — ein Klick auf
+"Über WhatsApp senden" öffnet WhatsApp mit der vorbereiteten Nachricht, bereit zum Absenden.
+Ein separater "Anrufen"-Button bleibt zusätzlich bestehen.
+
+**Abgrenzung:** Keine serverseitige Persistenz oder Zustellung der Kontaktformular-Nachricht —
+der Versand erfolgt ausschliesslich über den vom Nutzer selbst ausgelösten WhatsApp-Link, wie
+beim bestehenden `ContactModal`-Muster. Kein Kontaktformular, wenn keine Koordinations-Telefonnummer
+hinterlegt ist (dann nur die FAQ-Antworten mit generischem "der Koordination"-Verweis).
+
+**Entschieden von:** Product Owner, 2026-08-17 (mitgebrachter FAQ-Text-Entwurf zur Überarbeitung
+und Integration; Wunsch nach einem Kontaktformular nach dem Vorbild der bestehenden
+Absagefrist-Kontaktoption, mit frei eingebbarem Text statt fester Nachricht).

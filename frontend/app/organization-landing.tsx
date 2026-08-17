@@ -4,7 +4,7 @@ import { CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Clock3, Users, X } from "lucide-react";
+import { ChevronDown, Clock3, HelpCircle, Users, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { useOrganization } from "@/components/organization-provider";
 import { rememberLastOrganizationSlug, type PublicOrganization } from "@/lib/organization";
@@ -309,6 +309,13 @@ export function OrganizationLanding({
             <p className="text-xs font-semibold text-muted-foreground">{areaLabel}</p>
             <h1 className="truncate text-xl font-bold">{organization.name}</h1>
           </div>
+          <Link
+            href={`${orgBasePath}/hilfe`}
+            className={cn(buttonVariants({ variant: "secondary" }), "min-h-11")}
+          >
+            <HelpCircle aria-hidden="true" className="h-4 w-4" />
+            Hilfe
+          </Link>
           <nav className="flex items-center gap-2" aria-label="Konto">
             {auth.isAuthenticated ? (
               <>
