@@ -233,6 +233,18 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
     () => seasons.filter((season) => season.status !== "CLOSED" && season.status !== "ARCHIVED"),
     [seasons],
   );
+  // The Agenda below lists both Grill and Kiosk shifts for an event (shiftsCoveringEvent does
+  // not filter by type), so the assignment dropdown under each shift must offer only the
+  // matching helper type — never let a Kiosk-only helper get assigned to a Grill shift or the
+  // reverse.
+  const grillVolunteers = useMemo(
+    () => volunteers.filter((volunteer) => volunteer.is_grill_helper),
+    [volunteers],
+  );
+  const kioskVolunteers = useMemo(
+    () => volunteers.filter((volunteer) => volunteer.is_kiosk_helper),
+    [volunteers],
+  );
   const filteredEvents = useMemo(() => {
     const activeIds = new Set(activeSeasons.map((season) => season.id));
     const query = search.trim().toLocaleLowerCase("de-CH");
@@ -1624,7 +1636,11 @@ export function PlanningPanel({ org, timezone }: Readonly<{ org: string; timezon
                                                     <ShiftVolunteerAssignment
                                                       shift={shift}
                                                       eventTitle={planningEvent.title}
-                                                      volunteers={volunteers}
+                                                      volunteers={
+                                                        shift.shift_type === "GRILL"
+                                                          ? grillVolunteers
+                                                          : kioskVolunteers
+                                                      }
                                                       timezone={timezone}
                                                       busy={busy}
                                                       onAssign={(volunteerId) =>

@@ -1107,9 +1107,11 @@ def test_assign_volunteer_creates_active_admin_signup_and_returns_shift() -> Non
         shift.id, volunteer.id
     )
 
-    assert result.id == shift.id
+    assert result.shift.id == shift.id
+    assert result.signup is db.added[0]
+    assert result.management_token
     assert db.commits == 1
-    assert db.refreshes == 1
+    assert db.refreshes == 2
     assert len(db.added) == 1
     signup = db.added[0]
     assert isinstance(signup, Signup)
@@ -1119,6 +1121,7 @@ def test_assign_volunteer_creates_active_admin_signup_and_returns_shift() -> Non
     assert signup.status == SignupStatus.ACTIVE
     assert signup.outcome == SignupOutcome.OPEN
     assert signup.source == SignupSource.ADMIN
+    assert signup.management_token_hash
 
 
 def test_assign_volunteer_works_for_a_closed_shift_regardless_of_assignment_mode() -> None:
@@ -1132,7 +1135,7 @@ def test_assign_volunteer_works_for_a_closed_shift_regardless_of_assignment_mode
         shift.id, volunteer.id
     )
 
-    assert result.id == shift.id
+    assert result.shift.id == shift.id
     assert db.commits == 1
 
 
@@ -1197,7 +1200,15 @@ def test_assign_volunteer_is_tenant_isolated_for_a_volunteer_in_another_organiza
 def test_assign_volunteer_route_calls_service_and_returns_admin_shift_response(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="tenant-a"))
+    organization = cast(
+        Organization,
+        SimpleNamespace(
+            id=uuid4(),
+            slug="tenant-a",
+            name="Tenant A",
+            timezone="Europe/Zurich",
+        ),
+    )
     current = cast(CurrentStaffMembership, SimpleNamespace(organization=organization))
     now = datetime.now(UTC)
     shift_id = uuid4()
@@ -1220,7 +1231,22 @@ def test_assign_volunteer_route_calls_service_and_returns_admin_shift_response(
         updated_at=now,
         signups=[],
     )
+    returned_signup = SimpleNamespace(
+        id=uuid4(),
+        public_name_snapshot="Lea Beispiel",
+        volunteer=SimpleNamespace(email_display="lea@example.test"),
+        shift=SimpleNamespace(
+            starts_at=returned_shift.starts_at,
+            ends_at=returned_shift.ends_at,
+            shift_type=returned_shift.shift_type,
+            event=SimpleNamespace(title="Heimspiel", event_type="Match"),
+        ),
+    )
+    returned_result = SimpleNamespace(
+        shift=returned_shift, signup=returned_signup, management_token="secret-token"
+    )
     calls: list[tuple[object, object]] = []
+    dispatched: list[dict[str, object]] = []
 
     class FakePlanningService:
         def __init__(self, _db: object, _organization_id: object) -> None:
@@ -1230,13 +1256,19 @@ def test_assign_volunteer_route_calls_service_and_returns_admin_shift_response(
             self, received_shift_id: object, received_volunteer_id: object
         ) -> object:
             calls.append((received_shift_id, received_volunteer_id))
-            return returned_shift
+            return returned_result
 
     app.dependency_overrides[planning.manage] = lambda: current
     app.dependency_overrides[dependencies.validate_csrf] = lambda: None
     app.dependency_overrides[get_db] = lambda: _ListDb()
     monkeypatch.setattr(planning, "PlanningService", FakePlanningService)
     monkeypatch.setattr(planning, "_ensure_origin_and_host", lambda *_args: None)
+    monkeypatch.setattr(planning, "resolve_organization_branding", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        planning,
+        "dispatch_signup_confirmation_email",
+        lambda _settings, **kwargs: dispatched.append(kwargs),
+    )
     try:
         response = client.post(
             f"/api/admin/tenant-a/shifts/{shift_id}/assign",
@@ -1248,6 +1280,10 @@ def test_assign_volunteer_route_calls_service_and_returns_admin_shift_response(
     assert response.status_code == 200
     assert calls == [(shift_id, volunteer_id)]
     assert response.json()["id"] == str(shift_id)
+    assert len(dispatched) == 1
+    assert dispatched[0]["recipient"] == "lea@example.test"
+    assert dispatched[0]["management_token"] == "secret-token"
+    assert dispatched[0]["organization_name"] == "Tenant A"
 
 
 def test_admin_shift_response_includes_only_active_contact_details_in_stable_order() -> None:

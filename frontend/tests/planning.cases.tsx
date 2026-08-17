@@ -111,6 +111,7 @@ const shift = {
   internal_note: "Kasse bereitstellen",
   status: "OPEN",
   sort_order: 0,
+  shift_type: "GRILL",
 };
 const familyVolunteer = {
   id: "volunteer-9",
@@ -122,6 +123,8 @@ const familyVolunteer = {
   compensation_family_member_id: null,
   internal_note: null,
   status: "ACTIVE",
+  is_grill_helper: true,
+  is_kiosk_helper: false,
 };
 
 function session(role: "ADMIN" | "KOORDINATION" | "KIOSK" | "VORSTAND_LESEN"): AuthSession {

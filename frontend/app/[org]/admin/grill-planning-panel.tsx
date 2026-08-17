@@ -19,6 +19,7 @@ import {
   type ProposalGrillShiftSplitInput,
 } from "@/lib/proposals";
 import {
+  assignVolunteer,
   cancelSignup,
   loadShifts,
   updateShift,
@@ -26,6 +27,8 @@ import {
   type Shift,
   type SignupOutcome,
 } from "@/lib/planning";
+import { loadFamilyVolunteers, type FamilyVolunteer } from "@/lib/families";
+import { ShiftVolunteerAssignment } from "@/components/shift-volunteer-assignment";
 
 type EditableWindow = PlanningProposalWindow & {
   grill_required: boolean;
@@ -42,6 +45,13 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
   const [refreshing, setRefreshing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [shiftsByWindow, setShiftsByWindow] = useState<Record<string, Shift[]>>({});
+  const [grillVolunteers, setGrillVolunteers] = useState<FamilyVolunteer[]>([]);
+
+  useEffect(() => {
+    void loadFamilyVolunteers(org)
+      .then((items) => setGrillVolunteers(items.filter((item) => item.is_grill_helper)))
+      .catch(() => setGrillVolunteers([]));
+  }, [org]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -329,6 +339,7 @@ export function GrillPlanningPanel({ org, timezone }: Readonly<{ org: string; ti
               onReconcile={reconcile}
               onDelete={deleteConfirmed}
               shifts={shiftsByWindow[window.id] ?? []}
+              grillVolunteers={grillVolunteers}
               onShiftsChanged={(updated) =>
                 setShiftsByWindow((current) => ({ ...current, [window.id]: updated }))
               }
@@ -489,6 +500,7 @@ function GrillWindowCard({
   shifts,
   onShiftsChanged,
   onWindowUpdated,
+  grillVolunteers,
 }: Readonly<{
   org: string;
   window: PlanningProposalWindow;
@@ -501,6 +513,7 @@ function GrillWindowCard({
   shifts: Shift[];
   onShiftsChanged: (shifts: Shift[]) => void;
   onWindowUpdated: (window: PlanningProposalWindow) => void;
+  grillVolunteers: FamilyVolunteer[];
 }>) {
   const [grillRequired, setGrillRequired] = useState(window.grill_required);
   const [slots, setSlots] = useState(window.proposed_grill_slots);
@@ -516,6 +529,8 @@ function GrillWindowCard({
   const [splitsError, setSplitsError] = useState<string | null>(null);
   const [splitsSaved, setSplitsSaved] = useState(true);
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
   const confirming = saving;
   const headingId = `grill-window-${window.id}`;
   const kioskCoverage = shiftOccupancy(shifts, "KIOSK");
@@ -573,6 +588,26 @@ function GrillWindowCard({
       );
     } finally {
       setSplitsBusy(false);
+    }
+  }
+
+  async function assign(shift: Shift, volunteerId: string): Promise<boolean> {
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      await assignVolunteer(org, shift.id, volunteerId);
+      if (window.covered_event_ids?.[0]) {
+        const updatedShifts = await loadShifts(org, window.covered_event_ids[0]);
+        onShiftsChanged(updatedShifts);
+      }
+      return true;
+    } catch (caught) {
+      setAssignError(
+        caught instanceof Error ? caught.message : "Der Helfer konnte nicht zugewiesen werden.",
+      );
+      return false;
+    } finally {
+      setAssigning(false);
     }
   }
 
@@ -908,9 +943,22 @@ function GrillWindowCard({
                     ) : (
                       <p className="text-status-error">Noch keine Helfer angemeldet</p>
                     )}
+                    <ShiftVolunteerAssignment
+                      shift={shift}
+                      eventTitle="Grill"
+                      volunteers={grillVolunteers}
+                      timezone={timezone}
+                      busy={assigning}
+                      onAssign={(volunteerId) => assign(shift, volunteerId)}
+                    />
                   </div>
                 ),
               )}
+            {assignError ? (
+              <p role="alert" className="text-sm text-status-error">
+                {assignError}
+              </p>
+            ) : null}
             <p className="text-xs text-muted-foreground">
               Zuordnung, Bearbeitung und Entfernung erfolgen im Bereich Anwesenheit.
             </p>

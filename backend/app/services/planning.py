@@ -1,6 +1,8 @@
 """Tenant-safe planning CRUD and lifecycle rules."""
 
+import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
@@ -40,6 +42,7 @@ from app.schemas.planning import (
     ShiftUpdate,
 )
 from app.schemas.proposals import ProposalWindowResponse
+from app.services.public_signup import hash_management_token
 from app.services.settings import SettingsService
 
 TRANSITIONS = {
@@ -48,6 +51,13 @@ TRANSITIONS = {
     PlanningStatus.CLOSED: {PlanningStatus.ARCHIVED},
     PlanningStatus.ARCHIVED: set(),
 }
+
+
+@dataclass(frozen=True)
+class AssignedVolunteerSignup:
+    shift: Shift
+    signup: Signup
+    management_token: str
 
 
 class PlanningNotFoundError(Exception):
@@ -907,7 +917,9 @@ class PlanningService:
         self.db.refresh(signup)
         return signup
 
-    def assign_volunteer(self, shift_id: uuid.UUID, volunteer_id: uuid.UUID) -> Shift:
+    def assign_volunteer(
+        self, shift_id: uuid.UUID, volunteer_id: uuid.UUID
+    ) -> AssignedVolunteerSignup:
         """Directly reserve a shift slot for a volunteer chosen by staff.
 
         This bypasses public self-signup entirely: it works regardless of the shift's
@@ -915,7 +927,9 @@ class PlanningService:
         signup flow) and does not require the shift to be OPEN — CLOSED shifts exist precisely
         so staff can lock public signups while allocating helpers manually. A CANCELLED shift
         still rejects new signups. Capacity and duplicate-signup checks mirror
-        ``PublicSignupService.create_for_volunteer``.
+        ``PublicSignupService.create_for_volunteer``. Generates a management token just like a
+        self-signup does, so the confirmation email the caller sends includes a working
+        "manage my signup" link.
         """
         shift = self.db.scalar(
             select(Shift)
@@ -958,6 +972,7 @@ class PlanningService:
         )
         if duplicate is not None:
             raise PlanningConflictError("Dieser Helfer ist für diesen Einsatz bereits eingetragen.")
+        management_token = secrets.token_urlsafe(32)
         signup = Signup(
             shift_id=shift.id,
             volunteer_id=volunteer.id,
@@ -965,11 +980,15 @@ class PlanningService:
             status=SignupStatus.ACTIVE,
             outcome=SignupOutcome.OPEN,
             source=SignupSource.ADMIN,
+            management_token_hash=hash_management_token(management_token),
         )
         self.db.add(signup)
         self.db.commit()
         self.db.refresh(shift)
-        return shift
+        self.db.refresh(signup)
+        return AssignedVolunteerSignup(
+            shift=shift, signup=signup, management_token=management_token
+        )
 
     def _get_season(self, season_id: uuid.UUID) -> Season:
         item = self.db.scalar(

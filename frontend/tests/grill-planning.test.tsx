@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -26,12 +26,17 @@ vi.mock("@/lib/proposals", () => ({
   deleteConfirmedWindow,
 }));
 
-const { loadShifts, updateShift } = vi.hoisted(() => ({
+const { loadShifts, updateShift, assignVolunteer } = vi.hoisted(() => ({
   loadShifts: vi.fn(),
   updateShift: vi.fn(),
+  assignVolunteer: vi.fn(),
 }));
 
-vi.mock("@/lib/planning", () => ({ loadShifts, updateShift }));
+vi.mock("@/lib/planning", () => ({ loadShifts, updateShift, assignVolunteer }));
+
+const { loadFamilyVolunteers } = vi.hoisted(() => ({ loadFamilyVolunteers: vi.fn() }));
+
+vi.mock("@/lib/families", () => ({ loadFamilyVolunteers }));
 
 import { GrillPlanningPanel } from "@/app/[org]/admin/grill-planning-panel";
 
@@ -78,6 +83,7 @@ describe("GrillPlanningPanel", () => {
     updatePlanningProposal.mockResolvedValue({ ...openWindow, override_state: "MANUAL" });
     updateGrillShiftSplits.mockResolvedValue({ ...openWindow });
     loadShifts.mockResolvedValue([]);
+    loadFamilyVolunteers.mockResolvedValue([]);
   });
 
   it("shows only open kiosk windows with games, rule context and proposal separation", async () => {
@@ -427,6 +433,75 @@ describe("GrillPlanningPanel", () => {
     await screen.findByText("Junioren A");
     expect(await screen.findByText("20:00–21:00 Uhr")).toBeInTheDocument();
     expect(screen.queryByText("10:30–11:00 Uhr")).not.toBeInTheDocument();
+  });
+
+  it("offers an assign dropdown filtered to Grill helpers under a confirmed shift", async () => {
+    loadFamilyVolunteers.mockResolvedValue([
+      {
+        id: "volunteer-kiosk",
+        first_name: "Kiosk",
+        last_name: "Only",
+        phone: "079 000 00 00",
+        email: "kiosk@example.invalid",
+        compensation_preference: "WORK_HOURS",
+        compensation_family_member_id: null,
+        internal_note: null,
+        status: "ACTIVE",
+        is_grill_helper: false,
+        is_kiosk_helper: true,
+      },
+      {
+        id: "volunteer-grill",
+        first_name: "Grill",
+        last_name: "Helper",
+        phone: "079 111 11 11",
+        email: "grill@example.invalid",
+        compensation_preference: "WORK_HOURS",
+        compensation_family_member_id: null,
+        internal_note: null,
+        status: "ACTIVE",
+        is_grill_helper: true,
+        is_kiosk_helper: false,
+      },
+    ]);
+    loadPlanningProposals.mockResolvedValue({
+      windows: [{ ...openWindow, grill_confirmed: true, covered_event_ids: ["event-1"] }],
+    });
+    const shift = {
+      id: "grill-shift",
+      event_id: "event-1",
+      starts_at: "2026-08-08T18:00:00Z",
+      ends_at: "2026-08-08T19:00:00Z",
+      required_volunteers: 2,
+      occupied_volunteers: 0,
+      open_places: 2,
+      signups: [],
+      public_note: null,
+      internal_note: null,
+      status: "OPEN" as const,
+      sort_order: 0,
+      shift_type: "GRILL" as const,
+      assignment_mode: "OPEN_SIGNUP" as const,
+      menu_type: null,
+      crew_suggestion_overridden: false,
+    };
+    loadShifts.mockResolvedValue([shift]);
+    assignVolunteer.mockResolvedValue(shift);
+    render(<GrillPlanningPanel org="club" timezone="Europe/Zurich" />);
+
+    await screen.findByText("Junioren A");
+    const select = await screen.findByLabelText(/Helfer für Einsatz .* für Grill zuweisen/);
+    const options = within(select)
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+    expect(options).toEqual(["Bitte wählen", "Grill Helper"]);
+
+    fireEvent.change(select, { target: { value: "volunteer-grill" } });
+    fireEvent.click(screen.getByRole("button", { name: "Zuweisen" }));
+
+    await waitFor(() =>
+      expect(assignVolunteer).toHaveBeenCalledWith("club", "grill-shift", "volunteer-grill"),
+    );
   });
 
   it("lets an admin adjust a confirmed shift's time and headcount via Anpassen", async () => {

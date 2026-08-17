@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -42,12 +42,14 @@ from app.schemas.work_record import (
     WorkRecordPayoutStatusUpdate,
     WorkRecordResponse,
 )
+from app.services.email.branding import resolve_organization_branding
 from app.services.planning import (
     PlanningConflictError,
     PlanningNotFoundError,
     PlanningService,
     PlanningValidationError,
 )
+from app.services.signup_confirmation import dispatch_signup_confirmation_email
 from app.services.work_record import (
     WorkRecordConflictError,
     WorkRecordNotFoundError,
@@ -508,17 +510,39 @@ def assign_volunteer(
     shift_id: uuid.UUID,
     payload: ShiftAssignVolunteer,
     request: Request,
+    background_tasks: BackgroundTasks,
     current: CurrentStaffMembership = Depends(manage),
     _: None = Depends(validate_csrf),
     db: Session = Depends(get_db),
 ) -> AdminShiftResponse:
     try:
-        shift = _write_service(organization_slug, current, db, request).assign_volunteer(
+        result = _write_service(organization_slug, current, db, request).assign_volunteer(
             shift_id, payload.volunteer_id
         )
-        return _admin_shift_response(shift)
     except (PlanningNotFoundError, PlanningConflictError) as error:
         raise _translate(error) from None
+    signup = result.signup
+    organization = current.organization
+    background_tasks.add_task(
+        dispatch_signup_confirmation_email,
+        get_settings(),
+        recipient=signup.volunteer.email_display,
+        signup_id=signup.id,
+        organization_name=organization.name,
+        organization_slug=organization.slug,
+        event_title=signup.shift.event.title,
+        event_type=signup.shift.event.event_type,
+        shift_starts_at=signup.shift.starts_at,
+        shift_ends_at=signup.shift.ends_at,
+        shift_type=signup.shift.shift_type,
+        organization_timezone=organization.timezone,
+        volunteer_public_name=signup.public_name_snapshot,
+        management_token=result.management_token,
+        branding=resolve_organization_branding(
+            db, organization, frontend_public_url=get_settings().frontend_public_url
+        ),
+    )
+    return _admin_shift_response(result.shift)
 
 
 @router.post("/signups/{signup_id}/cancel", response_model=AdminShiftResponse)

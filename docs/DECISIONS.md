@@ -745,3 +745,35 @@ verloren (nicht angefragt, out of scope).
 **Entschieden von:** Product Owner, 2026-08-17 (konkreter Vorfall: zwei Elternteile eines Kindes
 hatten sich unabhängig registriert und zwei "Züger"-Familien erzeugt; Wunsch, Helfer und Kinder in
 eine gemeinsame Familie zusammenzuführen und doppelte Kinder danach manuell zu bereinigen).
+
+## D-065 – Manuelle Helferzuweisung im Grill-Tab, Bestätigungsmail auch bei Admin-Zuweisung
+
+**Entscheid:** `Planung/Grill` (`GrillWindowCard` in `grill-planning-panel.tsx`) bekommt dieselbe
+manuelle Zuweisungs-Dropdown-Komponente (`ShiftVolunteerAssignment`), die im Kiosk-Tab bereits
+existiert, unter jeder bestätigten Grill-Schicht. Die Auswahlliste ist auf Helfer mit
+`is_grill_helper` gefiltert (`grillVolunteers`, geladen über `loadFamilyVolunteers` beim Öffnen
+des Tabs) – Kiosk-only-Helfer erscheinen dort nicht. Analog dazu wurde ein zweiter, unabhängig
+vorgefundener Bug in der allgemeinen Planung-Agenda (`planning-panel.tsx`, `PlanningPanel`)
+behoben: dort erschien die Zuweisungs-Dropdown bereits für beide Schichttypen (die Agenda zeigt
+Grill- und Kiosk-Schichten desselben Anlasses gemeinsam), zeigte aber für beide dieselbe
+ungefilterte Helferliste. Sie filtert jetzt pro Schicht nach `shift.shift_type`
+(`grillVolunteers`/`kioskVolunteers`).
+
+`PlanningService.assign_volunteer()` (`backend/app/services/planning.py`) erzeugte bisher einen
+`Signup` ohne `management_token_hash`, wodurch weder ein funktionierender "Anmeldung verwalten"-
+Link existierte noch die Bestätigungsmail verschickt wurde, die eine Selbstanmeldung sonst immer
+auslöst. Die Methode generiert jetzt wie `PublicSignupService.create_for_volunteer` einen
+Management-Token und gibt ein neues `AssignedVolunteerSignup`-Datenobjekt (`shift`, `signup`,
+`management_token`) zurück statt der blossen `Shift`. Die Route
+`POST /shifts/{shift_id}/assign` (`backend/app/api/planning.py`) verschickt darauf basierend
+dieselbe Bestätigungsmail wie `authenticated_signup`, per `background_tasks.add_task(...)`. Das
+gilt für beide Einsatzarten (Grill und Kiosk), da der Fix auf der gemeinsamen Service-/Routen-
+Ebene liegt.
+
+**Abgrenzung:** Kein Opt-out für die Bestätigungsmail bei Admin-Zuweisung – sie entspricht
+inhaltlich exakt der Selbstanmeldungs-Mail (gleicher Text, gleicher Link), nur der Auslöser ist
+ein anderer.
+
+**Entschieden von:** Product Owner, 2026-08-17 ("ich möchte unter planung/grill wie bei kiosk,
+helfer können zuweisen bei den schichten, natürlich da nur grilleure auswehlbar. wenn einem eine
+schicht zugewiesen wurde, sende das bestätigungs email").
