@@ -16,6 +16,7 @@ from app.models.planning import (
     ShiftStatus,
     Signup,
     SignupSource,
+    SignupStatus,
     Volunteer,
     VolunteerStatus,
 )
@@ -305,13 +306,19 @@ class FamilyService:
         volunteer = self.get_volunteer(volunteer_id)
         # delete_confirmed_window() cancels shifts unconditionally without touching their
         # signups, so a signup on an already-cancelled shift is defunct, not a real
-        # commitment worth blocking deletion for.
+        # commitment worth blocking deletion for. Likewise, a signup the volunteer or an
+        # admin already cancelled (SignupStatus != ACTIVE) is no longer a commitment even
+        # if the shift itself is still open -- only an active signup should block deletion.
         blocking_signup = self.db.execute(
             select(Event.title, Event.date)
             .select_from(Signup)
             .join(Shift, Shift.id == Signup.shift_id)
             .join(Event, Event.id == Shift.event_id)
-            .where(Signup.volunteer_id == volunteer.id, Shift.status != ShiftStatus.CANCELLED)
+            .where(
+                Signup.volunteer_id == volunteer.id,
+                Shift.status != ShiftStatus.CANCELLED,
+                Signup.status == SignupStatus.ACTIVE,
+            )
             .limit(1)
         ).first()
         if blocking_signup is not None:

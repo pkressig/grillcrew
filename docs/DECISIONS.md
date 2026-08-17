@@ -557,3 +557,20 @@ Redirect-Weiterleitung vom alten Klickverhalten des "Meine kommenden Einsätze"-
 **Entschieden von:** Product Owner, 2026-08-17 (Screenshot-Vergleich Samsung Internet vs. Chrome
 mit Bitte um konsistente, nie umbrechende Darstellung; Wunsch, die "Meine Eintragung"-Seite auch
 ohne den E-Mail-Link über Profil bzw. Klick auf einen kommenden Einsatz erreichen zu können).
+
+## D-057 – Bugfix: eigene abgesagte Anmeldung blockierte fälschlich das Löschen eines Helfers
+
+**Entscheid:** `FamilyService.delete_volunteer()` (`backend/app/services/family.py`) prüfte vor
+dem Löschen bislang nur, ob eine Anmeldung auf einer nicht stornierten Schicht existiert
+(`Shift.status != CANCELLED`), aber nicht, ob diese Anmeldung selbst noch aktiv ist. Eine vom
+Helfer oder Admin bereits abgesagte Anmeldung (`Signup.status != ACTIVE`) auf einer weiterhin
+offenen Schicht blockierte dadurch fälschlich das Löschen, obwohl die Schicht (korrekt) als
+"Noch niemand eingetragen" angezeigt wurde – der gemeldete Fall von "hans Mustermann", dessen
+Anmeldung zu "FCTC Senioren 30+" bereits storniert war. Die Prüfung filtert jetzt zusätzlich auf
+`Signup.status == ACTIVE`; nur eine wirklich noch bestehende Verpflichtung blockiert das Löschen.
+
+**Abgrenzung:** Keine Änderung am Löschverhalten für Helfer mit einer echten aktiven Anmeldung
+oder erfassten Arbeitszeiten – beides blockiert weiterhin wie bisher.
+
+**Entschieden von:** Product Owner, 2026-08-17 (Bug-Meldung: Helfer ohne sichtbare Zuweisung
+liess sich nicht löschen).

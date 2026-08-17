@@ -4,6 +4,8 @@ family lookup, admin-triggered password actions, the broader all-volunteers dire
 the `team_name` (Mannschaft) field on CHILD family members.
 """
 
+from collections.abc import Iterator
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from typing import cast
 from uuid import UUID, uuid4
@@ -11,18 +13,41 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from sqlalchemy import JSON, Column, Table, create_engine, event
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.orm import Session
+from sqlalchemy.sql.compiler import SQLCompiler
 
 import app.services.family as family_service_module
 from app.api import auth, dependencies, families
 from app.api.dependencies import CurrentStaffMembership
 from app.core.config import get_settings
 from app.core.security.password import PasswordPolicyError
+from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-from app.models.family import FamilyMemberType, FamilyStatus
+from app.models.family import Family, FamilyMember, FamilyMemberType, FamilyStatus
 from app.models.identity import AuditEvent, StaffMembership, StaffRole, User, UserStatus
-from app.models.organization import Organization
-from app.models.planning import SignupSource, Volunteer, VolunteerCompensation, VolunteerStatus
+from app.models.organization import Organization, Theme
+from app.models.planning import (
+    ClubYear,
+    Event,
+    EventStatus,
+    PlanningStatus,
+    Season,
+    SeasonType,
+    Shift,
+    ShiftStatus,
+    Signup,
+    SignupSource,
+    SignupStatus,
+    Volunteer,
+    VolunteerCompensation,
+    VolunteerStatus,
+)
+from app.models.work_record import WorkRecord
 from app.schemas.auth import VolunteerRegisterRequest
 from app.schemas.family import FamilyMemberCreate, VolunteerCreate
 from app.services.family import (
@@ -845,6 +870,7 @@ def test_delete_volunteer_removes_row_unlinks_family_member_and_audits() -> None
     signup_query = str(db.executed[0])
     assert "JOIN shift" in signup_query
     assert "shift.status" in signup_query
+    assert "signup.status" in signup_query
     assert "family_member" in str(db.executed[1]).lower()
     assert "DELETE FROM signup" in str(db.executed[2])
     audit = cast(AuditEvent, db.added[-1])
@@ -882,6 +908,173 @@ def test_delete_volunteer_raises_not_found() -> None:
     service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
     with pytest.raises(VolunteerNotFoundError):
         service.delete_volunteer(uuid4(), uuid4())
+
+
+# ---------------------------------------------------------------------------
+# FamilyService.delete_volunteer against a real session -- the mock-based tests
+# above only prove the service reacts correctly to a canned query result, not
+# that the query itself filters correctly. This regression-tests a real bug: a
+# volunteer's own-cancelled signup on a still-open shift wrongly blocked
+# deletion, because the query only excluded cancelled *shifts*, not cancelled
+# *signups*.
+# ---------------------------------------------------------------------------
+
+_DELETE_VOLUNTEER_TABLES = cast(
+    "list[Table]",
+    [
+        Theme.__table__,
+        Organization.__table__,
+        ClubYear.__table__,
+        Season.__table__,
+        Event.__table__,
+        Shift.__table__,
+        Family.__table__,
+        FamilyMember.__table__,
+        Volunteer.__table__,
+        Signup.__table__,
+        WorkRecord.__table__,
+        AuditEvent.__table__,
+    ],
+)
+
+
+@compiles(JSONB, "sqlite")
+def _jsonb_as_json_on_sqlite(element: JSONB, compiler: SQLCompiler, **kw: object) -> str:
+    return str(compiler.process(JSON(), **kw))
+
+
+@pytest.fixture
+def delete_volunteer_engine() -> Iterator[Engine]:
+    sqlite_engine = create_engine("sqlite:///:memory:")
+
+    @event.listens_for(sqlite_engine, "connect")
+    def _register_uuid_function(dbapi_connection: object, _record: object) -> None:
+        dbapi_connection.create_function(  # type: ignore[attr-defined]
+            "gen_random_uuid", 0, lambda: uuid4().hex
+        )
+
+    # AuditEvent.metadata's server_default is a Postgres-only `'{}'::jsonb` cast that
+    # SQLite's DDL compiler rejects; the app always passes event_metadata explicitly,
+    # so the server_default is never relied on at runtime -- strip it only for this
+    # table-creation call.
+    metadata_column = cast("Column[object]", AuditEvent.__table__.c.metadata)
+    original_default = metadata_column.server_default
+    metadata_column.server_default = None
+    try:
+        Base.metadata.create_all(sqlite_engine, tables=_DELETE_VOLUNTEER_TABLES)
+    finally:
+        metadata_column.server_default = original_default
+    yield sqlite_engine
+    sqlite_engine.dispose()
+
+
+@pytest.fixture
+def delete_volunteer_session(delete_volunteer_engine: Engine) -> Iterator[Session]:
+    with Session(delete_volunteer_engine) as db_session:
+        yield db_session
+
+
+def _seed_volunteer_with_signup(
+    db_session: Session,
+    *,
+    signup_status: SignupStatus,
+    shift_status: ShiftStatus = ShiftStatus.OPEN,
+) -> tuple[Organization, Volunteer]:
+    theme = Theme(name="Theme")
+    db_session.add(theme)
+    db_session.flush()
+    organization = Organization(theme_id=theme.id, name="Org", slug=f"org-{uuid4().hex[:8]}")
+    db_session.add(organization)
+    db_session.flush()
+    club_year = ClubYear(
+        organization_id=organization.id,
+        label="2026",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31),
+        status=PlanningStatus.ACTIVE,
+    )
+    db_session.add(club_year)
+    db_session.flush()
+    season = Season(
+        club_year_id=club_year.id,
+        type=SeasonType.SPRING,
+        name="Spring",
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 12, 31),
+        status=PlanningStatus.ACTIVE,
+    )
+    db_session.add(season)
+    db_session.flush()
+    event_row = Event(
+        season_id=season.id,
+        title="FCTC Senioren 30+",
+        date=date(2026, 8, 21),
+        location="Home",
+        event_type="match",
+        status=EventStatus.PUBLISHED,
+    )
+    db_session.add(event_row)
+    db_session.flush()
+    shift = Shift(
+        event_id=event_row.id,
+        starts_at=datetime(2026, 8, 21, 19, 30, tzinfo=UTC),
+        ends_at=datetime(2026, 8, 21, 23, 30, tzinfo=UTC),
+        required_volunteers=1,
+        status=shift_status,
+    )
+    db_session.add(shift)
+    db_session.flush()
+    volunteer = Volunteer(
+        organization_id=organization.id,
+        first_name="hans",
+        last_name="Mustermann",
+        phone_normalized="+41790000001",
+        phone_display="+41 79 000 00 01",
+        email_normalized="hans@example.test",
+        email_display="hans@example.test",
+        created_from=SignupSource.PUBLIC_SIGNUP,
+        compensation_preference=VolunteerCompensation.VOLUNTARY,
+        status=VolunteerStatus.INACTIVE,
+    )
+    db_session.add(volunteer)
+    db_session.flush()
+    signup = Signup(
+        shift_id=shift.id,
+        volunteer_id=volunteer.id,
+        public_name_snapshot="hans Mustermann",
+        source=SignupSource.PUBLIC_SIGNUP,
+        status=signup_status,
+    )
+    db_session.add(signup)
+    db_session.commit()
+    return organization, volunteer
+
+
+def test_delete_volunteer_ignores_a_cancelled_signup_on_an_otherwise_open_shift(
+    delete_volunteer_session: Session,
+) -> None:
+    organization, volunteer = _seed_volunteer_with_signup(
+        delete_volunteer_session, signup_status=SignupStatus.CANCELLED_BY_VOLUNTEER
+    )
+    service = FamilyService(delete_volunteer_session, organization.id)
+
+    service.delete_volunteer(volunteer.id, uuid4())
+
+    assert delete_volunteer_session.get(Volunteer, volunteer.id) is None
+
+
+def test_delete_volunteer_still_blocks_on_a_real_active_signup(
+    delete_volunteer_session: Session,
+) -> None:
+    organization, volunteer = _seed_volunteer_with_signup(
+        delete_volunteer_session, signup_status=SignupStatus.ACTIVE
+    )
+    service = FamilyService(delete_volunteer_session, organization.id)
+
+    with pytest.raises(VolunteerHasRecordsError) as excinfo:
+        service.delete_volunteer(volunteer.id, uuid4())
+    assert "FCTC Senioren 30+" in excinfo.value.detail
+    assert delete_volunteer_session.get(Volunteer, volunteer.id) is not None
 
 
 def test_delete_volunteer_route_returns_204_on_success(
