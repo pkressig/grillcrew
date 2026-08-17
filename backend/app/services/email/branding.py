@@ -5,7 +5,7 @@ No organization or club name is ever hardcoded here. Every organization-specific
 `Organization`/`Theme` rows already used to render the admin theme settings screen (see
 `app.services.settings.SettingsService.get_theme`). When no organization can be resolved (see
 the password-reset gap documented in `app.services.auth`), callers pass `branding=None` and this
-module falls back to generic, platform-only branding ("GrillCrew") rather than guessing.
+module falls back to generic, platform-only branding ("Vereinshelden") rather than guessing.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.models.organization import Organization, Theme
 
-GENERIC_ORGANIZATION_NAME = "GrillCrew"
+GENERIC_ORGANIZATION_NAME = "Vereinshelden"
 _DEFAULT_PRIMARY_COLOR = "#262626"
 _DEFAULT_SECONDARY_COLOR = "#525252"
 
@@ -117,8 +117,8 @@ def render_branded_email(
     secondary_color = branding.secondary_color if branding is not None else _DEFAULT_SECONDARY_COLOR
 
     footer_text = (
-        f"Diese E-Mail wurde von der GrillCrew-Plattform im Auftrag von {organization_name} "
-        "versendet. GrillCrew ist die App, nicht der Verein."
+        f"Diese E-Mail wurde von der Vereinshelden-Plattform im Auftrag von {organization_name} "
+        "versendet. Vereinshelden ist die App, nicht der Verein."
     )
 
     logo_row = ""

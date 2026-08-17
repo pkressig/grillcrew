@@ -42,7 +42,7 @@ describe("OrganizationLanding", () => {
     );
     const { container } = renderPage();
     expect(screen.getByText("Öffentlicher Einsatzplan")).toBeInTheDocument();
-    expect(screen.queryByText(/GrillCrew/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Vereinshelden/)).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("geladen");
     resolvePlan({
       events: [

@@ -6,15 +6,12 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "GrillCrew – Helfer-Einsatzplanung für Vereine",
+  title: "Vereinshelden – Helfer-Einsatzplanung für Vereine",
   description:
-    "GrillCrew hilft Sportvereinen, Helfereinsätze am Grillstand, Kiosk und an Spieltagen einfach, fair und mobil zu planen.",
+    "Vereinshelden hilft Sportvereinen, Helfereinsätze am Grillstand, Kiosk und an Spieltagen einfach, fair und mobil zu planen.",
 };
 
-// The platform does not yet have a public domain or a dedicated contact
-// address. Replace this placeholder with the real address once that is
-// decided (see docs/DECISIONS.md) — do not treat it as a working inbox.
-const CONTACT_EMAIL = "hallo@DEINE-DOMAIN";
+const CONTACT_EMAIL = "hallo@vereinshelden.ch";
 const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}`;
 
 type Feature = { icon: LucideIcon; title: string; description: string };
@@ -30,7 +27,7 @@ const FEATURES: Feature[] = [
     icon: Smartphone,
     title: "Mobile-first für alle Altersgruppen",
     description:
-      "Grosse Bedienelemente und klare Sprache: GrillCrew funktioniert auf dem Smartphone und ist für junge wie ältere Helferinnen und Helfer verständlich.",
+      "Grosse Bedienelemente und klare Sprache: Vereinshelden funktioniert auf dem Smartphone und ist für junge wie ältere Helferinnen und Helfer verständlich.",
   },
   {
     icon: HandCoins,
@@ -69,7 +66,7 @@ export default function HomePage() {
       <header className="border-b border-border/70 px-4 py-4 sm:px-6">
         <div className="mx-auto flex max-w-5xl items-center gap-2">
           <Flame aria-hidden="true" className="h-6 w-6 text-primary" />
-          <span className="text-lg font-bold tracking-tight">GrillCrew</span>
+          <span className="text-lg font-bold tracking-tight">Vereinshelden</span>
         </div>
       </header>
 
@@ -79,8 +76,8 @@ export default function HomePage() {
             Helfer-Einsatzplanung für Vereine — einfach, fair, mobil
           </h1>
           <p className="max-w-2xl text-lg text-muted-foreground">
-            GrillCrew hilft Sportvereinen, Helfereinsätze am Grillstand, Kiosk und an Spieltagen zu
-            planen — verständlich für Helferinnen und Helfer jeden Alters und jederzeit vom
+            Vereinshelden hilft Sportvereinen, Helfereinsätze am Grillstand, Kiosk und an Spieltagen
+            zu planen — verständlich für Helferinnen und Helfer jeden Alters und jederzeit vom
             Smartphone aus nutzbar.
           </p>
           <div className="flex flex-wrap gap-3">
@@ -150,8 +147,8 @@ export default function HomePage() {
             Interesse für deinen Verein?
           </h2>
           <p className="mt-3 text-muted-foreground">
-            GrillCrew wird laufend für weitere Sportvereine bereitgestellt. Melde dich
-            unverbindlich, wenn du GrillCrew für deinen Verein einrichten möchtest.
+            Vereinshelden wird laufend für weitere Sportvereine bereitgestellt. Melde dich
+            unverbindlich, wenn du Vereinshelden für deinen Verein einrichten möchtest.
           </p>
           <a href={CONTACT_MAILTO} className={cn(buttonVariants(), "mt-6 min-h-11 min-w-56")}>
             Jetzt Kontakt aufnehmen
@@ -160,7 +157,7 @@ export default function HomePage() {
       </section>
 
       <footer className="border-t border-border/70 px-4 py-6 text-center text-sm text-muted-foreground sm:px-6">
-        © {new Date().getFullYear()} GrillCrew
+        © {new Date().getFullYear()} Vereinshelden
       </footer>
     </main>
   );

@@ -23,7 +23,7 @@ describe("HomePage", () => {
         name: "Helfer-Einsatzplanung für Vereine — einfach, fair, mobil",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("GrillCrew")).toBeInTheDocument();
+    expect(screen.getByText("Vereinshelden")).toBeInTheDocument();
   });
 
   it("renders the Kernvorteile section with all four benefit cards", () => {
@@ -71,12 +71,12 @@ describe("HomePage", () => {
   it("exposes the CTA links with sensible accessible names and safe placeholder mailto targets", () => {
     render(<HomePage />);
     const heroContact = screen.getByRole("link", { name: "Kontakt aufnehmen" });
-    expect(heroContact).toHaveAttribute("href", "mailto:hallo@DEINE-DOMAIN");
+    expect(heroContact).toHaveAttribute("href", "mailto:hallo@vereinshelden.ch");
 
     const learnMore = screen.getByRole("link", { name: "So funktioniert's" });
     expect(learnMore).toHaveAttribute("href", "#so-einfach-gehts");
 
     const finalContact = screen.getByRole("link", { name: "Jetzt Kontakt aufnehmen" });
-    expect(finalContact).toHaveAttribute("href", "mailto:hallo@DEINE-DOMAIN");
+    expect(finalContact).toHaveAttribute("href", "mailto:hallo@vereinshelden.ch");
   });
 });

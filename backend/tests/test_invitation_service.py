@@ -341,8 +341,8 @@ def test_send_invitation_email_applies_organization_branding() -> None:
     assert message.body_html is not None
     assert "Example Org" in message.body_html
     assert '<img src="https://crew.example.test/branding/example-logo.png"' in message.body_html
-    assert "GrillCrew-Plattform im Auftrag von Example Org" in message.body_html
-    assert "GrillCrew-Plattform im Auftrag von Example Org" in message.body_text
+    assert "Vereinshelden-Plattform im Auftrag von Example Org" in message.body_html
+    assert "Vereinshelden-Plattform im Auftrag von Example Org" in message.body_text
 
 
 def test_invitation_email_failures_never_log_raw_token(

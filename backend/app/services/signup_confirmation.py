@@ -19,7 +19,7 @@ from app.services.email.branding import (
 from app.services.email.factory import build_email_sender
 
 logger = logging.getLogger(__name__)
-SUBJECT = "Deine GrillCrew-Eintragung ist bestätigt"
+SUBJECT = "Deine Vereinshelden-Eintragung ist bestätigt"
 _PUBLIC_PLAN_PATH_SEGMENT: dict[ShiftType, str] = {
     ShiftType.GRILL: "grill",
     ShiftType.KIOSK: "kiosk",

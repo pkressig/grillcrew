@@ -20,6 +20,21 @@ Erforderliche Environment Variables:
 - `NEXT_PUBLIC_API_URL`: öffentliche Backend-URL, z. B. `https://grillcrew-api.onrender.com`
 - `NEXT_TELEMETRY_DISABLED`: `1`
 
+### Custom Domain (vereinshelden.ch)
+
+Produktions-Zieldomain ist `vereinshelden.ch` (bei GoDaddy registriert, siehe D-054). Einrichtung:
+
+1. Im Vercel-Projekt unter Settings → Domains `vereinshelden.ch` und `www.vereinshelden.ch`
+   hinzufügen; Vercel zeigt die exakt zu setzenden DNS-Records an (massgeblich, nicht diese
+   Doku, falls sich Vercels Vorgaben ändern).
+2. Bei GoDaddy unter Domains → DNS → Manage DNS: vorhandene Parking-/Weiterleitungs-Records am
+   Root und bei `www` entfernen, dann die von Vercel angezeigten Records setzen (Stand
+   Einrichtung: A-Record `@` → `76.76.21.21`, CNAME `www` → `cname.vercel-dns.com` — vor dem
+   Setzen immer gegen die aktuelle Vercel-Anzeige prüfen).
+3. In Vercel eine der beiden Domains als "Primary" markieren, die andere automatisch
+   weiterleiten lassen.
+4. DNS-Propagation kann bis zu 24–48 h dauern, meist deutlich schneller.
+
 ## Render
 
 `render.yaml` beschreibt einen PostgreSQL-Dienst und den FastAPI-Webservice. Der Backend-Start führt vor dem Uvicorn-Start `alembic upgrade head` aus.
@@ -31,7 +46,9 @@ Erforderliche Environment Variables:
 - `LOG_FORMAT`: `json`
 - `BUSINESS_TIMEZONE`: `Europe/Zurich`
 - `DATABASE_URL`: von Render PostgreSQL gesetzt
-- `CORS_ALLOWED_ORIGINS`: kommagetrennte erlaubte Frontend-Ursprünge, z. B. `https://grillcrew.vercel.app`
+- `CORS_ALLOWED_ORIGINS`: kommagetrennte erlaubte Frontend-Ursprünge. Muss die alte
+  `https://grillcrew.vercel.app`-Origin so lange enthalten, wie darüber noch getestet wird, und
+  zusätzlich beide neuen Origins ohne Pfad: `https://vereinshelden.ch,https://www.vereinshelden.ch`
 
 Ab F002 (Authentifizierung, D-037–D-040) zusaetzlich erforderlich, sobald die zugehoerigen Endpunkte
 live gehen:
@@ -46,9 +63,9 @@ live gehen:
   zu versenden.
 - `EMAIL_FROM_ADDRESS`: plattformweite Absenderadresse; nicht pro Organisation konfigurierbar (siehe
   D-040, Deliverability-Begruendung).
-- `FRONTEND_PUBLIC_URL`: oeffentliche Frontend-Origin ohne organisationsspezifischen Pfad, z. B.
-  `https://grillcrew.vercel.app`; das Backend erzeugt daraus absolute Links fuer transaktionale
-  E-Mails. Der lokale Default ist `http://localhost:3000`.
+- `FRONTEND_PUBLIC_URL`: oeffentliche Frontend-Origin ohne organisationsspezifischen Pfad, ab dem
+  Domain-Umzug `https://vereinshelden.ch`; das Backend erzeugt daraus absolute Links fuer
+  transaktionale E-Mails. Der lokale Default ist `http://localhost:3000`.
 - `AUTH_COOKIE_SECURE`, `AUTH_COOKIE_DOMAIN`, Token-Laufzeiten sowie die `AUTH_RATE_LIMITS__*`-Variablen
   (D-038) haben produktionstaugliche Defaults und muessen nur bei abweichendem Bedarf gesetzt werden.
 

@@ -60,7 +60,7 @@ def test_confirmation_message_contains_local_details_and_absolute_links() -> Non
 
     assert len(sender.messages) == 1
     message = sender.messages[0]
-    assert message.subject == "Deine GrillCrew-Eintragung ist bestätigt"
+    assert message.subject == "Deine Vereinshelden-Eintragung ist bestätigt"
     assert "Example Organization" in message.body_text
     assert "Heimspiel (Match)" in message.body_text
     assert "01.08.2026" in message.body_text
@@ -112,8 +112,8 @@ def test_confirmation_email_applies_organization_branding() -> None:
     assert message.body_html is not None
     assert "Example Organization" in message.body_html
     assert '<img src="https://crew.example.test/branding/example-logo.png"' in message.body_html
-    assert "GrillCrew-Plattform im Auftrag von Example Organization" in message.body_html
-    assert "GrillCrew-Plattform im Auftrag von Example Organization" in message.body_text
+    assert "Vereinshelden-Plattform im Auftrag von Example Organization" in message.body_html
+    assert "Vereinshelden-Plattform im Auftrag von Example Organization" in message.body_text
 
 
 def test_sender_failure_is_contained_without_logging_management_token(

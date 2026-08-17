@@ -456,3 +456,26 @@ Marken-Entscheidung.
 **Entschieden von:** Product Owner, 2026-08-17 (Wunsch nach eigener Domain mit `/{org}/grill`
 und `/{org}/kiosk`, einer Helfer-Info-Landingpage zur Gewinnung neuer Helfer, und einer
 Bewerbungsmöglichkeit für Nicht-Helfer als Alternative zur direkten Selbstanmeldung).
+
+## D-054 – Domain und Plattform-Markenname: vereinshelden.ch / "Vereinshelden"
+
+**Entscheid:** Die Domain `vereinshelden.ch` (GoDaddy) und der Plattform-Markenname
+"Vereinshelden" sind entschieden. Der bisherige generische Plattform-Name "GrillCrew" wird in
+allen nutzerseitig sichtbaren Stellen ersetzt: E-Mail-Fallback-Branding
+(`GENERIC_ORGANIZATION_NAME` in `backend/app/services/email/branding.py`, dort auch der
+Footer-Disclaimer-Text und der Sender-Anzeigename-Fallback), der Betreff der
+Anmeldebestätigungs-Mail (`backend/app/services/signup_confirmation.py`), und die
+plattformweite Marketing-Landingpage (`frontend/app/page.tsx`, inkl. der jetzt echten
+Platzhalter-Kontaktadresse `hallo@vereinshelden.ch` statt `hallo@DEINE-DOMAIN`). Interner
+Repository-/Verzeichnisname (`grillcrew`) sowie rein interne, nicht nutzersichtbare Strings
+(z. B. der OneDrive-Sync-HTTP-User-Agent) bleiben unverändert – das wäre eine grössere,
+risikoreichere Umbenennung ohne Nutzennutzen und ist nicht Teil dieser Entscheidung.
+
+Der eigentliche Domain-Umzug (Vercel Custom Domain + DNS bei GoDaddy, `FRONTEND_PUBLIC_URL`
+und `CORS_ALLOWED_ORIGINS` auf Render) ist reine Infrastruktur ausserhalb des Repositories und
+wird manuell durch den Product Owner durchgeführt (siehe Checkliste in der Session).
+
+**Abgrenzung:** Keine Umbenennung des Git-Repositories/Verzeichnisnamens. Keine Änderung an
+club-spezifischem Branding (das kommt weiterhin ausschliesslich aus der Datenbank, D-048).
+
+**Entschieden von:** Product Owner, 2026-08-17.

@@ -359,8 +359,8 @@ def test_send_password_reset_email_applies_organization_branding() -> None:
     assert "FC Thusis-Cazis" in message.body_html
     assert '<img src="https://crew.example.test/branding/fctc-logo.png"' in message.body_html
     assert RAW_TOKEN in message.body_text
-    assert "GrillCrew-Plattform im Auftrag von FC Thusis-Cazis" in message.body_html
-    assert "GrillCrew-Plattform im Auftrag von FC Thusis-Cazis" in message.body_text
+    assert "Vereinshelden-Plattform im Auftrag von FC Thusis-Cazis" in message.body_html
+    assert "Vereinshelden-Plattform im Auftrag von FC Thusis-Cazis" in message.body_text
 
 
 def test_send_password_reset_email_uses_generic_branding_when_none_resolved() -> None:
@@ -375,7 +375,7 @@ def test_send_password_reset_email_uses_generic_branding_when_none_resolved() ->
         branding=None,
     )
 
-    assert sender.sent[0].from_display_name == "GrillCrew"
+    assert sender.sent[0].from_display_name == "Vereinshelden"
     assert sender.sent[0].body_html is not None
     assert "<img" not in sender.sent[0].body_html
 

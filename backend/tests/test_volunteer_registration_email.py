@@ -164,8 +164,8 @@ def test_send_volunteer_registration_email_applies_organization_branding() -> No
         '<img src="https://grillcrew.vercel.app/branding/fc-beispiel-logo.png"' in message.body_html
     )
     assert message.body_text is not None
-    assert "GrillCrew-Plattform im Auftrag von FC Beispiel" in message.body_html
-    assert "GrillCrew-Plattform im Auftrag von FC Beispiel" in message.body_text
+    assert "Vereinshelden-Plattform im Auftrag von FC Beispiel" in message.body_html
+    assert "Vereinshelden-Plattform im Auftrag von FC Beispiel" in message.body_text
 
 
 def test_dispatch_volunteer_registration_email_never_raises_when_sender_unavailable(
