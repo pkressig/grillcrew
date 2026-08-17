@@ -257,6 +257,7 @@ class _LinkDb:
         self.scalar_results = iter(scalars)
         self.volunteers = volunteers or []
         self.statements: list[object] = []
+        self.executed: list[object] = []
         self.added: list[object] = []
         self.deleted: list[object] = []
         self.commits = 0
@@ -268,6 +269,10 @@ class _LinkDb:
     def scalars(self, statement: object) -> list[object]:
         self.statements.append(statement)
         return self.volunteers
+
+    def execute(self, statement: object) -> SimpleNamespace:
+        self.executed.append(statement)
+        return SimpleNamespace(rowcount=0)
 
     def add(self, item: object) -> None:
         self.added.append(item)
@@ -544,9 +549,15 @@ def test_update_volunteer_applies_changes_and_audits() -> None:
         "compensation_family_member_id",
         "internal_note",
     }
+    assert len(db.executed) == 2
+    assert "family_member" in str(db.executed[0]).lower()
+    assert "signup" in str(db.executed[1]).lower()
 
 
-def test_update_volunteer_identical_payload_skips_commit_and_audit() -> None:
+def test_update_volunteer_identical_payload_skips_audit_but_still_syncs_denormalized_name() -> None:
+    # No Volunteer field changed, but the FamilyMember/signup name copies are always
+    # re-synced (and thus committed) -- reopening and saving self-heals a name left
+    # stale by an edit made before this sync existed.
     volunteer = _volunteer()
     db = _LinkDb([volunteer])
     service = FamilyService(cast(object, db), uuid4())  # type: ignore[arg-type]
@@ -565,7 +576,9 @@ def test_update_volunteer_identical_payload_skips_commit_and_audit() -> None:
         ),
         uuid4(),
     )
-    assert db.commits == 0 and db.added == []
+    assert db.added == []
+    assert db.commits == 1
+    assert len(db.executed) == 2
 
 
 def test_update_volunteer_rejects_missing_volunteer() -> None:

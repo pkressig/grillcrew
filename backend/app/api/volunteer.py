@@ -35,6 +35,7 @@ from app.schemas.auth import (
     VolunteerSignupSummary,
 )
 from app.schemas.planning import ManagedSignupResponse
+from app.services.family import sync_volunteer_display_name
 from app.services.public_signup import can_self_cancel
 
 router = APIRouter(prefix="/api/volunteer", tags=["volunteer"])
@@ -202,6 +203,7 @@ def update_profile(
     volunteer.compensation_preference = payload.compensation_preference
     volunteer.compensation_family_member_id = payload.compensation_family_member_id
     current_user.user.display_name = f"{volunteer.first_name} {volunteer.last_name}"
+    sync_volunteer_display_name(db, volunteer.id, volunteer.first_name, volunteer.last_name)
     db.commit()
     db.refresh(volunteer)
     return get_profile(current_user, db)

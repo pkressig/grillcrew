@@ -33,6 +33,28 @@ from app.services.auth import PasswordResetIssue, PasswordResetService
 from app.services.public_signup import normalize_email, normalize_phone
 
 
+def sync_volunteer_display_name(
+    db: Session, volunteer_id: uuid.UUID, first_name: str, last_name: str
+) -> None:
+    """Keep denormalized copies of a volunteer's name in sync after either the admin
+    (FamilyService.update_volunteer) or the volunteer themselves (self-service profile)
+    corrects it: the linked FamilyMember row, and the public_name_snapshot on their still
+    -active signups (shown in the shift list and on the emailed manage-signup link).
+    Completed/past signups keep their original snapshot, matching how the rest of the
+    system treats a signup's snapshot as a record of who signed up at the time.
+    """
+    db.execute(
+        update(FamilyMember)
+        .where(FamilyMember.volunteer_id == volunteer_id)
+        .values(first_name=first_name, last_name=last_name)
+    )
+    db.execute(
+        update(Signup)
+        .where(Signup.volunteer_id == volunteer_id, Signup.status == SignupStatus.ACTIVE)
+        .values(public_name_snapshot=f"{first_name} {last_name}")
+    )
+
+
 class FamilyNotFoundError(Exception):
     pass
 
@@ -295,30 +317,33 @@ class FamilyService:
             ("is_kiosk_helper", volunteer.is_kiosk_helper != payload.is_kiosk_helper),
         )
         changed_fields = [field for field, changed in field_changes if changed]
-        if not changed_fields:
-            return volunteer
-        volunteer.first_name = payload.first_name
-        volunteer.last_name = payload.last_name
-        volunteer.phone_normalized = new_phone_normalized
-        volunteer.phone_display = payload.phone
-        volunteer.email_normalized = new_email_normalized
-        volunteer.email_display = payload.email
-        volunteer.compensation_preference = payload.compensation_preference
-        volunteer.compensation_family_member_id = payload.compensation_family_member_id
-        volunteer.internal_note = payload.internal_note
-        volunteer.status = payload.status
-        volunteer.is_grill_helper = payload.is_grill_helper
-        volunteer.is_kiosk_helper = payload.is_kiosk_helper
-        self.db.add(
-            AuditEvent(
-                organization_id=self.organization_id,
-                actor_user_id=actor_user_id,
-                action="VOLUNTEER_PROFILE_UPDATED_BY_ADMIN",
-                entity_type="volunteer",
-                entity_id=volunteer.id,
-                event_metadata={"changed_fields": changed_fields},
+        if changed_fields:
+            volunteer.first_name = payload.first_name
+            volunteer.last_name = payload.last_name
+            volunteer.phone_normalized = new_phone_normalized
+            volunteer.phone_display = payload.phone
+            volunteer.email_normalized = new_email_normalized
+            volunteer.email_display = payload.email
+            volunteer.compensation_preference = payload.compensation_preference
+            volunteer.compensation_family_member_id = payload.compensation_family_member_id
+            volunteer.internal_note = payload.internal_note
+            volunteer.status = payload.status
+            volunteer.is_grill_helper = payload.is_grill_helper
+            volunteer.is_kiosk_helper = payload.is_kiosk_helper
+            self.db.add(
+                AuditEvent(
+                    organization_id=self.organization_id,
+                    actor_user_id=actor_user_id,
+                    action="VOLUNTEER_PROFILE_UPDATED_BY_ADMIN",
+                    entity_type="volunteer",
+                    entity_id=volunteer.id,
+                    event_metadata={"changed_fields": changed_fields},
+                )
             )
-        )
+        # Always re-sync, even when the Volunteer row itself was already correct: a
+        # FamilyMember row or signup snapshot can be left stale by an edit made before
+        # this sync existed, and simply reopening and saving the form should self-heal it.
+        sync_volunteer_display_name(self.db, volunteer.id, payload.first_name, payload.last_name)
         self.db.commit()
         self.db.refresh(volunteer)
         return volunteer

@@ -661,3 +661,39 @@ Freitext-Namensfeld ohne Vor-/Nachname-Aufteilung und dort korrekt.
 
 **Entschieden von:** Product Owner, 2026-08-17 (Bug-Meldung mit Screenshot: Telefon- und
 E-Mail-Feld wurden beim Autofill mit dem Namen befüllt statt mit Telefonnummer/E-Mail).
+
+## D-062 – Bugfix: Vor-/Nachname-Korrektur eines Helfers synchronisierte nicht überallhin
+
+**Entscheid:** `Volunteer.first_name`/`last_name` existieren dreifach dupliziert im System:
+auf dem `Volunteer`-Datensatz selbst, auf dem verknüpften `FamilyMember` (HELPER,
+`volunteer_id`-Link – zeigt sich in der Familienmitglieder-Liste im Familien-Tab), und als
+`Signup.public_name_snapshot` je Anmeldung (zeigt sich im öffentlichen Einsatzplan und im
+E-Mail-Link). Sowohl die Admin-Bearbeitung (`FamilyService.update_volunteer`) als auch die
+Selbstbearbeitung im Helferprofil (`PATCH /api/volunteer/profile`) aktualisierten bisher nur den
+`Volunteer`-Datensatz – die beiden anderen Kopien blieben stehen, sichtbar z. B. als
+"Dario Andric Dario Andric" in der Familienmitglieder-Liste und im Einsatzplan, nachdem der durch
+D-061 behobene Autofill-Bug ursprünglich beide Namensfelder mit dem vollen Namen befüllt hatte.
+
+Neue gemeinsame Hilfsfunktion `sync_volunteer_display_name()` (`backend/app/services/family.py`)
+wird jetzt aus beiden Stellen aufgerufen und schreibt den korrigierten Namen in den verknüpften
+`FamilyMember` sowie in `public_name_snapshot` aller **aktiven** Anmeldungen dieses Helfers.
+Abgeschlossene/vergangene Anmeldungen behalten ihren ursprünglichen Snapshot (Prinzip: eine
+Anmeldung dokumentiert, wer sich zum Zeitpunkt des Einsatzes eingetragen hat). Die Synchronisation
+läuft jetzt **immer** beim Speichern (auch ohne inhaltliche Namensänderung) – so genügt ein
+erneutes Öffnen und Speichern über "Bearbeiten", um bereits verwaiste Kopien selbst zu heilen,
+ohne dass eine echte Namensänderung nötig ist. Der Audit-Log-Eintrag wird weiterhin nur bei einer
+echten Feldänderung angelegt.
+
+**Abgrenzung:** Vergangene/abgeschlossene Anmeldungen werden nicht rückwirkend korrigiert (siehe
+oben). Die Vereinsname-separate `Family.display_name` ist von diesem Bug nicht betroffen und
+bleibt unverändert (D-060 regelt deren Bearbeitung separat).
+
+**Nacharbeit für den Product Owner:** Bereits betroffene Datensätze (z. B. "Dario Andric",
+"Madeleine Niemeyer") sind mit diesem Code-Fix noch nicht automatisch korrigiert – dafür einmal je
+betroffenem Helfer im Helfer-Tab "Bearbeiten" öffnen und "Speichern" klicken (auch ohne inhaltliche
+Änderung synchronisiert das jetzt die Familienmitglieder-Zeile und alle künftigen Einsatzplan-
+Anzeigen).
+
+**Entschieden von:** Product Owner, 2026-08-17 (Bug-Meldung mit Screenshot: doppelter Name
+"Dario Andric Dario Andric" in Familienmitglieder-Liste und Einsatzplan; Wunsch, dass eine
+Namenskorrektur überallhin durchschlägt).

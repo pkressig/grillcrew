@@ -389,6 +389,39 @@ def test_get_profile_reports_cannot_cancel_past_the_deadline(
     assert near["can_cancel"] is False
 
 
+def test_updating_own_profile_name_syncs_family_member_and_active_signup_snapshot(
+    client: TestClient, scenario: Scenario, db_session: Session
+) -> None:
+    # Regression test: renaming a volunteer previously only touched the Volunteer row,
+    # leaving the linked FamilyMember and any active signup's public_name_snapshot
+    # (shown in the shift list) stale with the volunteer's old -- possibly buggy,
+    # duplicated -- name.
+    response = client.patch(
+        "/api/volunteer/profile",
+        headers=_headers(),
+        json={
+            "first_name": "Mia-Corrected",
+            "last_name": "Muster-Corrected",
+            "phone": scenario.volunteer.phone_display,
+            "compensation_preference": "WORK_HOURS",
+            "compensation_family_member_id": None,
+        },
+    )
+    assert response.status_code == 200
+    db_session.expire_all()
+    helper_member = db_session.get(FamilyMember, scenario.helper_member.id)
+    assert helper_member is not None
+    assert helper_member.first_name == "Mia-Corrected"
+    assert helper_member.last_name == "Muster-Corrected"
+    upcoming_signup = db_session.get(Signup, scenario.upcoming_signup.id)
+    assert upcoming_signup is not None
+    assert upcoming_signup.public_name_snapshot == "Mia-Corrected Muster-Corrected"
+    # A different volunteer's signup must be untouched.
+    other_signup = db_session.get(Signup, scenario.other_volunteer_signup.id)
+    assert other_signup is not None
+    assert other_signup.public_name_snapshot == "Other Person"
+
+
 def test_get_own_signup_returns_the_same_detail_shape_as_the_emailed_management_link(
     client: TestClient, scenario: Scenario
 ) -> None:
