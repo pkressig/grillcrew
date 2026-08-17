@@ -5,6 +5,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   LayoutDashboard,
+  MessageCircle,
   Settings as SettingsIcon,
   Upload,
   Users,
@@ -28,8 +29,10 @@ import { PlanningPlaceholderPanel } from "./planning-placeholder-panel";
 import { PeriodManagementPanel } from "./period-management-panel";
 import { OverviewPanel } from "./overview-panel";
 import { SettingsPanel } from "./settings-panel";
+import { WhatsAppPanel } from "./whatsapp-panel";
 
-export type AdminView = "overview" | "planning" | "families" | "attendance" | "settings" | "import";
+export type AdminView =
+  "overview" | "planning" | "families" | "attendance" | "whatsapp" | "settings" | "import";
 export type PlanningSection = "schedule" | "matchdays" | "kiosk" | "grill" | "periods" | "archive";
 
 const roleLabels = {
@@ -74,6 +77,13 @@ const NAV_ITEMS: ReadonlyArray<{
     label: "Anwesenheit",
     icon: <ClipboardCheck aria-hidden="true" size={18} />,
     path: "/attendance",
+    roles: ["ADMIN", "KOORDINATION"],
+  },
+  {
+    view: "whatsapp",
+    label: "WhatsApp",
+    icon: <MessageCircle aria-hidden="true" size={18} />,
+    path: "/whatsapp",
     roles: ["ADMIN", "KOORDINATION"],
   },
   {
@@ -189,6 +199,8 @@ export function AdminShell({
             </div>
           ) : activeView === "families" ? (
             <FamiliesPanel org={org} />
+          ) : activeView === "whatsapp" ? (
+            <WhatsAppPanel org={org} timezone={organization.timezone} />
           ) : activeView === "settings" ? (
             <SettingsPanel org={org} />
           ) : activeView === "import" ? (

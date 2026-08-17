@@ -9,6 +9,7 @@ vi.mock("@/lib/organization", async (importOriginal) => ({
 
 import AdminPage from "@/app/[org]/admin/page";
 import SettingsAdminPage from "@/app/[org]/admin/settings/page";
+import WhatsAppAdminPage from "@/app/[org]/admin/whatsapp/page";
 import KioskPlanningPage from "@/app/[org]/admin/planning/kiosk/page";
 import PeriodPlanningPage from "@/app/[org]/admin/planning/periods/page";
 
@@ -31,6 +32,17 @@ describe("admin routes", () => {
     expect(fetchPublicOrganization).toHaveBeenCalledWith("example");
     expect(result.props.children.props).toMatchObject({
       activeView: "settings",
+      org: "example",
+      organization: platformFallbackOrganization,
+    });
+  });
+
+  it("composes the organization-scoped WhatsApp view", async () => {
+    fetchPublicOrganization.mockResolvedValue(platformFallbackOrganization);
+    const result = await WhatsAppAdminPage({ params: Promise.resolve({ org: "example" }) });
+    expect(fetchPublicOrganization).toHaveBeenCalledWith("example");
+    expect(result.props.children.props).toMatchObject({
+      activeView: "whatsapp",
       org: "example",
       organization: platformFallbackOrganization,
     });

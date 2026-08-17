@@ -35,8 +35,6 @@
   Kiosk-Öffnungszeiten, Darstellung im bestehenden Kalender. Datenmodell-Grundlage
   (`shift_type`/`assignment_mode`) wird ab Phase 3 der Grill-Digitalisierung mitgebaut (D-041),
   das Kiosk-Modul selbst folgt separat.
-- Kommunikationswerkzeug: Nachrichten aus der App generieren und per Klick an WhatsApp übergeben
-  (z. B. bei Spielverschiebungen betroffene Helfer informieren). Siehe D-041 Punkt 5.
 - KI-Unterstützung (Gemini, kostenloses API-Kontingent) für z. B. Besetzungsvorschläge oder
   Spielanalyse. Anwendungsfall noch nicht konkret definiert.
 - digitale Unterschrift für Auszahlungen (löst die papierbasierte Bestätigung aus D-041 Punkt 8 ab).

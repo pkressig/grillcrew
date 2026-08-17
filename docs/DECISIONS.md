@@ -777,3 +777,38 @@ ein anderer.
 **Entschieden von:** Product Owner, 2026-08-17 ("ich möchte unter planung/grill wie bei kiosk,
 helfer können zuweisen bei den schichten, natürlich da nur grilleure auswehlbar. wenn einem eine
 schicht zugewiesen wurde, sende das bestätigungs email").
+
+## D-066 – WhatsApp-Kommunikationszentrum (Deckungslücken, vorbereitete Nachrichten, kein Konto-Zugriff)
+
+**Entscheid:** Neuer Menüpunkt "WhatsApp" im Admin-Bereich (`frontend/app/[org]/admin/whatsapp-panel.tsx`,
+Route `/{org}/admin/whatsapp`, sichtbar für ADMIN/KOORDINATION) zeigt die Einsätze der nächsten 10 Tage
+gruppiert nach Tag mit Deckungsstatus (wiederverwendet `occupancyStatus`/`localDateOf` aus
+`lib/shift-coverage.ts` sowie die bereits geladenen Planungsdaten aus `loadAdminPlanningData`), hebt
+offene Deckungslücken hervor und bietet darunter einen Nachrichten-Baukasten: eine Vorlage mit
+Platzhalter `{Vorname}`, eine durchsuchbare Helferauswahl (gefiltert auf `is_grill_helper`/
+`is_kiosk_helper`, wie beim bestehenden Zuweisungs-Dropdown), und pro ausgewähltem Helfer einen fertigen
+`wa.me`-Link mit personalisiertem Text (wiederverwendet `whatsAppHref()` aus `lib/phone.ts`, exakt das
+D-058-Muster) — ein Klick öffnet WhatsApp beim Admin selbst, gesendet wird manuell. Für eine
+Gruppennachricht (WhatsApp erlaubt kein URL-Vorausfüllen einer bestehenden Gruppe) gibt es stattdessen
+ein Textfeld mit "In Zwischenablage kopieren". Ein zusätzlicher Button "KI-Kontext kopieren" fasst die
+offenen Lücken der nächsten 10 Tage als Text zusammen und kopiert ihn in die Zwischenablage, zum Einfügen
+in ein externes KI-Werkzeug (Claude Code, ChatGPT) nach Wahl des Nutzers — der generierte Entwurf wird
+manuell zurück in die App eingefügt. Kein neuer Backend-Endpunkt nötig: alle Daten (Schichten, Helfer,
+Telefonnummern) existieren bereits.
+
+**Abgrenzung (bewusst, siehe `CLAUDE.md`s "Forbidden: WhatsApp Business API in version 1" und
+`docs/BACKLOG.md`s "vollständig automatisierte WhatsApp-Business-Nachrichten"):** Keine Verbindung zu
+einem echten WhatsApp-Konto, kein Lesen oder Filtern eingehender Chats, kein automatischer Versand –
+jede Nachricht wird vom Admin selbst im eigenen WhatsApp ausgelöst. Keine eingebaute KI-Textgenerierung
+im Backend (kein LLM-API-Vertrag, keine laufenden Kosten pro Anfrage) – die KI-Unterstützung läuft
+bewusst extern über das Abo-Werkzeug des Nutzers (Claude Code/ChatGPT), die App liefert nur den
+kopierbaren Kontext. Der bisherige Backlog-Eintrag "Kommunikationswerkzeug: Nachrichten aus der App
+generieren und per Klick an WhatsApp übergeben" ist damit umgesetzt und aus `docs/BACKLOG.md` entfernt;
+"vollständig automatisierte WhatsApp-Business-Nachrichten" bleibt weiterhin explizit Backlog.
+
+**Entschieden von:** Product Owner, 2026-08-17. Ursprünglicher Wunsch ging deutlich weiter (Live-Verbindung
+zum echten WhatsApp-Konto, automatisches Chat-Filtern nach Helferprofil, eingebaute KI-Textgenerierung) –
+nach Rückfrage (Konflikt mit dem "Forbidden"-Eintrag und den ToS-/Datenschutzrisiken einer inoffiziellen
+WhatsApp-Web-Automatisierung erklärt) hat sich der Product Owner für die oben beschriebene, sichere
+Variante entschieden und für die KI-Unterstützung ausdrücklich gegen eine kostenpflichtige Backend-API
+und für die eigene Abo-Nutzung (Claude Code/ChatGPT) votiert.
