@@ -343,7 +343,7 @@ describe("mobile public plan", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Sonntag, 06\. September 2026.*Alle Schicht belegt/ }),
+      screen.getByRole("button", { name: /Sonntag, 06\. September 2026.*Alle Schichten belegt/ }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Samstag, 05\. September 2026.*Alle Schicht/ }),
@@ -410,7 +410,7 @@ describe("compact day-row layout on narrow screens", () => {
     });
     renderPage();
     expect(
-      await screen.findByRole("button", { name: /So\. 06\.09\.2026.*Alle Schicht belegt/ }),
+      await screen.findByRole("button", { name: /So\. 06\.09\.2026.*Alle Schichten belegt/ }),
     ).toBeInTheDocument();
   });
 });

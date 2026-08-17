@@ -959,7 +959,7 @@ function DayStatusBadge({ stats, compact }: Readonly<{ stats: DayShiftStats; com
   if (stats.openShifts === 0)
     return (
       <Badge variant="success" className="whitespace-nowrap">
-        Alle {stats.totalShifts === 1 ? "Schicht" : "Schichten"} belegt
+        Alle Schichten belegt
       </Badge>
     );
   const placesLabel = `${stats.openPlaces} ${stats.openPlaces === 1 ? "Platz" : "Plätze"}`;
