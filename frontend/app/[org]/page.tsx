@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { CalendarCheck, HandCoins, MessageCircle, Phone, Sparkles, Users } from "lucide-react";
 import { OrganizationLogo } from "@/components/organization-logo";
 import { OrganizationProvider } from "@/components/organization-provider";
 import { Card, CardBody } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
-import { fetchPublicOrganization, type PublicOrganization } from "@/lib/organization";
+import { fetchPublicOrganizationStrict, type PublicOrganization } from "@/lib/organization";
 import { telHref, whatsAppHref } from "@/lib/phone";
 import { cn } from "@/lib/utils";
 import { VolunteerInterestForm } from "./volunteer-interest-form";
@@ -23,7 +24,8 @@ export async function generateMetadata({
   params,
 }: Readonly<OrganizationPageProps>): Promise<Metadata> {
   const { org } = await params;
-  const organization = await fetchPublicOrganization(org);
+  const organization = await fetchPublicOrganizationStrict(org);
+  if (!organization) redirect("/vereine");
   return { title: `${organization.name} – Werde Helfer` };
 }
 
@@ -59,7 +61,8 @@ const STEPS = [
 
 export default async function OrganizationHubPage({ params }: Readonly<OrganizationPageProps>) {
   const { org } = await params;
-  const organization = await fetchPublicOrganization(org);
+  const organization = await fetchPublicOrganizationStrict(org);
+  if (!organization) redirect("/vereine");
   const grillHref = `/${encodeURIComponent(org)}/grill`;
   const kioskHref = `/${encodeURIComponent(org)}/kiosk`;
 

@@ -70,6 +70,13 @@ export type Theme = {
 
 export type ThemeInput = Partial<Omit<Theme, "id" | "name">>;
 
+export type OrganizationIdentity = {
+  id: string;
+  name: string;
+  short_name: string | null;
+  slug: string;
+};
+
 async function request<T>(path: string, init?: RequestInit, errorMessage?: string): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, { credentials: "include", ...init });
   if (!response.ok)
@@ -163,3 +170,24 @@ export const updateTheme = (org: string, payload: ThemeInput) =>
     writeInit("PATCH", payload),
     "Das Erscheinungsbild konnte nicht gespeichert werden.",
   );
+
+export async function updateOrganizationIdentity(
+  org: string,
+  slug: string,
+): Promise<OrganizationIdentity> {
+  const response = await fetch(`${apiBaseUrl}${base(org)}/organization`, {
+    ...writeInit("PATCH", { slug }),
+    credentials: "include",
+  });
+  if (!response.ok) {
+    let detail = "Das URL-Kürzel konnte nicht gespeichert werden.";
+    try {
+      const body = (await response.json()) as { detail?: unknown };
+      if (typeof body.detail === "string" && body.detail.trim()) detail = body.detail;
+    } catch {
+      // Keep safe fallback for non-JSON responses.
+    }
+    throw new Error(detail);
+  }
+  return (await response.json()) as OrganizationIdentity;
+}

@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.api.dependencies import CurrentUser, get_current_user, validate_csrf
 from app.core.config import get_settings
@@ -18,6 +18,7 @@ from app.models.organization import Organization
 from app.models.planning import ShiftStatus, ShiftType, Signup, SignupStatus, Volunteer
 from app.schemas.organization import (
     OrganizationContact,
+    OrganizationDirectoryEntry,
     PublicOrganizationResponse,
     PublicOrganizationSettings,
     PublicTheme,
@@ -88,6 +89,23 @@ def public_organization(
         )
 
     return to_public_response(organization)
+
+
+@router.get("/organizations", response_model=list[OrganizationDirectoryEntry])
+def list_organizations(db: Session = Depends(get_db)) -> list[OrganizationDirectoryEntry]:  # noqa: B008
+    """Return every organization on the platform for a public club directory."""
+    organizations = db.scalars(
+        select(Organization).options(selectinload(Organization.theme)).order_by(Organization.name)
+    )
+    return [
+        OrganizationDirectoryEntry(
+            slug=item.slug,
+            name=item.name,
+            short_name=item.short_name,
+            logo_url=item.theme.logo_url,
+        )
+        for item in organizations
+    ]
 
 
 @router.get("/{organization_slug}/plan", response_model=PublicPlanResponse)

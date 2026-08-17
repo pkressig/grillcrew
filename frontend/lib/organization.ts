@@ -103,3 +103,47 @@ export async function fetchPublicOrganization(
     return platformFallbackOrganization;
   }
 }
+
+/** Like fetchPublicOrganization, but distinguishes a genuine "this club
+ * doesn't exist" 404 (returns null) from a transient backend outage (still
+ * falls back to platformFallbackOrganization, same as the lenient variant
+ * above). Use this for routes that should show a clear "not found" page
+ * instead of silently rendering a generic fallback organization. */
+export async function fetchPublicOrganizationStrict(
+  organizationSlug: string,
+): Promise<PublicOrganization | null> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const organizationPath = `/api/public/organization/${encodeURIComponent(organizationSlug)}`;
+
+  try {
+    const response = await fetch(`${apiUrl}${organizationPath}`, {
+      cache: "no-store",
+    });
+
+    if (response.status === 404) {
+      return null;
+    }
+
+    if (!response.ok) {
+      return platformFallbackOrganization;
+    }
+
+    return (await response.json()) as PublicOrganization;
+  } catch {
+    return platformFallbackOrganization;
+  }
+}
+
+export type OrganizationDirectoryEntry = {
+  slug: string;
+  name: string;
+  short_name: string | null;
+  logo_url: string | null;
+};
+
+export async function fetchOrganizationDirectory(): Promise<OrganizationDirectoryEntry[]> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+  const response = await fetch(`${apiUrl}/api/public/organizations`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Die Vereinsliste konnte nicht geladen werden.");
+  return (await response.json()) as OrganizationDirectoryEntry[];
+}

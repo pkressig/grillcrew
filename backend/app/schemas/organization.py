@@ -1,5 +1,7 @@
 """Organization schemas for public-safe tenant metadata."""
 
+import uuid
+
 from pydantic import BaseModel, ConfigDict, Field
 
 # NOTE on the ignores below: pydantic.BaseModel.__init__ itself is typed as
@@ -47,3 +49,31 @@ class PublicOrganizationResponse(BaseModel):  # type: ignore[explicit-any]
     currency: str
     contact: OrganizationContact
     settings: PublicOrganizationSettings
+
+
+class OrganizationIdentityUpdate(BaseModel):  # type: ignore[explicit-any]
+    """Admin-submitted request to change an organization's public URL slug."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    slug: str = Field(min_length=1, max_length=80)
+
+
+class OrganizationIdentityResponse(BaseModel):  # type: ignore[explicit-any]
+    """Admin-facing identity fields, including the URL slug, after an update."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    name: str
+    short_name: str | None
+    slug: str
+
+
+class OrganizationDirectoryEntry(BaseModel):  # type: ignore[explicit-any]
+    """One entry in the public cross-tenant directory of all organizations."""
+
+    slug: str
+    name: str
+    short_name: str | None
+    logo_url: str | None

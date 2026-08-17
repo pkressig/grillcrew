@@ -2,10 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { platformFallbackOrganization } from "@/lib/organization";
 
-const { fetchPublicOrganization } = vi.hoisted(() => ({ fetchPublicOrganization: vi.fn() }));
+const { fetchPublicOrganizationStrict } = vi.hoisted(() => ({
+  fetchPublicOrganizationStrict: vi.fn(),
+}));
 vi.mock("@/lib/organization", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/organization")>()),
-  fetchPublicOrganization,
+  fetchPublicOrganizationStrict,
 }));
 
 import OrganizationHubPage from "@/app/[org]/page";
@@ -17,7 +19,7 @@ const baseOrganization = {
 };
 
 async function renderPage(organization = baseOrganization) {
-  fetchPublicOrganization.mockResolvedValue(organization);
+  fetchPublicOrganizationStrict.mockResolvedValue(organization);
   const element = await OrganizationHubPage({
     params: Promise.resolve({ org: organization.slug }),
   });
@@ -27,7 +29,7 @@ async function renderPage(organization = baseOrganization) {
 
 describe("OrganizationHubPage (recruitment landing)", () => {
   beforeEach(() => {
-    fetchPublicOrganization.mockReset();
+    fetchPublicOrganizationStrict.mockReset();
     vi.unstubAllGlobals();
   });
   afterEach(cleanup);

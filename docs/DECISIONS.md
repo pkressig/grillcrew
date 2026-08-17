@@ -479,3 +479,41 @@ wird manuell durch den Product Owner durchgeführt (siehe Checkliste in der Sess
 club-spezifischem Branding (das kommt weiterhin ausschliesslich aus der Datenbank, D-048).
 
 **Entschieden von:** Product Owner, 2026-08-17.
+
+## D-055 – Vereins-URL-Kürzel in den Einstellungen verwaltbar, Vereinsverzeichnis statt Fehlseite
+
+**Entscheid:** `Organization.slug` (bislang nur per Datenbank-Migration/Bootstrap-Skript
+gesetzt) ist jetzt über einen neuen, ADMIN-only-Endpunkt
+`PATCH /api/admin/{organization_slug}/settings/organization` änderbar und in den
+Admin-Einstellungen als neue, erste Sektion "Organisation" mit Live-Vorschau der resultierenden
+URL sichtbar. Normalisierung (Kleinbuchstaben, zusammenhängende Sonderzeichen zu einem
+Bindestrich) und globale Eindeutigkeitsprüfung (slug ist plattformweit eindeutig, nicht nur pro
+Organisation) verhindern Kollisionen; ein `window.confirm`-Warnhinweis vor dem Speichern macht
+explizit, dass bereits verschickte Links dadurch ungültig werden. Da die Autorisierung dieses
+Routers die URL gegen die live aus der Datenbank aufgelöste Session-Organisation prüft (keine im
+Token/Cookie gespeicherte Kopie des Slugs, siehe Recherche zu D-053), leitet das Frontend nach
+erfolgreicher Umbenennung sofort auf `/{neuer-slug}/admin/settings` weiter, um eine sofort
+403-werfende, veraltete URL zu vermeiden.
+
+Zusätzlich behoben: `fetchPublicOrganization()` behandelte bislang jeden Fehlerfall identisch
+(inklusive eines echten 404 für einen nicht existierenden Vereins-Slug) und rendert dafür
+stillschweigend die generische `platformFallbackOrganization` – das erzeugte die gemeldete
+"komische Seite" bei einem Tippfehler in der URL. Die drei öffentlichen Vereinsseiten
+(`/{org}`, `/{org}/grill`, `/{org}/kiosk`) nutzen jetzt eine neue, strikte Variante
+(`fetchPublicOrganizationStrict`), die einen echten 404 von einem transienten Backend-Ausfall
+unterscheidet: nur bei einem bestätigten "Verein existiert nicht" leiten sie auf eine neue
+`/vereine`-Seite weiter, die alle Organisationen der Plattform mit Logo auflistet
+(`GET /api/public/organizations`, unauthentifiziert). Alle anderen Aufrufer von
+`fetchPublicOrganization` (Admin-Bereich, Registrierung, Profil, Passwort-Reset,
+Anmeldungsverwaltung) sind unverändert und behalten ihr bisheriges, nachsichtiges
+Fallback-Verhalten bei einem echten Ausfall.
+
+**Abgrenzung:** Keine Bearbeitung von Vereinsname/Kurzname/Kontaktdaten über diesen Endpunkt (nur
+der Slug) – das bleibt eine spätere, separate Erweiterung bei Bedarf. Keine
+Redirect-Infrastruktur für bereits verschickte Links mit dem alten Slug (akzeptiertes,
+transientes Risiko bei noch wenigen echten Nutzern; `manage-signup`-Links sind davon ohnehin
+nicht betroffen, siehe D-053).
+
+**Entschieden von:** Product Owner, 2026-08-17 (Wunsch, den Vereins-Slug von
+"fc-thusis-cazis" auf "fctc" zu ändern, verwaltbar in den Einstellungen statt einmaligem Fix;
+Meldung einer "komischen Seite" bei falscher/unbekannter Vereins-URL).

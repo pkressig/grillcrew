@@ -2,11 +2,13 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdminShell } from "@/app/[org]/admin/admin-shell";
 import { AuthProvider } from "@/components/auth-provider";
+import { OrganizationProvider } from "@/components/organization-provider";
 import { clearCsrfToken } from "@/lib/api";
 import type { AuthSession, StaffRole } from "@/lib/auth";
 import { platformFallbackOrganization } from "@/lib/organization";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+const { routerReplaceMock } = vi.hoisted(() => ({ routerReplaceMock: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: routerReplaceMock }) }));
 
 const organizationSettings = {
   id: "settings-1",
@@ -78,13 +80,19 @@ function session(role: StaffRole): AuthSession {
   };
 }
 
-function settingsFetch(role: StaffRole) {
+function settingsFetch(role: StaffRole, identityResponse?: { status: number; body: unknown }) {
   const rules = [namedRule, catchallRule];
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     if (url.endsWith("/api/auth/me")) return Response.json(session(role));
     if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "csrf-memory" });
+    if (url.endsWith("/settings/organization") && method === "PATCH") {
+      if (identityResponse)
+        return Response.json(identityResponse.body, { status: identityResponse.status });
+      const { slug } = JSON.parse(String(init?.body)) as { slug: string };
+      return Response.json({ id: "org-1", name: "Example Org", short_name: null, slug });
+    }
     if (url.endsWith("/coordination-time-records") && method === "GET") return Response.json([]);
     if (url.endsWith("/coordination-time-records") && method === "POST")
       return Response.json(
@@ -131,16 +139,24 @@ function settingsFetch(role: StaffRole) {
   });
 }
 
-function renderAdmin(role: StaffRole, activeView: "settings" | "families" = "settings") {
-  const fetchMock = settingsFetch(role);
+const exampleOrganization = {
+  ...platformFallbackOrganization,
+  name: "Example Org",
+  slug: "example",
+};
+
+function renderAdmin(
+  role: StaffRole,
+  activeView: "settings" | "families" = "settings",
+  identityResponse?: { status: number; body: unknown },
+) {
+  const fetchMock = settingsFetch(role, identityResponse);
   vi.stubGlobal("fetch", fetchMock);
   render(
     <AuthProvider>
-      <AdminShell
-        activeView={activeView}
-        org="example"
-        organization={platformFallbackOrganization}
-      />
+      <OrganizationProvider organization={exampleOrganization}>
+        <AdminShell activeView={activeView} org="example" organization={exampleOrganization} />
+      </OrganizationProvider>
     </AuthProvider>,
   );
   return fetchMock;
@@ -175,6 +191,94 @@ describe("settings admin navigation and role gating", () => {
     renderAdmin("KOORDINATION");
     expect(await screen.findByText("keine Berechtigung")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Einstellungen" })).not.toBeInTheDocument();
+  });
+});
+
+describe("organization identity (URL slug)", () => {
+  it("renders the club name and current slug", async () => {
+    renderAdmin("ADMIN");
+    const slugInput = await screen.findByLabelText("URL-Kürzel");
+    expect(slugInput).toHaveValue("example");
+    const form = slugInput.closest("form");
+    if (!form) throw new Error("organization identity form not found");
+    expect(within(form).getByText("Example Org")).toBeInTheDocument();
+  });
+
+  it("asks for confirmation before submitting and does not save when cancelled", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const fetchMock = renderAdmin("ADMIN");
+    const slugInput = await screen.findByLabelText("URL-Kürzel");
+    fireEvent.change(slugInput, { target: { value: "newslug" } });
+    const form = slugInput.closest("form");
+    if (!form) throw new Error("organization identity form not found");
+    fireEvent.click(within(form).getByRole("button", { name: "Speichern" }));
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) =>
+          String(url).endsWith("/settings/organization") &&
+          (init as RequestInit | undefined)?.method === "PATCH",
+      ),
+    ).toBe(false);
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("confirms, saves the new slug, and redirects to the renamed settings URL", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchMock = renderAdmin("ADMIN");
+    const slugInput = await screen.findByLabelText("URL-Kürzel");
+    fireEvent.change(slugInput, { target: { value: "newslug" } });
+    const form = slugInput.closest("form");
+    if (!form) throw new Error("organization identity form not found");
+    fireEvent.click(within(form).getByRole("button", { name: "Speichern" }));
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith("/settings/organization") &&
+            (init as RequestInit | undefined)?.method === "PATCH" &&
+            JSON.parse(String((init as RequestInit).body)).slug === "newslug",
+        ),
+      ).toBe(true),
+    );
+    expect(
+      await screen.findByText("URL-Kürzel geändert, du wirst weitergeleitet …"),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(routerReplaceMock).toHaveBeenCalledWith("/newslug/admin/settings"));
+    confirmSpy.mockRestore();
+  });
+
+  it("shows the backend error on a 409 conflict without navigating away", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderAdmin("ADMIN", "settings", {
+      status: 409,
+      body: { detail: "Dieses URL-Kürzel ist bereits vergeben." },
+    });
+    const slugInput = await screen.findByLabelText("URL-Kürzel");
+    fireEvent.change(slugInput, { target: { value: "taken" } });
+    const form = slugInput.closest("form");
+    if (!form) throw new Error("organization identity form not found");
+    fireEvent.click(within(form).getByRole("button", { name: "Speichern" }));
+    expect(await screen.findByText("Dieses URL-Kürzel ist bereits vergeben.")).toBeInTheDocument();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("shows the backend error on a 422 invalid slug without navigating away", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderAdmin("ADMIN", "settings", {
+      status: 422,
+      body: { detail: "Das URL-Kürzel ist ungültig." },
+    });
+    const slugInput = await screen.findByLabelText("URL-Kürzel");
+    fireEvent.change(slugInput, { target: { value: "***" } });
+    const form = slugInput.closest("form");
+    if (!form) throw new Error("organization identity form not found");
+    fireEvent.click(within(form).getByRole("button", { name: "Speichern" }));
+    expect(await screen.findByText("Das URL-Kürzel ist ungültig.")).toBeInTheDocument();
+    expect(routerReplaceMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
   });
 });
 

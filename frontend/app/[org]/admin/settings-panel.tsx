@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody } from "@/components/ui/card";
+import { useOrganization } from "@/components/organization-provider";
 import {
   createCrewSizeRule,
   createHomeVenue,
@@ -15,6 +17,7 @@ import {
   reorderCrewSizeRules,
   updateCrewSizeRule,
   updateHomeVenue,
+  updateOrganizationIdentity,
   updateOrganizationSettings,
   updateTheme,
   type CrewSizeRule,
@@ -49,6 +52,12 @@ export function SettingsPanel({ org }: Readonly<{ org: string }>) {
       <nav aria-label="Einstellungskategorien" className="flex flex-wrap gap-2">
         <a
           className="min-h-11 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
+          href="#org-identity-heading"
+        >
+          Organisation
+        </a>
+        <a
+          className="min-h-11 rounded-md border px-4 py-2 text-sm font-medium hover:bg-muted"
           href="#org-settings-heading"
         >
           Organisation &amp; Betrieb
@@ -78,6 +87,7 @@ export function SettingsPanel({ org }: Readonly<{ org: string }>) {
           Crew-Regeln
         </a>
       </nav>
+      <OrganizationIdentitySection org={org} />
       <OrganizationSettingsSection org={org} />
       <ThemeSection org={org} />
       <CoordinationTimeSection org={org} />
@@ -333,6 +343,94 @@ function FeedbackMessages({
         </p>
       ) : null}
     </>
+  );
+}
+
+const RENAME_WARNING =
+  "Achtung: Bereits verschickte Links (z. B. E-Mails) werden ungültig, sobald du das URL-Kürzel änderst. Trotzdem fortfahren?";
+
+function OrganizationIdentitySection({ org }: Readonly<{ org: string }>) {
+  const organization = useOrganization();
+  const router = useRouter();
+  const [slug, setSlug] = useState(organization.slug);
+  const [origin, setOrigin] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+  }, []);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = slug.trim();
+    if (!trimmed) {
+      setError("Das URL-Kürzel darf nicht leer sein.");
+      return;
+    }
+    if (!window.confirm(RENAME_WARNING)) return;
+    setBusy(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const identity = await updateOrganizationIdentity(org, trimmed);
+      setSuccess("URL-Kürzel geändert, du wirst weitergeleitet …");
+      setTimeout(() => {
+        router.replace(`/${identity.slug}/admin/settings`);
+      }, 400);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Das URL-Kürzel konnte nicht gespeichert werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="border-border/80" aria-labelledby="org-identity-heading">
+      <CardBody className="grid gap-4">
+        <div>
+          <h2 id="org-identity-heading" className="text-xl font-semibold">
+            Organisation
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Name und öffentliche Adresse deines Vereins.
+          </p>
+        </div>
+        <form className="grid gap-3" onSubmit={submit}>
+          <div className="grid gap-1">
+            <span className="text-sm font-medium">Vereinsname</span>
+            <p className="min-h-11 rounded-md border bg-muted/40 px-3 py-2">{organization.name}</p>
+          </div>
+          <label className="grid gap-1" htmlFor="org-slug">
+            URL-Kürzel
+            <input
+              className={control}
+              id="org-slug"
+              name="slug"
+              required
+              maxLength={100}
+              value={slug}
+              onChange={(event) => setSlug(event.target.value)}
+              disabled={busy}
+            />
+          </label>
+          <p className="text-sm text-muted-foreground">
+            Deine Vereinsseite ist erreichbar unter: {origin}/{slug}
+          </p>
+          <div>
+            <Button type="submit" disabled={busy}>
+              {busy ? "Wird gespeichert …" : "Speichern"}
+            </Button>
+          </div>
+        </form>
+        <FeedbackMessages error={error} success={success} />
+      </CardBody>
+    </Card>
   );
 }
 

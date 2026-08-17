@@ -14,6 +14,7 @@ from app.models.organization import (
     OrganizationSettings,
     Theme,
 )
+from app.schemas.organization import OrganizationIdentityUpdate
 from app.schemas.settings import (
     CrewSizeRuleCreate,
     CrewSizeRuleUpdate,
@@ -25,6 +26,7 @@ from app.schemas.settings import (
 
 _DEFAULT_CATCHALL_MENU_TYPE = MenuType.FRIES_NUGGETS
 _DEFAULT_CATCHALL_GRILLER_COUNT = 1
+_SLUG_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
 class SettingsNotFoundError(Exception):
@@ -41,6 +43,11 @@ class SettingsValidationError(Exception):
 
 def normalize_venue_name(name: str) -> str:
     return re.sub(r"\s+", " ", name.strip()).casefold()
+
+
+def normalize_slug(value: str) -> str:
+    collapsed = re.sub(r"[^a-zA-Z0-9]+", "-", value.strip().lower())
+    return collapsed.strip("-")
 
 
 class SettingsService:
@@ -73,11 +80,7 @@ class SettingsService:
     # -- Theme / branding --------------------------------------------------------
 
     def get_theme(self) -> Theme:
-        organization = self.db.scalar(
-            select(Organization).where(Organization.id == self.organization_id)
-        )
-        if organization is None:
-            raise SettingsNotFoundError
+        organization = self._get_organization()
         theme = self.db.scalar(select(Theme).where(Theme.id == organization.theme_id))
         if theme is None:
             raise SettingsNotFoundError
@@ -90,6 +93,35 @@ class SettingsService:
         self.db.commit()
         self.db.refresh(theme)
         return theme
+
+    # -- Organization identity ----------------------------------------------------
+
+    def _get_organization(self) -> Organization:
+        organization = self.db.scalar(
+            select(Organization).where(Organization.id == self.organization_id)
+        )
+        if organization is None:
+            raise SettingsNotFoundError
+        return organization
+
+    def update_organization_identity(self, payload: OrganizationIdentityUpdate) -> Organization:
+        organization = self._get_organization()
+        normalized = normalize_slug(payload.slug)
+        if not normalized or not _SLUG_PATTERN.match(normalized):
+            raise SettingsValidationError("slug must contain at least one letter or number")
+        if normalized != organization.slug:
+            conflict = self.db.scalar(
+                select(Organization).where(
+                    Organization.slug == normalized,
+                    Organization.id != self.organization_id,
+                )
+            )
+            if conflict is not None:
+                raise SettingsConflictError("this URL slug is already taken")
+            organization.slug = normalized
+            self.db.commit()
+            self.db.refresh(organization)
+        return organization
 
     # -- Home venues -------------------------------------------------------------
 

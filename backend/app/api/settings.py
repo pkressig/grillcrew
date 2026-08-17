@@ -12,6 +12,7 @@ from app.api.dependencies import CurrentStaffMembership, require_staff_role, val
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models.identity import StaffRole
+from app.schemas.organization import OrganizationIdentityResponse, OrganizationIdentityUpdate
 from app.schemas.settings import (
     CrewSizeRuleCreate,
     CrewSizeRuleReorder,
@@ -78,6 +79,25 @@ def update_organization_settings(
     try:
         settings = _service(organization_slug, current, db).update_organization_settings(payload)
         return OrganizationSettingsResponse.model_validate(settings)
+    except (SettingsNotFoundError, SettingsConflictError, SettingsValidationError) as error:
+        raise _translate(error) from None
+
+
+@router.patch("/organization", response_model=OrganizationIdentityResponse)
+def update_organization_identity(
+    organization_slug: str,
+    payload: OrganizationIdentityUpdate,
+    request: Request,
+    current: CurrentStaffMembership = Depends(manage),
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),
+) -> OrganizationIdentityResponse:
+    _ensure_origin_and_host(request, db, get_settings())
+    try:
+        organization = _service(organization_slug, current, db).update_organization_identity(
+            payload
+        )
+        return OrganizationIdentityResponse.model_validate(organization)
     except (SettingsNotFoundError, SettingsConflictError, SettingsValidationError) as error:
         raise _translate(error) from None
 

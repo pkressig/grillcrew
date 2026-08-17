@@ -1,5 +1,7 @@
 """Organization settings, home-venue allowlist, and crew-size rule tests."""
 
+import uuid
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
@@ -9,10 +11,16 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
+from sqlalchemy import Table, create_engine, event
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
+from sqlalchemy.pool import StaticPool
 
 from app.api import dependencies
 from app.api import settings as settings_api
 from app.api.dependencies import CurrentStaffMembership
+from app.core.config import AppEnv
+from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.identity import StaffMembership, StaffRole, User
@@ -24,6 +32,7 @@ from app.models.organization import (
     OrganizationSettings,
     Theme,
 )
+from app.schemas.organization import OrganizationIdentityUpdate
 from app.schemas.settings import (
     CrewSizeRuleCreate,
     CrewSizeRuleUpdate,
@@ -32,11 +41,13 @@ from app.schemas.settings import (
     OrganizationSettingsUpdate,
     ThemeUpdate,
 )
+from app.services.organization_context import OrganizationLookup, resolve_organization
 from app.services.settings import (
     SettingsConflictError,
     SettingsNotFoundError,
     SettingsService,
     SettingsValidationError,
+    normalize_slug,
     normalize_venue_name,
 )
 
@@ -82,6 +93,52 @@ class _FakeDb:
         if getattr(item, "created_at", None) is None:
             item.created_at = now
         item.updated_at = now
+
+
+_ORGANIZATION_IDENTITY_TABLES = cast("list[Table]", [Theme.__table__, Organization.__table__])
+
+
+@pytest.fixture
+def identity_engine() -> Iterator[Engine]:
+    """SQLite engine standing in for Postgres, with a gen_random_uuid() shim.
+
+    Used for organization-identity (slug rename) tests that need real uniqueness
+    and lookup behaviour rather than a scripted `_FakeDb`. A `StaticPool` with
+    `check_same_thread=False` is required because the route-level tests exercise
+    this session through `TestClient`, which runs the endpoint in a worker thread.
+    """
+    sqlite_engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(sqlite_engine, "connect")
+    def _register_uuid_function(dbapi_connection: object, _record: object) -> None:
+        dbapi_connection.create_function(  # type: ignore[attr-defined]
+            "gen_random_uuid", 0, lambda: uuid.uuid4().hex
+        )
+
+    Base.metadata.create_all(sqlite_engine, tables=_ORGANIZATION_IDENTITY_TABLES)
+    yield sqlite_engine
+    sqlite_engine.dispose()
+
+
+@pytest.fixture
+def identity_session(identity_engine: Engine) -> Iterator[Session]:
+    with Session(identity_engine) as db_session:
+        yield db_session
+
+
+def _seed_organization(db_session: Session, *, name: str, slug: str) -> Organization:
+    theme = Theme(name=f"{name} Theme")
+    db_session.add(theme)
+    db_session.flush()
+    organization = Organization(theme_id=theme.id, name=name, slug=slug)
+    db_session.add(organization)
+    db_session.commit()
+    db_session.refresh(organization)
+    return organization
 
 
 # -- Role guard --------------------------------------------------------------
@@ -171,6 +228,19 @@ def test_normalize_venue_name_preserves_explicit_wildcards() -> None:
     assert normalize_venue_name("  * Cazis   Platz * ") == "* cazis platz *"
 
 
+def test_normalize_slug_lowercases_and_strips_symbols() -> None:
+    assert normalize_slug("FCTC!!") == "fctc"
+
+
+def test_normalize_slug_collapses_whitespace_and_case() -> None:
+    assert normalize_slug("  Fc Tc  ") == "fc-tc"
+
+
+def test_normalize_slug_strips_leading_and_trailing_hyphens() -> None:
+    assert normalize_slug("--fctc--") == "fctc"
+    assert normalize_slug("!!!") == ""
+
+
 # -- Service: organization settings --------------------------------------------
 
 
@@ -241,6 +311,70 @@ def test_update_theme_only_applies_provided_fields() -> None:
     assert result.primary_color == "#01417e"
     assert result.secondary_color == "#525252"
     assert db.commits == 1
+
+
+# -- Service: organization identity ---------------------------------------------
+
+
+def test_update_organization_identity_raises_when_organization_missing() -> None:
+    service = SettingsService(cast(object, _FakeDb(scalar_results=[None])), uuid4())  # type: ignore[arg-type]
+    with pytest.raises(SettingsNotFoundError):
+        service.update_organization_identity(OrganizationIdentityUpdate(slug="fctc"))
+
+
+def test_update_organization_identity_rejects_empty_or_symbol_only_slug() -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="fc-thusis-cazis"))
+    db = _FakeDb(scalar_results=[organization])
+    service = SettingsService(cast(object, db), organization.id)  # type: ignore[arg-type]
+    with pytest.raises(SettingsValidationError):
+        service.update_organization_identity(OrganizationIdentityUpdate(slug="!!!"))
+    assert db.commits == 0
+
+
+def test_update_organization_identity_is_a_noop_when_slug_unchanged() -> None:
+    organization = cast(Organization, SimpleNamespace(id=uuid4(), slug="fctc"))
+    db = _FakeDb(scalar_results=[organization])
+    service = SettingsService(cast(object, db), organization.id)  # type: ignore[arg-type]
+    result = service.update_organization_identity(OrganizationIdentityUpdate(slug="  FCTC  "))
+    assert result is organization
+    assert result.slug == "fctc"
+    assert db.commits == 0
+
+
+def test_update_organization_identity_rejects_slug_used_by_another_organization(
+    identity_session: Session,
+) -> None:
+    organization = _seed_organization(identity_session, name="FC Thusis-Cazis", slug="fctc-old")
+    _seed_organization(identity_session, name="FC Rival", slug="fc-rival")
+    service = SettingsService(identity_session, organization.id)
+    with pytest.raises(SettingsConflictError):
+        service.update_organization_identity(OrganizationIdentityUpdate(slug="fc-rival"))
+    identity_session.expire_all()
+    unchanged = identity_session.get(Organization, organization.id)
+    assert unchanged is not None
+    assert unchanged.slug == "fctc-old"
+
+
+def test_update_organization_identity_renames_slug_and_old_slug_stops_resolving(
+    identity_session: Session,
+) -> None:
+    organization = _seed_organization(
+        identity_session, name="FC Thusis-Cazis", slug="fc-thusis-cazis"
+    )
+    service = SettingsService(identity_session, organization.id)
+    result = service.update_organization_identity(OrganizationIdentityUpdate(slug="FCTC!!"))
+    assert result.slug == "fctc"
+
+    old_lookup = OrganizationLookup(
+        custom_domain=None, subdomain=None, path_slug="fc-thusis-cazis", development_override=None
+    )
+    new_lookup = OrganizationLookup(
+        custom_domain=None, subdomain=None, path_slug="fctc", development_override=None
+    )
+    assert resolve_organization(identity_session, old_lookup, AppEnv.PRODUCTION) is None
+    resolved = resolve_organization(identity_session, new_lookup, AppEnv.PRODUCTION)
+    assert resolved is not None
+    assert resolved.id == organization.id
 
 
 # -- Service: home venues -------------------------------------------------------
@@ -577,6 +711,56 @@ def test_update_theme_route_requires_csrf_and_origin(
         app.dependency_overrides.clear()
     assert missing_csrf.status_code == 403
     assert missing_origin.status_code == 403
+
+
+def test_update_organization_identity_route_rejects_non_admin_role(client: TestClient) -> None:
+    current = _current(StaffRole.KIOSK)
+    app.dependency_overrides[dependencies.require_staff_membership] = lambda: current
+    app.dependency_overrides[get_db] = lambda: _FakeDb()
+    try:
+        response = client.patch(
+            "/api/admin/tenant-a/settings/organization", json={"slug": "new-slug"}
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 403
+
+
+def test_update_organization_identity_route_updates_slug_and_old_slug_stops_resolving(
+    client: TestClient, identity_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    organization = _seed_organization(
+        identity_session, name="FC Thusis-Cazis", slug="fc-thusis-cazis"
+    )
+    current = CurrentStaffMembership(
+        organization=organization,
+        user=cast(User, SimpleNamespace(id=uuid4())),
+        membership=cast(StaffMembership, SimpleNamespace(role=StaffRole.ADMIN)),
+    )
+    app.dependency_overrides[settings_api.manage] = lambda: current
+    app.dependency_overrides[dependencies.validate_csrf] = lambda: None
+    app.dependency_overrides[get_db] = lambda: identity_session
+    monkeypatch.setattr(settings_api, "_ensure_origin_and_host", lambda *_args: None)
+    try:
+        response = client.patch(
+            "/api/admin/fc-thusis-cazis/settings/organization", json={"slug": "FCTC"}
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    body = response.json()
+    assert body["slug"] == "fctc"
+
+    old_lookup = OrganizationLookup(
+        custom_domain=None, subdomain=None, path_slug="fc-thusis-cazis", development_override=None
+    )
+    new_lookup = OrganizationLookup(
+        custom_domain=None, subdomain=None, path_slug="fctc", development_override=None
+    )
+    assert resolve_organization(identity_session, old_lookup, AppEnv.PRODUCTION) is None
+    resolved = resolve_organization(identity_session, new_lookup, AppEnv.PRODUCTION)
+    assert resolved is not None
+    assert resolved.id == organization.id
 
 
 def test_list_home_venues_returns_admin_fields(
