@@ -2051,11 +2051,16 @@ function FamilyDetail({
                                 (item) => item.id === member.volunteer_id,
                               )!}
                               childMembers={members?.filter((m) => m.member_type === "CHILD") ?? []}
-                              onSaved={(updated) =>
+                              onSaved={(updated) => {
                                 setVolunteers((current) =>
                                   current.map((item) => (item.id === updated.id ? updated : item)),
-                                )
-                              }
+                                );
+                                // The FamilyMember row above (its own separate name copy,
+                                // shown as the member list item's heading) isn't part of
+                                // this response -- refetch so a name correction is reflected
+                                // immediately instead of only after the next navigation.
+                                void refresh();
+                              }}
                             />
                           ) : (
                             <p className="text-sm font-medium">

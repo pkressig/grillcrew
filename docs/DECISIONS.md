@@ -697,3 +697,22 @@ Anzeigen).
 **Entschieden von:** Product Owner, 2026-08-17 (Bug-Meldung mit Screenshot: doppelter Name
 "Dario Andric Dario Andric" in Familienmitglieder-Liste und Einsatzplan; Wunsch, dass eine
 Namenskorrektur überallhin durchschlägt).
+
+## D-063 – Bugfix: Familienmitglieder-Liste zeigte nach Namenskorrektur weiterhin den alten Namen
+
+**Entscheid:** Nach D-062 synchronisiert das Backend die Namenskopien korrekt, trotzdem blieb die
+Familienmitglieder-Zeile im Familien-Tab weiterhin auf dem alten (fehlerhaften) Namen stehen – ein
+separater, rein frontendseitiger Bug: `onSaved` beim Bearbeiten eines verknüpften Helfers
+(`VolunteerKartei` in `families-panel.tsx`) aktualisierte nur den lokalen `volunteers`-State, nicht
+aber den separat geladenen `members`-State, aus dem die Zeilenüberschrift
+(`{member.first_name} {member.last_name}`) gerendert wird. Der Callback ruft jetzt zusätzlich
+`refresh()` auf (bereits vorhandene Funktion, lädt `loadFamilyMembers` neu), sodass eine
+Namenskorrektur sofort sichtbar wird, ohne dass Tab wechseln oder neu laden nötig ist.
+
+**Abgrenzung:** Keine Änderung an den beiden anderen `onSaved`-Verwendungsstellen (primäre
+Helfer-Tab-Detailansicht) – dort liest die Anzeige direkt aus demselben `volunteers`-State, den der
+Callback bereits aktualisiert, ohne eine separate Kopie zu betreffen.
+
+**Entschieden von:** Product Owner, 2026-08-17 (Rückmeldung: die in D-062 beschriebene Korrektur
+über "Bearbeiten" → "Speichern" zeigte in der Familienmitglieder-Liste weiterhin den alten,
+doppelten Namen).

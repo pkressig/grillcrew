@@ -1094,6 +1094,50 @@ describe("family (Familien) admin — secondary view", () => {
     ).toHaveLength(3);
   });
 
+  it("refreshes the family member list after editing a linked volunteer's name", async () => {
+    // Regression test: the member row's own name text comes from a separate
+    // FamilyMember copy, not from the volunteer response the Kartei form saves --
+    // editing the volunteer must also refetch the member list, or the row keeps
+    // showing the stale (possibly duplicated) name after a successful save.
+    document.cookie = "gc_csrf=rename-token";
+    const staleMember = {
+      ...member,
+      first_name: "Dario Andric",
+      last_name: "Dario Andric",
+      volunteer_id: "volunteer-1",
+    };
+    const fixedMember = { ...staleMember, first_name: "Dario", last_name: "Andric" };
+    const linkedVolunteer = {
+      ...directoryVolunteer,
+      id: "volunteer-1",
+      first_name: "Dario Andric",
+      last_name: "Dario Andric",
+    };
+    const fetchMock = adminFetch("ADMIN", {
+      familyResponses: [Response.json([family])],
+      memberResponses: [Response.json([staleMember]), Response.json([fixedMember])],
+      familyVolunteersResponses: [Response.json([linkedVolunteer])],
+    });
+    renderAdmin("ADMIN", fetchMock);
+    await openFamilienTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Familie Muster" }));
+
+    expect((await screen.findAllByText("Dario Andric Dario Andric")).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Bearbeiten" }));
+    fireEvent.change(screen.getByLabelText("Vorname", { selector: "#kartei-first-volunteer-1" }), {
+      target: { value: "Dario" },
+    });
+    fireEvent.change(screen.getByLabelText("Nachname", { selector: "#kartei-last-volunteer-1" }), {
+      target: { value: "Andric" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Speichern" }));
+
+    await waitFor(() => expect(screen.queryAllByText("Dario Andric Dario Andric")).toHaveLength(0));
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).endsWith("/family-1/members")),
+    ).toHaveLength(2);
+  });
+
   it("keeps a linked inactive volunteer visible, edits its email, and allows reactivation", async () => {
     document.cookie = "gc_csrf=reactivate-token";
     const inactive = {
