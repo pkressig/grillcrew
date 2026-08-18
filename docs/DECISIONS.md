@@ -816,10 +816,14 @@ und für die eigene Abo-Nutzung (Claude Code/ChatGPT) votiert.
 ## D-067 – Passwort-Bestätigungsfeld bei Registrierung, Passwort ändern im Profil
 
 **Entscheid:** Das Registrierungsformular (`frontend/app/register/register-form.tsx`) bekommt ein
-zweites Passwortfeld "Passwort bestätigen". Vor dem eigentlichen `registerVolunteer()`-Aufruf prüft
-`submit()` clientseitig, ob beide Eingaben identisch sind, und zeigt andernfalls sofort "Die Passwörter
-stimmen nicht überein. Bitte überprüfe deine Eingabe." an, ohne einen Server-Request auszulösen —
-adressiert Tippfehler beim Registrieren, die sonst erst beim nächsten Login-Versuch auffallen.
+zweites Passwortfeld "Passwort bestätigen". Der Abgleich läuft live: sobald das Bestätigungsfeld nicht
+leer ist, vergleicht eine abgeleitete Größe (`passwordsMismatch`/`passwordsMatch`) beide Eingaben bei
+jedem Tastendruck und zeigt sofort "Die Passwörter stimmen nicht überein." (rot, Eingaberand ebenfalls
+rot markiert) bzw. "Die Passwörter stimmen überein." (grün) — beide über `aria-live="polite"` auch für
+Screenreader. `submit()` prüft vor dem eigentlichen `registerVolunteer()`-Aufruf zusätzlich als
+Sicherheitsnetz noch einmal serverseitig-frei nach, falls die Eingabe z. B. per Passwort-Manager ohne
+Tastenanschläge gesetzt wurde. Adressiert Tippfehler beim Registrieren, die sonst erst beim nächsten
+Login-Versuch auffallen.
 
 Zusätzlich kann ein eingeloggter Helfer sein Passwort jetzt selbst im Profil ändern: eine neue,
 einklappbare Sektion "Passwort ändern" (`ChangePasswordSection` in `frontend/app/profile/page.tsx`)

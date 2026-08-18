@@ -108,6 +108,10 @@ export function RegisterForm({
   const [fields, setFields] = useState<DraftFields>(() => readDraft(organization.slug));
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  // Live feedback as the visitor types, rather than only on submit — only judge once the
+  // confirmation field has content, so an empty field never flashes a mismatch.
+  const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Re-read the draft if the form is ever mounted for a different organization.
@@ -252,7 +256,10 @@ export function RegisterForm({
         <label className="flex flex-col gap-1 font-medium">
           Passwort bestätigen
           <input
-            className="min-h-11 rounded border px-3 font-normal"
+            className={cn(
+              "min-h-11 rounded border px-3 font-normal",
+              passwordsMismatch && "border-status-error focus:border-status-error",
+            )}
             name="password_confirmation"
             type="password"
             value={confirmPassword}
@@ -260,8 +267,18 @@ export function RegisterForm({
             required
             minLength={minimumLength}
             autoComplete="new-password"
+            aria-invalid={passwordsMismatch}
           />
         </label>
+        {passwordsMismatch ? (
+          <p aria-live="polite" className="text-sm text-status-error">
+            Die Passwörter stimmen nicht überein.
+          </p>
+        ) : passwordsMatch ? (
+          <p aria-live="polite" className="text-sm text-status-success">
+            Die Passwörter stimmen überein.
+          </p>
+        ) : null}
         <label className="flex flex-col gap-1 font-medium">
           Einsatzvergütung (optional)
           <select

@@ -155,6 +155,25 @@ describe("RegisterForm password confirmation", () => {
   });
   afterEach(cleanup);
 
+  it("shows live feedback as the visitor types, before ever submitting", async () => {
+    render(<RegisterForm organization={organization} />);
+    fireEvent.change(screen.getByLabelText("Passwort"), { target: { value: "super-secret-pw" } });
+    expect(screen.queryByText(/Passwörter/)).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Passwort bestätigen"), {
+      target: { value: "typo-secret-pw" },
+    });
+    expect(await screen.findByText("Die Passwörter stimmen nicht überein.")).toBeInTheDocument();
+    expect(screen.queryByText("Die Passwörter stimmen überein.")).not.toBeInTheDocument();
+    expect(mockedRegister).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Passwort bestätigen"), {
+      target: { value: "super-secret-pw" },
+    });
+    expect(await screen.findByText("Die Passwörter stimmen überein.")).toBeInTheDocument();
+    expect(screen.queryByText("Die Passwörter stimmen nicht überein.")).not.toBeInTheDocument();
+  });
+
   it("shows a mismatch error and never submits when the passwords differ", async () => {
     render(<RegisterForm organization={organization} />);
     fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Mia" } });
