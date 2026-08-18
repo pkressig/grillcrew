@@ -60,6 +60,9 @@ describe("RegisterForm draft persistence", () => {
     fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+41 79 123 45 67" } });
     fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "mia@example.test" } });
     fireEvent.change(screen.getByLabelText("Passwort"), { target: { value: "super-secret-pw" } });
+    fireEvent.change(screen.getByLabelText("Passwort bestätigen"), {
+      target: { value: "super-secret-pw" },
+    });
     await waitFor(() => expect(window.sessionStorage.getItem(draftKey)).not.toBeNull());
 
     fireEvent.click(screen.getByRole("button", { name: "Registrieren" }));
@@ -145,6 +148,41 @@ describe("RegisterForm multiple children", () => {
   });
 });
 
+describe("RegisterForm password confirmation", () => {
+  beforeEach(() => {
+    window.sessionStorage.clear();
+    mockedRegister.mockReset();
+  });
+  afterEach(cleanup);
+
+  it("shows a mismatch error and never submits when the passwords differ", async () => {
+    render(<RegisterForm organization={organization} />);
+    fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Mia" } });
+    fireEvent.change(screen.getByLabelText("Nachname"), { target: { value: "Muster" } });
+    fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+41 79 123 45 67" } });
+    fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "mia@example.test" } });
+    fireEvent.change(screen.getByLabelText("Passwort"), { target: { value: "super-secret-pw" } });
+    fireEvent.change(screen.getByLabelText("Passwort bestätigen"), {
+      target: { value: "typo-secret-pw" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Registrieren" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Die Passwörter stimmen nicht überein.",
+    );
+    expect(mockedRegister).not.toHaveBeenCalled();
+  });
+
+  it("submits once both password fields match", async () => {
+    mockedRegister.mockResolvedValue({ ok: true });
+    render(<RegisterForm organization={organization} />);
+    fillRequiredFields();
+    fireEvent.click(screen.getByRole("button", { name: "Registrieren" }));
+    await waitFor(() => expect(mockedRegister).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
 describe("RegisterForm autofill hints", () => {
   beforeEach(() => window.sessionStorage.clear());
   afterEach(cleanup);
@@ -174,6 +212,9 @@ function fillRequiredFields() {
   fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+41 79 123 45 67" } });
   fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "mia@example.test" } });
   fireEvent.change(screen.getByLabelText("Passwort"), { target: { value: "super-secret-pw" } });
+  fireEvent.change(screen.getByLabelText("Passwort bestätigen"), {
+    target: { value: "super-secret-pw" },
+  });
 }
 
 describe("RegisterForm page navigation (default variant)", () => {

@@ -64,6 +64,10 @@ class InvalidPasswordResetTokenError(Exception):
     """Raised when a password reset token is missing, expired, unknown, or consumed."""
 
 
+class InvalidCurrentPasswordError(Exception):
+    """Raised when a self-service password change supplies the wrong current password."""
+
+
 @dataclass(frozen=True)
 class IssuedSession:
     access_token: str
@@ -294,6 +298,41 @@ class PasswordResetService:
         session = issue_session(db=self._db, user=token.user, settings=self._settings, now=now)
         self._db.commit()
         return session, build_session_response(token.user)
+
+    def change_password(
+        self, *, user: User, current_password: str, new_password: str
+    ) -> tuple[IssuedSession, AuthSessionResponse]:
+        """Self-service change from within an active session (current-password verified,
+        no token). Revokes every other refresh token (defense in depth on other devices)
+        but immediately issues a fresh session so the requesting browser stays signed in,
+        mirroring ``reset_password``'s pattern.
+        """
+        if not verify_password_or_dummy(current_password, user.password_hash):
+            raise InvalidCurrentPasswordError
+
+        minimum_length = self._resolve_password_minimum_length(user.id)
+        validate_password_policy(new_password, minimum_length=minimum_length)
+
+        now = datetime.now(UTC)
+        user.password_hash = hash_password(new_password)
+        self._db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=now)
+        )
+        self._db.add(
+            AuditEvent(
+                organization_id=None,
+                actor_user_id=user.id,
+                action="PASSWORD_CHANGED_BY_USER",
+                entity_type="user",
+                entity_id=user.id,
+                event_metadata={},
+            )
+        )
+        session = issue_session(db=self._db, user=user, settings=self._settings, now=now)
+        self._db.commit()
+        return session, build_session_response(user)
 
     def _resolve_password_minimum_length(self, user_id: uuid.UUID) -> int:
         volunteer = self._db.scalar(select(Volunteer).where(Volunteer.user_id == user_id))

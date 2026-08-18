@@ -107,6 +107,7 @@ export function RegisterForm({
   const [saving, setSaving] = useState(false);
   const [fields, setFields] = useState<DraftFields>(() => readDraft(organization.slug));
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Re-read the draft if the form is ever mounted for a different organization.
@@ -152,6 +153,10 @@ export function RegisterForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    if (password !== confirmPassword) {
+      setError("Die Passwörter stimmen nicht überein. Bitte überprüfe deine Eingabe.");
+      return;
+    }
     setSaving(true);
     try {
       const children = fields.children
@@ -244,6 +249,19 @@ export function RegisterForm({
           />
         </label>
         <p className="text-sm text-muted-foreground">Mindestens {minimumLength} Zeichen.</p>
+        <label className="flex flex-col gap-1 font-medium">
+          Passwort bestätigen
+          <input
+            className="min-h-11 rounded border px-3 font-normal"
+            name="password_confirmation"
+            type="password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            required
+            minLength={minimumLength}
+            autoComplete="new-password"
+          />
+        </label>
         <label className="flex flex-col gap-1 font-medium">
           Einsatzvergütung (optional)
           <select

@@ -812,3 +812,30 @@ nach Rückfrage (Konflikt mit dem "Forbidden"-Eintrag und den ToS-/Datenschutzri
 WhatsApp-Web-Automatisierung erklärt) hat sich der Product Owner für die oben beschriebene, sichere
 Variante entschieden und für die KI-Unterstützung ausdrücklich gegen eine kostenpflichtige Backend-API
 und für die eigene Abo-Nutzung (Claude Code/ChatGPT) votiert.
+
+## D-067 – Passwort-Bestätigungsfeld bei Registrierung, Passwort ändern im Profil
+
+**Entscheid:** Das Registrierungsformular (`frontend/app/register/register-form.tsx`) bekommt ein
+zweites Passwortfeld "Passwort bestätigen". Vor dem eigentlichen `registerVolunteer()`-Aufruf prüft
+`submit()` clientseitig, ob beide Eingaben identisch sind, und zeigt andernfalls sofort "Die Passwörter
+stimmen nicht überein. Bitte überprüfe deine Eingabe." an, ohne einen Server-Request auszulösen —
+adressiert Tippfehler beim Registrieren, die sonst erst beim nächsten Login-Versuch auffallen.
+
+Zusätzlich kann ein eingeloggter Helfer sein Passwort jetzt selbst im Profil ändern: eine neue,
+einklappbare Sektion "Passwort ändern" (`ChangePasswordSection` in `frontend/app/profile/page.tsx`)
+mit aktuellem Passwort, neuem Passwort und Bestätigung (dieselbe clientseitige Abgleichsprüfung wie bei
+der Registrierung). Backend: neuer Endpunkt `POST /api/auth/change-password` (authentifiziert, CSRF-
+geschützt) und `PasswordResetService.change_password()` (`backend/app/services/auth.py`) — verifiziert
+das aktuelle Passwort (`verify_password_or_dummy`, konstante Fehlerantwort-Zeit wie beim Login), prüft
+die org-spezifische Mindestlänge, widerruft alle bestehenden Refresh-Tokens des Nutzers (andere Geräte/
+Sessions) und stellt sofort eine frische Session für den anfragenden Browser aus (`issue_session` +
+`set_auth_cookies`), damit die aktuelle Sitzung eingeloggt bleibt — exakt das bereits etablierte Muster
+aus `reset_password`, nur mit Passwort-Verifikation statt Token. Neuer Audit-Event-Typ
+`PASSWORD_CHANGED_BY_USER`.
+
+**Abgrenzung:** Kein Passwort-Bestätigungsfeld beim Token-basierten "Passwort vergessen"-Formular
+(`reset-password-form.tsx`) — nicht angefragt, bleibt unverändert mit einem einzelnen Feld.
+
+**Entschieden von:** Product Owner, 2026-08-17 ("bei der registrierung als helfer, wäre sinnvoll das
+password 2 mal eingeben zu müssen mit überprüfung ob identisch [...] nach einloggen in mein profil,
+sollte der helfer die möglichkeit haben sein password zu ändern").

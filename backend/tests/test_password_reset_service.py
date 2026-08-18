@@ -21,6 +21,7 @@ from app.models.identity import AuditEvent, PasswordResetToken, User, UserStatus
 from app.models.organization import Organization, OrganizationSettings, Theme
 from app.models.planning import Volunteer
 from app.services.auth import (
+    InvalidCurrentPasswordError,
     InvalidPasswordResetTokenError,
     PasswordResetService,
     dispatch_password_reset_email,
@@ -269,6 +270,94 @@ def test_reset_password_enforces_password_policy_before_any_mutation() -> None:
     assert db.added == []
     assert db.executed == []
     assert db.committed is False
+
+
+def test_change_password_succeeds_updates_hash_and_revokes_other_sessions() -> None:
+    user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    db = FakeSession(scalar_values=[None])
+
+    session, session_body = PasswordResetService(cast(Session, db), Settings()).change_password(
+        user=user,
+        current_password="old-password-123",
+        new_password="new-password-123",
+    )
+
+    assert verify_password("new-password-123", user.password_hash or "")
+    assert len(db.executed) == 1
+    assert _only_added(db, AuditEvent).action == "PASSWORD_CHANGED_BY_USER"
+    assert db.committed is True
+    assert session.access_token
+    assert session_body.user.id == str(user.id)
+
+
+def test_change_password_rejects_wrong_current_password_without_mutation() -> None:
+    user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    original_hash = user.password_hash
+    db = FakeSession(scalar_values=[])
+
+    with pytest.raises(InvalidCurrentPasswordError):
+        PasswordResetService(cast(Session, db), Settings()).change_password(
+            user=user,
+            current_password="totally-wrong",
+            new_password="new-password-123",
+        )
+
+    assert user.password_hash == original_hash
+    assert db.added == []
+    assert db.executed == []
+    assert db.committed is False
+
+
+def test_change_password_enforces_password_policy_before_any_mutation() -> None:
+    user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    original_hash = user.password_hash
+    db = FakeSession(scalar_values=[None])
+
+    with pytest.raises(PasswordPolicyError):
+        PasswordResetService(cast(Session, db), Settings()).change_password(
+            user=user,
+            current_password="old-password-123",
+            new_password="short",
+        )
+
+    assert user.password_hash == original_hash
+    assert db.added == []
+    assert db.executed == []
+    assert db.committed is False
+
+
+def test_change_password_uses_the_linked_volunteers_organization_minimum_length() -> None:
+    user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    volunteer = Volunteer(id=uuid.uuid4(), organization_id=uuid.uuid4(), user_id=user.id)
+    org_settings = OrganizationSettings(
+        organization_id=volunteer.organization_id, volunteer_password_min_length=6
+    )
+    db = FakeSession(scalar_values=[volunteer, org_settings])
+
+    assert MIN_PASSWORD_LENGTH > 8
+    PasswordResetService(cast(Session, db), Settings()).change_password(
+        user=user,
+        current_password="old-password-123",
+        new_password="short8ch",
+    )
+
+    assert verify_password("short8ch", user.password_hash or "")
+
+
+def test_change_password_rejects_a_password_below_the_organizations_configured_minimum() -> None:
+    user = _user(status=UserStatus.ACTIVE, password_hash=hash_password("old-password-123"))
+    volunteer = Volunteer(id=uuid.uuid4(), organization_id=uuid.uuid4(), user_id=user.id)
+    org_settings = OrganizationSettings(
+        organization_id=volunteer.organization_id, volunteer_password_min_length=12
+    )
+    db = FakeSession(scalar_values=[volunteer, org_settings])
+
+    with pytest.raises(PasswordPolicyError):
+        PasswordResetService(cast(Session, db), Settings()).change_password(
+            user=user,
+            current_password="old-password-123",
+            new_password="eleven-char",
+        )
 
 
 def test_send_password_reset_email_failure_never_logs_raw_token(

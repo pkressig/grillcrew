@@ -165,6 +165,11 @@ class ResetPasswordResponse(BaseModel):  # type: ignore[explicit-any]
     session: AuthSessionResponse
 
 
+class ChangePasswordRequest(BaseModel):  # type: ignore[explicit-any]
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: str = Field(min_length=1, max_length=1024)
+
+
 class AcceptInvitationRequest(BaseModel):  # type: ignore[explicit-any]
     token: str = Field(min_length=1, max_length=512)
     display_name: str = Field(min_length=1, max_length=200)

@@ -11,6 +11,7 @@ import { getLastOrganizationSlug, rememberLastOrganizationSlug } from "@/lib/org
 import { SignupCancelControl } from "@/components/signup-cancel-control";
 import { formatShiftHeading } from "@/lib/shift-format";
 import {
+  changePassword,
   createChild,
   deleteChild,
   fetchVolunteerProfile,
@@ -198,6 +199,9 @@ export default function ProfilePage() {
         familyChildren={profile.family_children}
         onChanged={reload}
         onError={(text) => setMessage(text)}
+      />
+      <ChangePasswordSection
+        minimumLength={profile.organization.settings.volunteer_password_min_length}
       />
       <SignupList
         title="Kommende Einsätze"
@@ -430,6 +434,101 @@ function ChildrenSection({
         </Button>
       )}
     </section>
+  );
+}
+
+function ChangePasswordSection({ minimumLength }: Readonly<{ minimumLength: number }>) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError(null);
+    setSuccess(null);
+    if (newPassword !== confirmPassword) {
+      setError("Die neuen Passwörter stimmen nicht überein. Bitte überprüfe deine Eingabe.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await changePassword({ current_password: currentPassword, new_password: newPassword });
+      setSuccess("Passwort wurde geändert.");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (caught) {
+      const detail = caught instanceof Error ? caught.message : "";
+      setError(
+        detail === "invalid current password"
+          ? "Das aktuelle Passwort ist nicht korrekt."
+          : detail === "password policy violation"
+            ? `Das neue Passwort muss mindestens ${minimumLength} Zeichen lang sein.`
+            : "Das Passwort konnte nicht geändert werden.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <details className="rounded-lg border bg-background p-4">
+      <summary className="min-h-11 cursor-pointer font-semibold">Passwort ändern</summary>
+      <form className="mt-3 flex flex-col gap-4" onSubmit={submit}>
+        <label className="flex flex-col gap-1 font-medium">
+          Aktuelles Passwort
+          <input
+            className="min-h-11 rounded border px-3 font-normal"
+            type="password"
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
+            required
+            autoComplete="current-password"
+          />
+        </label>
+        <label className="flex flex-col gap-1 font-medium">
+          Neues Passwort
+          <input
+            className="min-h-11 rounded border px-3 font-normal"
+            type="password"
+            value={newPassword}
+            onChange={(event) => setNewPassword(event.target.value)}
+            required
+            minLength={minimumLength}
+            autoComplete="new-password"
+          />
+        </label>
+        <p className="text-sm text-muted-foreground">Mindestens {minimumLength} Zeichen.</p>
+        <label className="flex flex-col gap-1 font-medium">
+          Neues Passwort bestätigen
+          <input
+            className="min-h-11 rounded border px-3 font-normal"
+            type="password"
+            value={confirmPassword}
+            onChange={(event) => setConfirmPassword(event.target.value)}
+            required
+            minLength={minimumLength}
+            autoComplete="new-password"
+          />
+        </label>
+        {error ? (
+          <p role="alert" className="text-sm text-status-error">
+            {error}
+          </p>
+        ) : null}
+        {success ? (
+          <p role="status" className="text-sm text-status-success">
+            {success}
+          </p>
+        ) : null}
+        <Button type="submit" className="self-start" disabled={busy}>
+          {busy ? "Wird gespeichert …" : "Passwort ändern"}
+        </Button>
+      </form>
+    </details>
   );
 }
 

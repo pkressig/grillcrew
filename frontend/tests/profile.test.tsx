@@ -79,7 +79,14 @@ const profile: VolunteerProfile = {
   family_children: [{ id: "child-1", name: "Leo Muster" }],
 };
 
-function profileFetch(initial: VolunteerProfile, options: { cancelStatus?: number } = {}) {
+function profileFetch(
+  initial: VolunteerProfile,
+  options: {
+    cancelStatus?: number;
+    changePasswordStatus?: number;
+    changePasswordDetail?: string;
+  } = {},
+) {
   let current: VolunteerProfile = structuredClone(initial);
   let nextChildId = 2;
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -87,6 +94,15 @@ function profileFetch(initial: VolunteerProfile, options: { cancelStatus?: numbe
     const method = init?.method ?? "GET";
     if (url.endsWith("/api/auth/me")) return Response.json(session);
     if (url.endsWith("/api/auth/csrf")) return Response.json({ csrf_token: "csrf-test" });
+    if (url.endsWith("/api/auth/change-password") && method === "POST") {
+      if (options.changePasswordStatus && options.changePasswordStatus !== 200) {
+        return Response.json(
+          { detail: options.changePasswordDetail ?? "invalid current password" },
+          { status: options.changePasswordStatus },
+        );
+      }
+      return Response.json({ ok: true });
+    }
     if (url.endsWith("/api/volunteer/profile") && method === "GET") return Response.json(current);
     if (url.endsWith("/api/volunteer/profile") && method === "PATCH") {
       current = { ...current, ...JSON.parse(String(init?.body)) };
@@ -535,5 +551,135 @@ describe("ProfilePage children management", () => {
       ).toBe(true),
     );
     confirmSpy.mockRestore();
+  });
+});
+
+describe("ProfilePage change password", () => {
+  it("submits current and new password, shows success, and clears the fields", async () => {
+    const fetchMock = profileFetch(profile);
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    fireEvent.click(await screen.findByText("Passwort ändern", { selector: "summary" }));
+    fireEvent.change(screen.getByLabelText("Aktuelles Passwort"), {
+      target: { value: "old-secret-pw" },
+    });
+    fireEvent.change(screen.getByLabelText("Neues Passwort"), {
+      target: { value: "new-secret-pw" },
+    });
+    fireEvent.change(screen.getByLabelText("Neues Passwort bestätigen"), {
+      target: { value: "new-secret-pw" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Passwort ändern" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith("/api/auth/change-password") &&
+            (init as RequestInit | undefined)?.method === "POST" &&
+            JSON.parse(String((init as RequestInit).body)).current_password === "old-secret-pw" &&
+            JSON.parse(String((init as RequestInit).body)).new_password === "new-secret-pw",
+        ),
+      ).toBe(true),
+    );
+    expect(await screen.findByText("Passwort wurde geändert.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Aktuelles Passwort")).toHaveValue("");
+    expect(screen.getByLabelText("Neues Passwort")).toHaveValue("");
+  });
+
+  it("shows a mismatch error and never calls the API when the new passwords differ", async () => {
+    const fetchMock = profileFetch(profile);
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    fireEvent.click(await screen.findByText("Passwort ändern", { selector: "summary" }));
+    fireEvent.change(screen.getByLabelText("Aktuelles Passwort"), {
+      target: { value: "old-secret-pw" },
+    });
+    fireEvent.change(screen.getByLabelText("Neues Passwort"), {
+      target: { value: "new-secret-pw" },
+    });
+    fireEvent.change(screen.getByLabelText("Neues Passwort bestätigen"), {
+      target: { value: "typo-secret-pw" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Passwort ändern" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Die neuen Passwörter stimmen nicht überein.",
+    );
+    expect(
+      fetchMock.mock.calls.some(([url]) => String(url).endsWith("/api/auth/change-password")),
+    ).toBe(false);
+  });
+
+  it("shows a friendly error when the current password is wrong", async () => {
+    const fetchMock = profileFetch(profile, {
+      changePasswordStatus: 400,
+      changePasswordDetail: "invalid current password",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    fireEvent.click(await screen.findByText("Passwort ändern", { selector: "summary" }));
+    fireEvent.change(screen.getByLabelText("Aktuelles Passwort"), {
+      target: { value: "wrong-password" },
+    });
+    fireEvent.change(screen.getByLabelText("Neues Passwort"), {
+      target: { value: "new-secret-pw" },
+    });
+    fireEvent.change(screen.getByLabelText("Neues Passwort bestätigen"), {
+      target: { value: "new-secret-pw" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Passwort ändern" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Das aktuelle Passwort ist nicht korrekt.",
+    );
+  });
+
+  it("shows the organization's minimum length hint and maps a policy violation", async () => {
+    const brandedProfile: VolunteerProfile = {
+      ...profile,
+      organization: {
+        ...organization,
+        settings: { ...organization.settings, volunteer_password_min_length: 12 },
+      },
+    };
+    const fetchMock = profileFetch(brandedProfile, {
+      changePasswordStatus: 422,
+      changePasswordDetail: "password policy violation",
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    fireEvent.click(await screen.findByText("Passwort ändern", { selector: "summary" }));
+    expect(screen.getByText("Mindestens 12 Zeichen.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Aktuelles Passwort"), {
+      target: { value: "old-secret-pw" },
+    });
+    fireEvent.change(screen.getByLabelText("Neues Passwort"), {
+      target: { value: "twelve-chars" },
+    });
+    fireEvent.change(screen.getByLabelText("Neues Passwort bestätigen"), {
+      target: { value: "twelve-chars" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Passwort ändern" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Das neue Passwort muss mindestens 12 Zeichen lang sein.",
+    );
   });
 });

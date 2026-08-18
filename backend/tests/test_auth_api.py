@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api import auth
-from app.api.dependencies import CurrentUser, get_current_user
+from app.api.dependencies import CurrentUser, get_current_user, validate_csrf
 from app.core.config import Settings, get_settings
 from app.core.security.csrf import (
     CSRF_HEADER_NAME,
@@ -25,6 +25,7 @@ from app.services.auth import (
     ACCESS_TOKEN_COOKIE_NAME,
     REFRESH_TOKEN_COOKIE_NAME,
     InvalidCredentialsError,
+    InvalidCurrentPasswordError,
     InvalidPasswordResetTokenError,
     InvalidRefreshTokenError,
     IssuedSession,
@@ -763,6 +764,127 @@ def test_reset_password_rejects_missing_origin(
         response = client.post(
             "/api/auth/reset-password",
             json={"token": "raw-token", "new_password": "new-password-123"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 403
+
+
+def test_change_password_returns_success_and_sets_cookies(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = _user_with_membership()
+    calls: list[tuple[str, str]] = []
+
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def change_password(
+            self, *, user: object, current_password: str, new_password: str
+        ) -> tuple[IssuedSession, object]:
+            calls.append((current_password, new_password))
+            return _session(), _body()
+
+    app.dependency_overrides[get_db] = _fake_db
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(user=user)
+    app.dependency_overrides[validate_csrf] = lambda: None
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        response = client.post(
+            "/api/auth/change-password",
+            headers=_origin_headers(),
+            json={"current_password": "old-password-123", "new_password": "new-password-123"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["session"]["user"]["email_normalized"] == "user@example.test"
+    assert calls == [("old-password-123", "new-password-123")]
+    set_cookie = response.headers.get_list("set-cookie")
+    assert _cookie_header(set_cookie, ACCESS_TOKEN_COOKIE_NAME)
+    assert _cookie_header(set_cookie, REFRESH_TOKEN_COOKIE_NAME)
+
+
+def test_change_password_rejects_wrong_current_password(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def change_password(
+            self, *, user: object, current_password: str, new_password: str
+        ) -> None:
+            raise InvalidCurrentPasswordError
+
+    app.dependency_overrides[get_db] = _fake_db
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(user=_user_with_membership())
+    app.dependency_overrides[validate_csrf] = lambda: None
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        response = client.post(
+            "/api/auth/change-password",
+            headers=_origin_headers(),
+            json={"current_password": "wrong-password", "new_password": "new-password-123"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "invalid current password"
+
+
+def test_change_password_enforces_password_policy(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakePasswordResetService:
+        def __init__(self, _db: object, _settings: object) -> None:
+            pass
+
+        def change_password(
+            self, *, user: object, current_password: str, new_password: str
+        ) -> None:
+            raise PasswordPolicyError("too short")
+
+    app.dependency_overrides[get_db] = _fake_db
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(user=_user_with_membership())
+    app.dependency_overrides[validate_csrf] = lambda: None
+    monkeypatch.setattr(auth, "PasswordResetService", FakePasswordResetService)
+    try:
+        response = client.post(
+            "/api/auth/change-password",
+            headers=_origin_headers(),
+            json={"current_password": "old-password-123", "new_password": "short"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "password policy violation"
+
+
+def test_change_password_requires_authentication(client: TestClient) -> None:
+    response = client.post(
+        "/api/auth/change-password",
+        headers=_origin_headers(),
+        json={"current_password": "old-password-123", "new_password": "new-password-123"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_change_password_requires_csrf(client: TestClient) -> None:
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(user=_user_with_membership())
+    try:
+        response = client.post(
+            "/api/auth/change-password",
+            headers=_origin_headers(),
+            json={"current_password": "old-password-123", "new_password": "new-password-123"},
         )
     finally:
         app.dependency_overrides.clear()

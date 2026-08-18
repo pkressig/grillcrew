@@ -128,6 +128,18 @@ export async function deleteChild(childId: string): Promise<void> {
   });
 }
 
+export async function changePassword(payload: {
+  current_password: string;
+  new_password: string;
+}): Promise<void> {
+  await ensureCsrfToken();
+  await request<{ ok: boolean }>("/api/auth/change-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...csrfHeaders() },
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function requestPasswordReset(email: string): Promise<void> {
   await request<{ ok: boolean }>("/api/auth/forgot-password", {
     method: "POST",

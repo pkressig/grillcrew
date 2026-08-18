@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import CurrentUser, get_current_user
+from app.api.dependencies import CurrentUser, get_current_user, validate_csrf
 from app.core.config import Settings, get_settings
 from app.core.security.csrf import (
     CSRF_COOKIE_NAME,
@@ -31,6 +31,7 @@ from app.schemas.auth import (
     AcceptInvitationRequest,
     AcceptInvitationResponse,
     AuthSessionResponse,
+    ChangePasswordRequest,
     CsrfTokenResponse,
     ForgotPasswordRequest,
     ForgotPasswordResponse,
@@ -45,6 +46,7 @@ from app.services.auth import (
     ACCESS_TOKEN_COOKIE_NAME,
     REFRESH_TOKEN_COOKIE_NAME,
     InvalidCredentialsError,
+    InvalidCurrentPasswordError,
     InvalidPasswordResetTokenError,
     InvalidRefreshTokenError,
     IssuedSession,
@@ -255,6 +257,37 @@ def reset_password(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid reset token",
+        ) from None
+    set_auth_cookies(response, session, settings)
+    return ResetPasswordResponse(session=session_body)
+
+
+@router.post("/change-password", response_model=ResetPasswordResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    response: Response,
+    current_user: CurrentUser = Depends(get_current_user),  # noqa: B008
+    _: None = Depends(validate_csrf),
+    db: Session = Depends(get_db),  # noqa: B008
+) -> ResetPasswordResponse:
+    settings = get_settings()
+    _ensure_origin_and_host(request, db, settings)
+    try:
+        session, session_body = PasswordResetService(db, settings).change_password(
+            user=current_user.user,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+    except PasswordPolicyError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="password policy violation",
+        ) from None
+    except InvalidCurrentPasswordError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid current password",
         ) from None
     set_auth_cookies(response, session, settings)
     return ResetPasswordResponse(session=session_body)
