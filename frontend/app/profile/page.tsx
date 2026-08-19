@@ -449,13 +449,24 @@ function ChangePasswordSection({ minimumLength }: Readonly<{ minimumLength: numb
     event.preventDefault();
     setError(null);
     setSuccess(null);
-    if (newPassword !== confirmPassword) {
+    // Read straight from the DOM, not React state: a password manager filling the current/new/
+    // confirm fields (very common on a change-password form) can set their values without
+    // firing React's onChange, leaving state stale even though the fields look right on screen.
+    // FormData always reflects what is actually in the fields.
+    const data = new FormData(event.currentTarget);
+    const submittedCurrentPassword = String(data.get("current_password") ?? "");
+    const submittedNewPassword = String(data.get("new_password") ?? "");
+    const submittedConfirmPassword = String(data.get("new_password_confirmation") ?? "");
+    if (submittedNewPassword !== submittedConfirmPassword) {
       setError("Die neuen Passwörter stimmen nicht überein. Bitte überprüfe deine Eingabe.");
       return;
     }
     setBusy(true);
     try {
-      await changePassword({ current_password: currentPassword, new_password: newPassword });
+      await changePassword({
+        current_password: submittedCurrentPassword,
+        new_password: submittedNewPassword,
+      });
       setSuccess("Passwort wurde geändert.");
       setCurrentPassword("");
       setNewPassword("");
@@ -482,9 +493,11 @@ function ChangePasswordSection({ minimumLength }: Readonly<{ minimumLength: numb
           Aktuelles Passwort
           <input
             className="min-h-11 rounded border px-3 font-normal"
+            name="current_password"
             type="password"
             value={currentPassword}
             onChange={(event) => setCurrentPassword(event.target.value)}
+            onBlur={(event) => setCurrentPassword(event.target.value)}
             required
             autoComplete="current-password"
           />
@@ -493,9 +506,11 @@ function ChangePasswordSection({ minimumLength }: Readonly<{ minimumLength: numb
           Neues Passwort
           <input
             className="min-h-11 rounded border px-3 font-normal"
+            name="new_password"
             type="password"
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
+            onBlur={(event) => setNewPassword(event.target.value)}
             required
             minLength={minimumLength}
             autoComplete="new-password"
@@ -506,9 +521,11 @@ function ChangePasswordSection({ minimumLength }: Readonly<{ minimumLength: numb
           Neues Passwort bestätigen
           <input
             className="min-h-11 rounded border px-3 font-normal"
+            name="new_password_confirmation"
             type="password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
+            onBlur={(event) => setConfirmPassword(event.target.value)}
             required
             minLength={minimumLength}
             autoComplete="new-password"

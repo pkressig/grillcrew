@@ -157,7 +157,16 @@ export function RegisterForm({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (password !== confirmPassword) {
+    // Read the two password fields straight from the DOM instead of trusting React state:
+    // a browser's password manager can fill both new-password fields (and often does, once a
+    // form has a matching confirmation field) without firing the input's change event, leaving
+    // `password`/`confirmPassword` stale even though the fields visually show matching text.
+    // FormData always reflects what is actually in the fields, so the match check and the
+    // value sent to the backend can never disagree with what the visitor sees on screen.
+    const data = new FormData(event.currentTarget);
+    const submittedPassword = String(data.get("password") ?? "");
+    const submittedConfirmPassword = String(data.get("password_confirmation") ?? "");
+    if (submittedPassword !== submittedConfirmPassword) {
       setError("Die Passwörter stimmen nicht überein. Bitte überprüfe deine Eingabe.");
       return;
     }
@@ -176,7 +185,7 @@ export function RegisterForm({
         last_name: fields.last_name,
         phone: fields.phone,
         email: fields.email,
-        password,
+        password: submittedPassword,
         compensation_preference: fields.compensation_type || undefined,
         children,
       });
@@ -247,6 +256,7 @@ export function RegisterForm({
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            onBlur={(event) => setPassword(event.target.value)}
             required
             minLength={minimumLength}
             autoComplete="new-password"
@@ -264,6 +274,7 @@ export function RegisterForm({
             type="password"
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}
+            onBlur={(event) => setConfirmPassword(event.target.value)}
             required
             minLength={minimumLength}
             autoComplete="new-password"

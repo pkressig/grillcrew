@@ -843,3 +843,29 @@ aus `reset_password`, nur mit Passwort-Verifikation statt Token. Neuer Audit-Eve
 **Entschieden von:** Product Owner, 2026-08-17 ("bei der registrierung als helfer, wäre sinnvoll das
 password 2 mal eingeben zu müssen mit überprüfung ob identisch [...] nach einloggen in mein profil,
 sollte der helfer die möglichkeit haben sein password zu ändern").
+
+## D-068 – Bugfix: Passwort-Abgleich verglich veralteten React-State statt der echten Eingabe
+
+**Entscheid:** Sowohl das Registrierungsformular (Passwort/Passwort bestätigen) als auch
+`ChangePasswordSection` im Profil (aktuelles/neues/Bestätigungs-Passwort) lasen den Abgleich und die
+an das Backend gesendeten Werte aus React-`useState` statt aus dem tatsächlichen DOM. Ein
+Passwort-Manager, der ein Feld direkt per DOM-Property setzt (üblich bei einem Formular mit zwei
+`new-password`-Feldern bzw. einem Formular mit aktuellem/neuem/Bestätigungs-Passwort — genau die
+Muster, die Browser/Passwort-Manager am aggressivsten automatisch ausfüllen), löst dabei oft **kein**
+React-`change`-Event aus. Das Feld zeigte sichtbar den korrekten, übereinstimmenden Text, aber der
+React-State blieb auf dem alten Wert (meist leer) stehen — der Abgleich verglich dadurch dauerhaft
+"nicht übereinstimmend", unabhängig davon, was tatsächlich eingetippt wurde, und im schlimmsten Fall
+wurde ein anderer Wert ans Backend gesendet als der sichtbar eingegebene.
+
+Behoben durch Umstellung auf dasselbe robuste Muster, das die bereits bestehenden Passwort-Formulare
+in diesem Codebase verwenden (Admin "Passwort direkt setzen" in `families-panel.tsx`, Token-basiertes
+`reset-password-form.tsx`): `submit()` liest die tatsächlichen Werte jetzt über `new
+FormData(event.currentTarget)` direkt aus dem DOM — das ist unabhängig davon korrekt, ob ein Feld
+getippt, eingefügt oder automatisch ausgefüllt wurde. Zusätzlich bekommen alle betroffenen
+Passwortfelder einen `onBlur`-Handler, der den React-State beim Verlassen des Feldes mit dem echten
+DOM-Wert neu synchronisiert, damit auch die *Live*-Anzeige (Rot/Grün beim Tippen, D-067) sich nach
+einem Autofill korrekt aktualisiert.
+
+**Entschieden von:** Product Owner, 2026-08-18 (Fehlermeldung: Registrierung meldet immer
+"Passwörter stimmen nicht überein"; nach manuellem Setzen eines Helfer-Passworts war kein Login mehr
+möglich).

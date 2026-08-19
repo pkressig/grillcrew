@@ -591,6 +591,53 @@ describe("ProfilePage change password", () => {
     expect(screen.getByLabelText("Neues Passwort")).toHaveValue("");
   });
 
+  it("submits the real DOM value even when a password manager fills a field without firing React's change event", async () => {
+    // Regression test: a change-password form (current/new/confirm) is exactly the shape
+    // browsers and password managers autofill aggressively, often by writing the DOM value
+    // directly without dispatching the input/change event React relies on for controlled
+    // state — which previously left the mismatch check comparing a stale confirmPassword
+    // against the real new password. The fix reads the actual DOM values via FormData at
+    // submit time, so this must succeed even though React state never heard about the
+    // autofilled confirmation field.
+    const fetchMock = profileFetch(profile);
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <AuthProvider>
+        <ProfilePage />
+      </AuthProvider>,
+    );
+    fireEvent.click(await screen.findByText("Passwort ändern", { selector: "summary" }));
+    fireEvent.change(screen.getByLabelText("Aktuelles Passwort"), {
+      target: { value: "old-secret-pw" },
+    });
+    fireEvent.change(screen.getByLabelText("Neues Passwort"), {
+      target: { value: "autofilled-pw-1" },
+    });
+
+    const confirmInput = screen.getByLabelText("Neues Passwort bestätigen") as HTMLInputElement;
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    nativeSetter.call(confirmInput, "autofilled-pw-1");
+    // Deliberately no dispatchEvent here — this is the browser-autofill behavior under test.
+    expect(confirmInput.value).toBe("autofilled-pw-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Passwort ändern" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(
+          ([url, init]) =>
+            String(url).endsWith("/api/auth/change-password") &&
+            (init as RequestInit | undefined)?.method === "POST" &&
+            JSON.parse(String((init as RequestInit).body)).new_password === "autofilled-pw-1",
+        ),
+      ).toBe(true),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("shows a mismatch error and never calls the API when the new passwords differ", async () => {
     const fetchMock = profileFetch(profile);
     vi.stubGlobal("fetch", fetchMock);

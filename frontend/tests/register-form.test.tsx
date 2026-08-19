@@ -200,6 +200,40 @@ describe("RegisterForm password confirmation", () => {
     await waitFor(() => expect(mockedRegister).toHaveBeenCalled());
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
+
+  it("submits the real DOM value even when a password manager fills a field without firing React's change event", async () => {
+    // Regression test: browsers commonly autofill a matching new-password/confirm pair (this
+    // is exactly what triggers once a form has two such fields) by writing the DOM value
+    // directly, without dispatching the input/change event React relies on for controlled
+    // state. That desync previously made the live check — and the submit-time check — compare
+    // a stale confirmPassword ("") against the real password, always reporting a mismatch even
+    // though both fields visibly showed the same text. The fix reads the actual DOM values via
+    // FormData at submit time, so it must succeed here despite React state never having heard
+    // about the confirmation field's autofilled value.
+    mockedRegister.mockResolvedValue({ ok: true });
+    render(<RegisterForm organization={organization} />);
+    fireEvent.change(screen.getByLabelText("Vorname"), { target: { value: "Mia" } });
+    fireEvent.change(screen.getByLabelText("Nachname"), { target: { value: "Muster" } });
+    fireEvent.change(screen.getByLabelText("Telefon"), { target: { value: "+41 79 123 45 67" } });
+    fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "mia@example.test" } });
+    fireEvent.change(screen.getByLabelText("Passwort"), { target: { value: "autofilled-pw-1" } });
+
+    const confirmInput = screen.getByLabelText("Passwort bestätigen") as HTMLInputElement;
+    const nativeSetter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )!.set!;
+    nativeSetter.call(confirmInput, "autofilled-pw-1");
+    // Deliberately no dispatchEvent here — this is the browser-autofill behavior under test.
+    expect(confirmInput.value).toBe("autofilled-pw-1");
+
+    fireEvent.click(screen.getByRole("button", { name: "Registrieren" }));
+    await waitFor(() => expect(mockedRegister).toHaveBeenCalled());
+    expect(mockedRegister).toHaveBeenCalledWith(
+      expect.objectContaining({ password: "autofilled-pw-1" }),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });
 
 describe("RegisterForm autofill hints", () => {
